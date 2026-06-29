@@ -95,3 +95,40 @@ bash ~/.claude/skills/db-connect/scripts/tests/test-db.sh
 ```
 
 23 个用例覆盖：参数解析、连接列表、切换、权限拒绝、DDL/高危拦截、自动 LIMIT、连接失败检测。无需真实数据库（mock CLI）。
+
+## TUN 代理兼容（v2rayN / sing-box）
+
+sing-box gvisor TUN 会破坏 MySQL 协议握手，导致所有数据库连接失败。
+
+### 修复方法
+
+在 v2rayN 路由规则中添加数据库直连规则：
+
+1. 打开 v2rayN → 路由规则
+2. 新建或编辑一条规则：
+   - **别名**: WB直连IP
+   - **规则类型**: ALL（同时对 Routing 和 DNS 生效）
+   - **outboundTag**: direct
+   - **Domain**:
+     ```
+     wbsmysql.cravyof0csdw.us-east-1.rds.amazonaws.com,
+     worldesusde.cf6km0y04l41.us-east-1.rds.amazonaws.com
+     ```
+   - **IP**（当前解析，RDS IP 会变需定期更新）:
+     ```
+     100.31.205.43,
+     100.31.205.99,
+     3.211.153.99,
+     172.31.5.87,
+     3.220.48.20,
+     34.236.250.114
+     ```
+   - **Port**: `3306,24686,27017`
+3. 保存并重启 v2rayN
+
+### 注意
+
+- 规则类型必须选 **ALL**，不能只选 Routing（MySQL 不走 SNI，域名匹配需要 DNS 层配合）
+- RDS IP 会变（AWS 弹性 IP），如果突然连不上先 `dig +short <rds-domain>` 查新 IP 并更新规则
+- Hub 上的 v2rayN 也需要同样配置（配置存在 guiNDB.db SQLite 数据库里）
+- 不使用 TUN 时无需此配置
