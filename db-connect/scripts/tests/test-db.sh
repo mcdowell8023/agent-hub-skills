@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # test-db.sh — db.sh TDD 测试套件
 # 用法：bash test-db.sh
-# 所有 MYSQL_CMD / MONGOSH_CMD 指向 mock 脚本，零真实数据库依赖。
+# 通过 DB_ENGINE_CMD mock 掉 db_engine.py，零真实数据库依赖。
 
 set -u
 
@@ -9,10 +9,10 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 DB_SH="$SKILL_DIR/scripts/db.sh"
+DB_ENGINE="$SKILL_DIR/scripts/db_engine.py"
 MOCK_DIR="$SCRIPT_DIR/mock"
 TEST_DB_JSON="$MOCK_DIR/databases.json"
-MYSQL_MOCK="$MOCK_DIR/mysql"
-MONGOSH_MOCK="$MOCK_DIR/mongosh"
+DB_ENGINE_MOCK="$MOCK_DIR/db_engine.py"
 
 # ============ 颜色 ============
 RED='\033[0;31m'
@@ -75,49 +75,40 @@ setup() {
 }
 JSON
 
-    # mock mysql CLI：所有参数 + stderr 记录到 $MOCK_DIR/mysql.log
-    cat > "$MYSQL_MOCK" <<'MOCK'
+    # mock db_engine.py：统一 mock 入口
+    # 接受 action 和 config_json 作为参数
+    # stderr 记录到 $MOCK_DIR/engine.log 用于断言
+    cat > "$DB_ENGINE_MOCK" <<'MOCK'
 #!/usr/bin/env bash
-echo "MYSQL_ARGS: $*" >> "${MOCK_DIR:-.}/mysql.log"
-# 模拟连接失败
-for arg in "$@"; do
-    if [ "$arg" = "CONNECT_FAIL" ]; then
-        echo "ERROR 2003 (HY000): Can't connect to MySQL server" >&2
-        exit 1
-    fi
-done
-# 模拟成功：输出固定结果
-echo "mock mysql result for: $*"
+echo "ENGINE_ARGS: $*" >> "${MOCK_DIR:-.}/engine.log"
+action="$1"; shift
+config="$1"; shift
+# 模拟连接失败：config 含 "wrong" 时
+if echo "$config" | grep -q '"pass": "wrong"'; then
+    echo "ERROR 1045 (28000): Access denied" >&2
+    exit 1
+fi
+# 模拟 export：把 CSV 写到 csv.out
+if [ "$action" = "export" ]; then
+    echo "mock csv data,field1,field2" >> "${MOCK_DIR:-.}/csv.out"
+    exit 0
+fi
+# 默认输出：tab 分隔的伪结果（模拟 mysql CLI -e 输出格式）
+echo -e "col1\tcol2"
+echo -e "v1\tv2"
 exit 0
 MOCK
-    chmod +x "$MYSQL_MOCK"
-
-    # mock mongosh：所有参数 + stderr 记录到 $MOCK_DIR/mongosh.log
-    cat > "$MONGOSH_MOCK" <<'MOCK'
-#!/usr/bin/env bash
-echo "MONGOSH_ARGS: $*" >> "${MOCK_DIR:-.}/mongosh.log"
-# 模拟连接失败
-for arg in "$@"; do
-    if [ "$arg" = "CONNECT_FAIL" ]; then
-        echo "MongoServerError: connect ECONNREFUSED" >&2
-        exit 1
-    fi
-done
-echo "mock mongosh result for: $*"
-exit 0
-MOCK
-    chmod +x "$MONGOSH_MOCK"
+    chmod +x "$DB_ENGINE_MOCK"
 
     # 清空 log
-    : > "$MOCK_DIR/mysql.log"
-    : > "$MOCK_DIR/mongosh.log"
+    : > "$MOCK_DIR/engine.log"
+    : > "$MOCK_DIR/csv.out"
 }
 
 # db 命令封装：传入子命令和参数
 db() {
     DATABASES_JSON="$TEST_DB_JSON" \
-    MYSQL_CMD="$MYSQL_MOCK" \
-    MONGOSH_CMD="$MONGOSH_MOCK" \
+    DB_ENGINE_CMD="$DB_ENGINE_MOCK" \
     MOCK_DIR="$MOCK_DIR" \
     "$DB_SH" "$@"
 }
@@ -226,12 +217,12 @@ db use test-mysql > /dev/null 2>&1
 
 echo "--- T8: MySQL 无 LIMIT 自动加 LIMIT 100 ---"
 db query "SELECT * FROM users" > /dev/null 2>&1
-if grep -qE "LIMIT 100" "$MOCK_DIR/mysql.log"; then
+if grep -qE "LIMIT 100" "$MOCK_DIR/engine.log"; then
     echo -e "${GREEN}PASS${NC} T8: 无 LIMIT 自动加 LIMIT 100"
     PASS=$((PASS+1))
 else
     echo -e "${RED}FAIL${NC} T8: 未自动加 LIMIT 100"
-    echo "  log: $(cat $MOCK_DIR/mysql.log)"
+    echo "  log: $(cat $MOCK_DIR/engine.log)"
     FAIL=$((FAIL+1))
     FAILED_TESTS+=("T8 LIMIT")
 fi
@@ -239,27 +230,10 @@ fi
 echo "--- T9: MongoDB readonly 拒绝 insertOne ---"
 db use test-mongo > /dev/null 2>&1
 assert_exit 1 "T9: Mongo readonly 拒绝 insertOne" query "db.users.insertOne({name:'x'})"
-assert_not_contains "mock mongosh" "T9: insertOne 未实际执行" query "db.users.insertOne({name:'x'})"
+assert_not_contains "col1" "T9: insertOne 未实际执行" query "db.users.insertOne({name:'x'})"
 
 echo "--- T10: db test 连接失败报错 ---"
-# 用 bad-mysql 测试连接失败
-# 先改 mock 让特定 host 触发失败
-cat > "$MYSQL_MOCK" <<'MOCK'
-#!/usr/bin/env bash
-echo "MYSQL_ARGS: $*" >> "${MOCK_DIR:-.}/mysql.log"
-# 含 pass=wrong 时模拟失败（检测 -pwrong 参数）
-for arg in "$@"; do
-    case "$arg" in
-        -pwrong|pwrong|*wrong*)
-            echo "ERROR 1045 (28000): Access denied" >&2
-            exit 1
-            ;;
-    esac
-done
-exit 0
-MOCK
-chmod +x "$MYSQL_MOCK"
-: > "$MOCK_DIR/mysql.log"
+# engine mock 已经处理 config 中 pass=wrong 的情况
 # 切换到 bad-mysql 然后测连接，整体应 exit=1
 T10_OUT=$(db use bad-mysql && db test 2>&1)
 T10_EXIT=$?
@@ -280,48 +254,40 @@ fi
 # T_empty: 真正的无参数测试
 
 echo "--- T_semi1: readonly 拒绝 SELECT 1; DELETE ---"
-# 重置 mock 为成功模式
-cat > "$MYSQL_MOCK" <<'MOCK'
-#!/usr/bin/env bash
-echo "MYSQL_ARGS: $*" >> "${MOCK_DIR:-.}/mysql.log"
-echo "mock mysql result for: $*"
-exit 0
-MOCK
-chmod +x "$MYSQL_MOCK"
 db use test-mysql > /dev/null 2>&1
-: > "$MOCK_DIR/mysql.log"
+: > "$MOCK_DIR/engine.log"
 assert_exit 1 "T_semi1: readonly 拒绝 SELECT 1; DELETE" query "SELECT 1; DELETE FROM users"
-# 验证 mysql mock 未被调用（说明 SQL 在权限层被拦）
-if [ ! -s "$MOCK_DIR/mysql.log" ]; then
+# 验证 engine mock 未被调用（说明 SQL 在权限层被拦）
+if [ ! -s "$MOCK_DIR/engine.log" ]; then
     echo -e "${GREEN}PASS${NC} T_semi1: SELECT 1; DELETE 未实际执行（mock log 为空）"
     PASS=$((PASS+1))
 else
     echo -e "${RED}FAIL${NC} T_semi1: mock 被调用了，SQL 未被拦截"
-    echo "  log: $(cat $MOCK_DIR/mysql.log)"
+    echo "  log: $(cat $MOCK_DIR/engine.log)"
     FAIL=$((FAIL+1))
     FAILED_TESTS+=("T_semi1 mock-untouched")
 fi
 
 echo "--- T_semi2: full 拒绝 DESCRIBE t; DROP ---"
 db use test-mysql-full > /dev/null 2>&1
-: > "$MOCK_DIR/mysql.log"
+: > "$MOCK_DIR/engine.log"
 assert_exit 1 "T_semi2: full 拒绝 DESCRIBE t; DROP" query "DESCRIBE t; DROP TABLE x"
-if [ ! -s "$MOCK_DIR/mysql.log" ]; then
+if [ ! -s "$MOCK_DIR/engine.log" ]; then
     echo -e "${GREEN}PASS${NC} T_semi2: DESCRIBE t; DROP 未实际执行（mock log 为空）"
     PASS=$((PASS+1))
 else
     echo -e "${RED}FAIL${NC} T_semi2: mock 被调用了，SQL 未被拦截"
-    echo "  log: $(cat $MOCK_DIR/mysql.log)"
+    echo "  log: $(cat $MOCK_DIR/engine.log)"
     FAIL=$((FAIL+1))
     FAILED_TESTS+=("T_semi2 mock-untouched")
 fi
 
 echo "--- T_semi3: 合法单语句不含分号 → 通过 ---"
 db use test-mysql > /dev/null 2>&1
-: > "$MOCK_DIR/mysql.log"
+: > "$MOCK_DIR/engine.log"
 assert_exit 0 "T_semi3: 合法无分号 SELECT 通过" query "SELECT * FROM users WHERE name='test'"
 # 验证 mock 真的被调用了（说明正常路径没误拦）
-if [ -s "$MOCK_DIR/mysql.log" ]; then
+if [ -s "$MOCK_DIR/engine.log" ]; then
     echo -e "${GREEN}PASS${NC} T_semi3: 合法 SELECT 正常执行（mock 被调用）"
     PASS=$((PASS+1))
 else
@@ -332,9 +298,9 @@ fi
 
 echo "--- T_mongo_cmd1: readonly 拒绝 db.runCommand({delete:...}) ---"
 db use test-mongo > /dev/null 2>&1
-: > "$MOCK_DIR/mongosh.log"
+: > "$MOCK_DIR/engine.log"
 assert_exit 1 "T_mongo_cmd1: readonly 拒绝 runCommand delete" query "db.runCommand({delete:'users',deletes:[{q:{},limit:0}]})"
-if [ ! -s "$MOCK_DIR/mongosh.log" ]; then
+if [ ! -s "$MOCK_DIR/engine.log" ]; then
     echo -e "${GREEN}PASS${NC} T_mongo_cmd1: runCommand delete 未实际执行（mock log 为空）"
     PASS=$((PASS+1))
 else
@@ -345,9 +311,9 @@ fi
 
 echo "--- T_mongo_cmd2: readonly 拒绝 db.adminCommand({shutdown:1}) ---"
 db use test-mongo > /dev/null 2>&1
-: > "$MOCK_DIR/mongosh.log"
+: > "$MOCK_DIR/engine.log"
 assert_exit 1 "T_mongo_cmd2: readonly 拒绝 adminCommand shutdown" query "db.adminCommand({shutdown:1})"
-if [ ! -s "$MOCK_DIR/mongosh.log" ]; then
+if [ ! -s "$MOCK_DIR/engine.log" ]; then
     echo -e "${GREEN}PASS${NC} T_mongo_cmd2: adminCommand shutdown 未实际执行（mock log 为空）"
     PASS=$((PASS+1))
 else
@@ -358,9 +324,9 @@ fi
 
 echo "--- T_mongo_cmd3: full 拒绝 db.runCommand({dropDatabase:1}) ---"
 db use test-mongo-full > /dev/null 2>&1
-: > "$MOCK_DIR/mongosh.log"
+: > "$MOCK_DIR/engine.log"
 assert_exit 1 "T_mongo_cmd3: full 拒绝 runCommand dropDatabase" query "db.runCommand({dropDatabase:1})"
-if [ ! -s "$MOCK_DIR/mongosh.log" ]; then
+if [ ! -s "$MOCK_DIR/engine.log" ]; then
     echo -e "${GREEN}PASS${NC} T_mongo_cmd3: runCommand dropDatabase 未实际执行（mock log 为空）"
     PASS=$((PASS+1))
 else
@@ -370,14 +336,6 @@ else
 fi
 
 echo "--- T_path1: export 路径穿越防护 ---"
-# 先恢复成功版 mysql mock（T10 改写过）
-cat > "$MYSQL_MOCK" <<'MOCK'
-#!/usr/bin/env bash
-echo "MYSQL_ARGS: $*" >> "${MOCK_DIR:-.}/mysql.log"
-echo "mock csv data" >> "${MOCK_DIR:-.}/csv.out"
-exit 0
-MOCK
-chmod +x "$MYSQL_MOCK"
 db use test-mysql > /dev/null 2>&1
 EXPORT_DIR="$HOME/.claude/skills/db-connect/exports"
 # 清理旧的 evil_ 文件
@@ -398,6 +356,22 @@ else
     FAILED_TESTS+=("T_path1")
 fi
 set -u
+
+echo "--- T_export_perm: readonly 模式 export --where 注入 INTO OUTFILE 应被拒 ---"
+db use test-mysql > /dev/null 2>&1
+: > "$MOCK_DIR/engine.log"
+T_EXPORT_OUT=$(db export users --where "1 UNION SELECT password INTO OUTFILE '/tmp/x' FROM users" 2>&1)
+T_EXPORT_EXIT=$?
+if [ "$T_EXPORT_EXIT" -eq 1 ] && [ ! -s "$MOCK_DIR/engine.log" ]; then
+    echo -e "${GREEN}PASS${NC} T_export_perm: readonly export --where 含 INTO OUTFILE 被拒"
+    PASS=$((PASS+1))
+else
+    echo -e "${RED}FAIL${NC} T_export_perm: readonly export --where 绕过权限 (exit=$T_EXPORT_EXIT)"
+    echo "  output: $T_EXPORT_OUT"
+    echo "  engine log: $(cat $MOCK_DIR/engine.log)"
+    FAIL=$((FAIL+1))
+    FAILED_TESTS+=("T_export_perm")
+fi
 
 echo "--- T_empty: 真正无参数调用 ---"
 T_EMPTY_OUT=$(db 2>&1)

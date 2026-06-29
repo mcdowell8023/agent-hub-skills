@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # db.sh — db-connect skill 核心脚本
 # 支持 MySQL + MongoDB，安全权限控制，零 MCP 依赖。
+# 数据库引擎通过 Python（pymysql/pymongo）实现，跨平台零差异。
 
 set -euo pipefail
 
@@ -10,9 +11,13 @@ SKILL_DIR="$(dirname "$SCRIPT_DIR")"
 DB_JSON="${DATABASES_JSON:-$HOME/.claude/skills/db-connect/databases.json}"
 EXPORTS_DIR="$SKILL_DIR/exports"
 
-# 命令 mock 入口（测试用）
-MYSQL_CMD="${MYSQL_CMD:-mysql}"
-MONGOSH_CMD="${MONGOSH_CMD:-mongosh}"
+# Python 引擎入口（测试用可注入 mock 脚本）
+DB_ENGINE="${DB_ENGINE_CMD:-python3 "$SCRIPT_DIR/db_engine.py"}"
+# 标记 DB_ENGINE_CMD 是否被显式覆盖（测试场景）
+DB_ENGINE_OVERRIDDEN=false
+if [ -n "${DB_ENGINE_CMD+x}" ] && [ -n "$DB_ENGINE_CMD" ]; then
+    DB_ENGINE_OVERRIDDEN=true
+fi
 
 # ============ 工具函数 ============
 err() { echo "错误: $*" >&2; }
@@ -35,6 +40,16 @@ get_active_type() {
 
 get_active_permission() {
     py_json "print(d['connections'][d['active']]['permission'])"
+}
+
+# 把当前活跃连接的 dict 转成 JSON 字符串，传给 Python 引擎
+# 用法: get_active_config_json
+get_active_config_json() {
+    python3 -c "
+import json
+d = json.load(open('$DB_JSON'))
+print(json.dumps(d['connections'][d['active']]))
+"
 }
 
 # 跨平台超时执行（macOS 无 timeout 命令）
@@ -84,6 +99,24 @@ run_with_timeout() {
     rm -rf "$tmpdir"
     err "查询超时（${secs}s）"
     return 124  # GNU timeout 的标准超时码
+}
+
+# ============ 依赖检查 ============
+# 启动时检查 Python 引擎依赖（pymysql + pymongo）
+# 仅在执行需要引擎的子命令时检查；help/ls 不依赖引擎
+check_python_deps() {
+    local missing=()
+    if ! python3 -c "import pymysql" 2>/dev/null; then
+        missing+=("pymysql")
+    fi
+    if ! python3 -c "import pymongo" 2>/dev/null; then
+        missing+=("pymongo")
+    fi
+    if [ ${#missing[@]} -gt 0 ]; then
+        err "缺少 Python 依赖: ${missing[*]}"
+        err "运行: pip3 install ${missing[*]}"
+        return 1
+    fi
 }
 
 # ============ 权限检查 ============
@@ -204,56 +237,19 @@ json.dump(d, open('$tmp','w'), indent=2, ensure_ascii=False)
 cmd_test() {
     local type
     type=$(get_active_type)
+    local config_json
+    config_json=$(get_active_config_json)
     local stderr_tmp
     stderr_tmp=$(mktemp)
-    case "$type" in
-        mysql)
-            local host user pass port db_name ssl
-            host=$(get_active_field host)
-            user=$(get_active_field user)
-            pass=$(get_active_field pass)
-            port=$(get_active_field port)
-            db_name=$(get_active_field db)
-            ssl=$(get_active_field ssl)
-            local extra=()
-            if [ "$ssl" = "True" ] || [ "$ssl" = "true" ]; then
-                extra+=(--ssl)
-            else
-                # 默认不加 --ssl，Hub MariaDB 需要
-                extra+=(--skip-ssl)
-            fi
-            if run_with_timeout 30 "$MYSQL_CMD" \
-                -h "$host" -P "$port" -u "$user" \
-                -p"$pass" "${extra[@]}" \
-                -e "SELECT 1" "$db_name" > /dev/null 2>"$stderr_tmp"; then
-                rm -f "$stderr_tmp"
-                info "连接成功: $(get_active_field label)"
-                return 0
-            else
-                err "连接失败: $(get_active_field label) — $(tail -1 "$stderr_tmp" 2>/dev/null)"
-                rm -f "$stderr_tmp"
-                return 1
-            fi
-            ;;
-        mongodb)
-            local uri
-            uri=$(get_active_field uri)
-            if run_with_timeout 30 "$MONGOSH_CMD" "$uri" --quiet --eval "db.runCommand({ping:1})" > /dev/null 2>"$stderr_tmp"; then
-                rm -f "$stderr_tmp"
-                info "连接成功: $(get_active_field label)"
-                return 0
-            else
-                err "连接失败: $(get_active_field label) — $(tail -1 "$stderr_tmp" 2>/dev/null)"
-                rm -f "$stderr_tmp"
-                return 1
-            fi
-            ;;
-        *)
-            err "未知数据库类型: $type"
-            rm -f "$stderr_tmp"
-            return 1
-            ;;
-    esac
+    if run_with_timeout 30 $DB_ENGINE connect "$config_json" > /dev/null 2>"$stderr_tmp"; then
+        rm -f "$stderr_tmp"
+        info "连接成功: $(get_active_field label)"
+        return 0
+    else
+        err "连接失败: $(get_active_field label) — $(tail -1 "$stderr_tmp" 2>/dev/null)"
+        rm -f "$stderr_tmp"
+        return 1
+    fi
 }
 
 cmd_query() {
@@ -279,24 +275,9 @@ cmd_query() {
                 final_query="${query} LIMIT 100"
             fi
 
-            local host user pass port db_name ssl
-            host=$(get_active_field host)
-            user=$(get_active_field user)
-            pass=$(get_active_field pass)
-            port=$(get_active_field port)
-            db_name=$(get_active_field db)
-            ssl=$(get_active_field ssl)
-            local extra=()
-            if [ "$ssl" = "True" ] || [ "$ssl" = "true" ]; then
-                extra+=(--ssl)
-            else
-                extra+=(--skip-ssl)
-            fi
-
-            run_with_timeout 30 "$MYSQL_CMD" \
-                -h "$host" -P "$port" -u "$user" \
-                -p"$pass" "${extra[@]}" \
-                --execute="$final_query" "$db_name"
+            local config_json
+            config_json=$(get_active_config_json)
+            run_with_timeout 30 $DB_ENGINE query "$config_json" "$final_query"
             ;;
 
         mongodb)
@@ -304,9 +285,9 @@ cmd_query() {
                 return 1
             fi
 
-            local uri
-            uri=$(get_active_field uri)
-            run_with_timeout 30 "$MONGOSH_CMD" "$uri" --quiet --eval "$query"
+            local config_json
+            config_json=$(get_active_config_json)
+            run_with_timeout 30 $DB_ENGINE query "$config_json" "$query"
             ;;
 
         *)
@@ -386,36 +367,33 @@ cmd_export() {
         return 1
     fi
 
+    # 权限检查：拼好的最终 SQL 也必须走安全校验
+    # 防止 --where 注入 INTO OUTFILE / UNION 等绕过 readonly
+    local permission
+    permission=$(get_active_permission)
+    local final_export_sql="SELECT * FROM $target"
+    if [ -n "$where" ]; then
+        final_export_sql="$final_export_sql WHERE $where"
+    fi
+    final_export_sql="$final_export_sql LIMIT 10000"
+    if ! check_mysql_permission "$final_export_sql" "$permission"; then
+        return 1
+    fi
+
     mkdir -p "$EXPORTS_DIR"
     # 路径穿越防护：basename 去掉 ../、/、绝对路径前缀等
     target=$(basename "$target")
     local ts=$(date +%Y%m%d_%H%M%S)
     local outfile="$EXPORTS_DIR/${target}_${ts}.csv"
 
-    local host user pass port db_name ssl
-    host=$(get_active_field host)
-    user=$(get_active_field user)
-    pass=$(get_active_field pass)
-    port=$(get_active_field port)
-    db_name=$(get_active_field db)
-    ssl=$(get_active_field ssl)
-    local extra=()
-    if [ "$ssl" = "True" ] || [ "$ssl" = "true" ]; then
-        extra+=(--ssl)
-    else
-        extra+=(--skip-ssl)
-    fi
+    local config_json
+    config_json=$(get_active_config_json)
 
-    local sql="SELECT * FROM $target"
     if [ -n "$where" ]; then
-        sql="$sql WHERE $where"
+        run_with_timeout 30 $DB_ENGINE export "$config_json" "$target" "$where" > "$outfile"
+    else
+        run_with_timeout 30 $DB_ENGINE export "$config_json" "$target" > "$outfile"
     fi
-    sql="$sql LIMIT 10000"
-
-    run_with_timeout 30 "$MYSQL_CMD" \
-        -h "$host" -P "$port" -u "$user" \
-        -p"$pass" "${extra[@]}" \
-        --batch --execute="$sql" "$db_name" > "$outfile"
 
     info "已导出: $outfile"
 }
@@ -440,8 +418,7 @@ MySQL 专用:
 
 环境变量:
   DATABASES_JSON  配置文件路径（默认 ~/.claude/skills/db-connect/databases.json）
-  MYSQL_CMD       mysql CLI 路径（默认 mysql）
-  MONGOSH_CMD     mongosh 路径（默认 mongosh）
+  DB_ENGINE_CMD   Python 引擎入口（默认 python3 <skill>/scripts/db_engine.py）
 EOF
 }
 
@@ -460,6 +437,18 @@ main() {
         err "请参考 databases.json.example 创建"
         return 1
     fi
+
+    # 需要 Python 引擎的子命令：提前检查依赖
+    # 但如果 DB_ENGINE_CMD 被显式覆盖（测试场景），跳过依赖检查
+    case "$subcmd" in
+        test|query|tables|desc|count|export)
+            if [ "$DB_ENGINE_OVERRIDDEN" != "true" ]; then
+                if ! check_python_deps; then
+                    return 1
+                fi
+            fi
+            ;;
+    esac
 
     case "$subcmd" in
         ls) cmd_ls "$@" ;;
