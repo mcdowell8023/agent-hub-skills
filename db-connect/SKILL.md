@@ -96,6 +96,59 @@ bash ~/.claude/skills/db-connect/scripts/tests/test-db.sh
 
 23 个用例覆盖：参数解析、连接列表、切换、权限拒绝、DDL/高危拦截、自动 LIMIT、连接失败检测。无需真实数据库（mock CLI）。
 
+## JumpServer 中转（jms_exec transport）
+
+内网数据库从外网不可达时，通过 JumpServer WebSocket 中转执行查询。
+
+### 什么时候需要
+
+- 数据库 IP 为 `172.31.x.x`（AWS 内网），外网无法直连
+- 已有 JumpServer 堡垒机账号且有目标服务器 SSH 权限
+- 目标服务器上已安装 `python3` + `pymysql`
+
+### databases.json 配置示例
+
+```json
+"test-wb-ucs": {
+  "type": "mysql",
+  "host": "172.31.5.87", "port": 3306,
+  "user": "root", "pass": "Doh+SaNyUdsVxg", "db": "wb_ucs",
+  "permission": "full",
+  "ssl": false,
+  "label": "测试 wb_ucs (内网, JumpServer 中转)",
+  "transport": "jms_exec",
+  "jms": {
+    "url": "https://jump.lvshiwanyang.com",
+    "username": "mengxianchao",
+    "asset_id": "a4cd3fa9-47d3-4059-9e48-d969748766d7",
+    "account_id": "e9b49234-1f40-4173-ac61-655336dc8912"
+  }
+}
+```
+
+- `transport: "jms_exec"` — 启用 JumpServer 中转模式
+- 不填或 `"transport": "direct"` — 走现有直连逻辑
+- `jms.asset_id` / `jms.account_id` — JumpServer 资产和账号 UUID（从 `wb-jumpserver-log-query` SKILL.md 获取）
+
+### JMS 密码配置
+
+JumpServer 登录密码**不存 databases.json**（安全原因）。按优先级：
+
+1. 环境变量 `JMS_PASSWORD`
+2. `~/.ai/rules/credentials.md` 或 `~/wb/.ai/rules/credentials.md` 的 §1.5 节
+
+### 依赖
+
+- `pip3 install websockets`（本地）
+- 远程服务器需要 `python3` + `pymysql`
+
+### 限制
+
+- 每次查询建一次 WebSocket 连接，比直连慢 3-5 秒
+- 不支持验证码自动处理（首次登录如触发验证码需手动处理）
+- 仅支持 MySQL（MongoDB 不支持 jms_exec）
+- SQL 安全检查（DDL 拦截、权限控制）与 direct 模式一致
+
 ## TUN 代理兼容（v2rayN / sing-box）
 
 sing-box gvisor TUN 会破坏 MySQL 协议握手，导致所有数据库连接失败。

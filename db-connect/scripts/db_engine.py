@@ -33,6 +33,10 @@ import json
 import sys
 import csv
 import io
+import os
+import re
+import time
+import asyncio
 
 
 # ============ 帮助 ============
@@ -285,13 +289,329 @@ def mongo_print(obj):
         sys.stdout.write(json.dumps(obj, default=str, ensure_ascii=False) + "\n")
 
 
+# ============ JumpServer (jms_exec) transport ============
+
+def jms_get_password():
+    pw = os.environ.get("JMS_PASSWORD", "")
+    if pw:
+        return pw
+    home = os.path.expanduser("~")
+    for rel in (".ai/rules/credentials.md", "wb/.ai/rules/credentials.md"):
+        path = os.path.join(home, rel)
+        if not os.path.isfile(path):
+            continue
+        try:
+            in_section = False
+            with open(path) as f:
+                for line in f:
+                    if "1.5" in line and ("JumpServer" in line or "jumpserver" in line.lower()):
+                        in_section = True
+                    elif in_section and line.startswith("###"):
+                        break
+                    elif in_section and "密码" in line:
+                        parts = line.split("|")
+                        if len(parts) >= 4:
+                            val = parts[3].strip()
+                            if val:
+                                return val
+        except Exception:
+            pass
+    return ""
+
+
+def jms_login(base_url, username, password):
+    import urllib.request
+    import urllib.parse
+    from html.parser import HTMLParser
+    from http.cookiejar import CookieJar
+    import ssl as _ssl
+
+    ssl_ctx = _ssl.create_default_context()
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = _ssl.CERT_NONE
+
+    jar = CookieJar()
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPSHandler(context=ssl_ctx),
+        urllib.request.HTTPCookieProcessor(jar),
+    )
+    opener.addheaders = [
+        ("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+    ]
+
+    login_url = f"{base_url}/core/auth/login/"
+    resp = opener.open(urllib.request.Request(login_url))
+    html = resp.read().decode("utf-8", errors="replace")
+
+    class LP(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.fields = {}
+            self.has_captcha = False
+        def handle_starttag(self, tag, attrs):
+            a = dict(attrs)
+            if tag == "input" and a.get("name"):
+                self.fields[a["name"]] = a.get("value", "")
+            if tag == "input" and a.get("name") == "captcha_0":
+                self.has_captcha = True
+
+    page = LP()
+    page.feed(html)
+    if page.has_captcha:
+        err("JMS 登录需要验证码，jms_exec transport 暂不支持自动验证码")
+
+    csrf = page.fields.get("csrfmiddlewaretoken", "")
+    if not csrf:
+        for c in jar:
+            if c.name == "csrftoken":
+                csrf = c.value
+                break
+
+    opener.open(urllib.request.Request(
+        login_url,
+        data=urllib.parse.urlencode({
+            "csrfmiddlewaretoken": csrf,
+            "username": username,
+            "password": password,
+        }).encode(),
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Referer": login_url,
+            "X-CSRFToken": csrf,
+        },
+    ))
+
+    for path in ("/core/auth/login/guard/", "/"):
+        try:
+            opener.open(urllib.request.Request(f"{base_url}{path}"))
+        except Exception:
+            pass
+
+    return opener, jar
+
+
+def jms_get_cookie(jar, name):
+    for c in jar:
+        if c.name == name:
+            return c.value
+    return ""
+
+
+def jms_get_connection_token(opener, jar, base_url, asset_id, account_id):
+    csrf = jms_get_cookie(jar, "jms_csrftoken") or jms_get_cookie(jar, "csrftoken")
+    payload = json.dumps({
+        "asset": asset_id,
+        "account": account_id,
+        "protocol": "ssh",
+        "connect_method": "web_cli",
+    }).encode()
+    resp = opener.open(urllib.request.Request(
+        f"{base_url}/api/v1/authentication/connection-token/",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrf,
+            "Accept": "application/json",
+        },
+    ))
+    data = json.loads(resp.read())
+    token_id = data.get("id")
+    if not token_id:
+        err(f"JMS connection-token 请求失败: {data}")
+    return token_id
+
+
+async def _jms_ws_exec(jar, base_url, conn_token, command, timeout=30):
+    import websockets
+    import ssl as _ssl
+
+    session = jms_get_cookie(jar, "jms_sessionid")
+    csrf = jms_get_cookie(jar, "jms_csrftoken") or jms_get_cookie(jar, "csrftoken")
+
+    ws_url = f"{'wss' if base_url.startswith('https') else 'ws'}://{base_url.split('://', 1)[-1]}/koko/ws/terminal/?token={conn_token}"
+    ssl_ctx = _ssl.create_default_context()
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = _ssl.CERT_NONE
+    ssl_ctx.set_alpn_protocols(["http/1.1"])
+
+    headers = {
+        "Origin": base_url,
+        "Cookie": f"jms_sessionid={session}; jms_csrftoken={csrf}",
+    }
+
+    raw = ""
+    cmd_sent = False
+    deadline = time.time() + timeout
+
+    async with websockets.connect(ws_url, ssl=ssl_ctx, additional_headers=headers) as ws:
+        while time.time() < deadline:
+            try:
+                msg = await asyncio.wait_for(ws.recv(), timeout=3.0)
+            except asyncio.TimeoutError:
+                if cmd_sent and raw:
+                    break
+                continue
+
+            if isinstance(msg, bytes):
+                raw += msg.decode("utf-8", errors="replace")
+                if not cmd_sent and ("$" in raw or "#" in raw):
+                    cmd_sent = True
+                    await asyncio.sleep(0.5)
+                    await ws.send(command.encode() + b"\r")
+            else:
+                frame = json.loads(msg)
+                if frame.get("type") == "CONNECT":
+                    await ws.send(json.dumps({
+                        "id": frame["id"],
+                        "type": "TERMINAL_INIT",
+                        "data": json.dumps({"cols": 300, "rows": 50}),
+                    }))
+
+    clean = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', raw)
+    clean = re.sub(r'\x1b\][^\x07]*\x07', '', clean)
+    clean = clean.replace('\r', '')
+    return clean
+
+
+def jms_extract_json(raw, marker="__JMS_RESULT__"):
+    s = raw.find(marker)
+    if s < 0:
+        err("JMS 输出未找到结果标记")
+    after = raw[s + len(marker):]
+    e = after.find(marker)
+    if e < 0:
+        err("JMS 输出缺少结束标记")
+    json_str = after[:e].strip()
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError as ex:
+        err(f"JMS 输出 JSON 解析失败: {ex}\n原始: {json_str[:200]}")
+
+
+def jms_build_remote_command(config, sql):
+    host = config["host"]
+    port = int(config.get("port", 3306))
+    user = config["user"]
+    password = config.get("pass", "")
+    database = config.get("db", "")
+
+    pw_esc = password.replace("'", "'\"'\"'")
+    sql_esc = sql.replace("'", "'\"'\"'")
+    db_arg = f",database='{database}'" if database else ""
+
+    py = (
+        f"import pymysql,json;sys=__import__('sys');"
+        f"c=pymysql.connect(host='{host}',port={port},user='{user}',"
+        f"password='{pw_esc}'{db_arg},charset='utf8mb4',"
+        f"cursorclass=pymysql.cursors.Cursor);"
+        f"cur=c.cursor();cur.execute('{sql_esc}');"
+        f"d=cur.description;"
+        f"r=[list(x) for x in cur.fetchall()];"
+        f"o=[[dd[0] for dd in d],r] if d else [[],[]];"
+        f"print('__JMS_RESULT__'+json.dumps(o,ensure_ascii=False,default=str)+'__JMS_RESULT__');"
+        f"c.close()"
+    )
+    return f"""python3 -c '{py}'"""
+
+
+def jms_query(config, sql):
+    jms = config.get("jms", {})
+    if not jms:
+        err("jms_exec transport 需要 jms 配置字段")
+
+    password = jms_get_password()
+    if not password:
+        err("JMS 密码未配置。设置环境变量 JMS_PASSWORD 或在 credentials.md §1.5 配置")
+
+    base_url = jms.get("url", "https://jump.lvshiwanyang.com")
+    username = jms.get("username", "mengxianchao")
+    asset_id = jms.get("asset_id", "")
+    account_id = jms.get("account_id", "")
+
+    if not asset_id or not account_id:
+        err("jms 配置缺少 asset_id 或 account_id")
+
+    opener, jar = jms_login(base_url, username, password)
+    conn_token = jms_get_connection_token(opener, jar, base_url, asset_id, account_id)
+    command = jms_build_remote_command(config, sql)
+    raw = asyncio.run(_jms_ws_exec(jar, base_url, conn_token, command))
+    data = jms_extract_json(raw)
+    columns = data[0] if data else []
+    rows = data[1] if len(data) > 1 else []
+    rows = [[str(v) if v is not None else "" for v in row] for row in rows]
+    return columns, rows
+
+
+def jms_connect_test(config):
+    jms = config.get("jms", {})
+    if not jms:
+        err("jms_exec transport 需要 jms 配置字段")
+    password = jms_get_password()
+    if not password:
+        err("JMS 密码未配置。设置环境变量 JMS_PASSWORD 或在 credentials.md §1.5 配置")
+    base_url = jms.get("url", "https://jump.lvshiwanyang.com")
+    username = jms.get("username", "mengxianchao")
+    asset_id = jms.get("asset_id", "")
+    account_id = jms.get("account_id", "")
+    if not asset_id or not account_id:
+        err("jms 配置缺少 asset_id 或 account_id")
+    opener, jar = jms_login(base_url, username, password)
+    jms_get_connection_token(opener, jar, base_url, asset_id, account_id)
+
+
 # ============ Dispatcher ============
 
 def main():
     if len(sys.argv) < 2:
         usage()
     action, config, args = load_config(sys.argv)
+    transport = config.get("transport", "direct")
     db_type = config.get("type", "").lower()
+
+    if transport == "jms_exec":
+        if action == "connect":
+            jms_connect_test(config)
+            return
+        if action == "query":
+            if not args:
+                err("query 需要 SQL 参数")
+            cols, rows = jms_query(config, " ".join(args))
+            mysql_print_table(cols, rows)
+            return
+        if action == "tables":
+            cols, rows = jms_query(config, "SHOW TABLES")
+            mysql_print_table(cols, rows)
+            return
+        if action == "desc":
+            if not args:
+                err("desc 需要表名")
+            cols, rows = jms_query(config, f"DESCRIBE {args[0]}")
+            mysql_print_table(cols, rows)
+            return
+        if action == "count":
+            if not args:
+                err("count 需要表名")
+            cols, rows = jms_query(config, f"SELECT COUNT(*) AS cnt FROM {args[0]}")
+            mysql_print_table(cols, rows)
+            return
+        if action == "export":
+            if not args:
+                err("export 需要表名")
+            table = args[0]
+            where = " ".join(args[1:]) if len(args) > 1 else ""
+            sql = f"SELECT * FROM {table}"
+            if where:
+                sql += f" WHERE {where}"
+            sql += " LIMIT 10000"
+            cols, rows = jms_query(config, sql)
+            writer = csv.writer(sys.stdout, quoting=csv.QUOTE_MINIMAL)
+            if cols:
+                writer.writerow(cols)
+            for row in rows:
+                writer.writerow(row)
+            return
+        err(f"未知 action: {action}")
 
     if db_type == "mysql":
         if action == "connect":

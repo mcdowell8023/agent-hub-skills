@@ -42,6 +42,10 @@ get_active_permission() {
     py_json "print(d['connections'][d['active']]['permission'])"
 }
 
+get_active_transport() {
+    py_json "print(d['connections'][d['active']].get('transport', 'direct'))"
+}
+
 # 把当前活跃连接的 dict 转成 JSON 字符串，传给 Python 引擎
 # 用法: get_active_config_json
 get_active_config_json() {
@@ -105,6 +109,22 @@ run_with_timeout() {
 # 启动时检查 Python 引擎依赖（pymysql + pymongo）
 # 仅在执行需要引擎的子命令时检查；help/ls 不依赖引擎
 check_python_deps() {
+    local transport
+    transport=$(get_active_transport 2>/dev/null || echo "direct")
+
+    if [ "$transport" = "jms_exec" ]; then
+        local missing=()
+        if ! python3 -c "import websockets" 2>/dev/null; then
+            missing+=("websockets")
+        fi
+        if [ ${#missing[@]} -gt 0 ]; then
+            err "缺少 Python 依赖: ${missing[*]}（jms_exec transport 需要）"
+            err "运行: pip3 install ${missing[*]}"
+            return 1
+        fi
+        return 0
+    fi
+
     local missing=()
     if ! python3 -c "import pymysql" 2>/dev/null; then
         missing+=("pymysql")

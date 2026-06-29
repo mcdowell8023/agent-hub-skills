@@ -69,6 +69,36 @@ setup() {
       "permission": "readonly",
       "ssl": false,
       "label": "测试连接失败"
+    },
+    "jms-mysql": {
+      "type": "mysql",
+      "host": "172.31.5.87", "port": 3306,
+      "user": "root", "pass": "Doh+SaNyUdsVxg", "db": "wb_ucs",
+      "permission": "full",
+      "ssl": false,
+      "label": "测试 wb_ucs (内网, JumpServer 中转)",
+      "transport": "jms_exec",
+      "jms": {
+        "url": "https://jump.lvshiwanyang.com",
+        "username": "mengxianchao",
+        "asset_id": "a4cd3fa9-47d3-4059-9e48-d969748766d7",
+        "account_id": "e9b49234-1f40-4173-ac61-655336dc8912"
+      }
+    },
+    "jms-mysql-nopw": {
+      "type": "mysql",
+      "host": "172.31.5.87", "port": 3306,
+      "user": "root", "pass": "Doh+SaNyUdsVxg", "db": "wb_ucs",
+      "permission": "full",
+      "ssl": false,
+      "label": "测试 JMS 无密码场景",
+      "transport": "jms_exec",
+      "jms": {
+        "url": "https://jump.lvshiwanyang.com",
+        "username": "mengxianchao",
+        "asset_id": "a4cd3fa9-47d3-4059-9e48-d969748766d7",
+        "account_id": "e9b49234-1f40-4173-ac61-655336dc8912"
+      }
     }
   },
   "active": "test-mysql"
@@ -83,6 +113,37 @@ JSON
 echo "ENGINE_ARGS: $*" >> "${MOCK_DIR:-.}/engine.log"
 action="$1"; shift
 config="$1"; shift
+
+# JMS transport mode
+if echo "$config" | grep -q '"transport": "jms_exec"\|"transport":"jms_exec"'; then
+    # Check JMS password: env var first, then credentials.md
+    if [ -z "${JMS_PASSWORD:-}" ]; then
+        CRED_FOUND=false
+        for CRED_FILE in "$HOME/.ai/rules/credentials.md" "$HOME/wb/.ai/rules/credentials.md"; do
+            if [ -f "$CRED_FILE" ] && grep -q "1.5.*JumpServer\|JumpServer.*堡垒机" "$CRED_FILE" 2>/dev/null; then
+                CRED_FOUND=true
+                break
+            fi
+        done
+        if [ "$CRED_FOUND" != "true" ]; then
+            echo "错误: JMS 密码未配置。设置环境变量 JMS_PASSWORD 或在 credentials.md §1.5 配置" >&2
+            exit 1
+        fi
+    fi
+    if [ "$action" = "connect" ]; then
+        exit 0
+    fi
+    if [ "$action" = "export" ]; then
+        echo "id,name"
+        echo "1,test"
+        exit 0
+    fi
+    # Default: tab-separated mock result (simulates parsed WS JSON output)
+    echo -e "col1\tcol2"
+    echo -e "v1\tv2"
+    exit 0
+fi
+
 # 模拟连接失败：config 含 "wrong" 时
 if echo "$config" | grep -q '"pass": "wrong"'; then
     echo "ERROR 1045 (28000): Access denied" >&2
@@ -385,6 +446,81 @@ else
     FAIL=$((FAIL+1))
     FAILED_TESTS+=("T_empty")
 fi
+
+# ============ JMS transport tests ============
+
+echo "--- T_jms1: transport=jms_exec 配置被正确识别 ---"
+db use jms-mysql > /dev/null 2>&1
+: > "$MOCK_DIR/engine.log"
+T_JMS1_OUT=$(JMS_PASSWORD=test_pass db query "SELECT 1" 2>&1)
+T_JMS1_EXIT=$?
+if [ "$T_JMS1_EXIT" -eq 0 ] && echo "$T_JMS1_OUT" | grep -q "col1"; then
+    echo -e "${GREEN}PASS${NC} T_jms1: jms_exec transport 查询成功 (exit=0, 输出含 col1)"
+    PASS=$((PASS+1))
+else
+    echo -e "${RED}FAIL${NC} T_jms1: jms_exec transport 查询失败 (exit=$T_JMS1_EXIT)"
+    echo "  output: $T_JMS1_OUT"
+    FAIL=$((FAIL+1))
+    FAILED_TESTS+=("T_jms1")
+fi
+# 验证 engine mock 被调用且 config 含 jms 字段
+if grep -q "jms_exec" "$MOCK_DIR/engine.log"; then
+    echo -e "${GREEN}PASS${NC} T_jms1: engine 收到 jms_exec config"
+    PASS=$((PASS+1))
+else
+    echo -e "${RED}FAIL${NC} T_jms1: engine 未收到 jms_exec config"
+    echo "  log: $(cat $MOCK_DIR/engine.log)"
+    FAIL=$((FAIL+1))
+    FAILED_TESTS+=("T_jms1 engine-log")
+fi
+
+echo "--- T_jms2: 缺少 JMS 密码时报错提示 ---"
+db use jms-mysql > /dev/null 2>&1
+: > "$MOCK_DIR/engine.log"
+# 用空 HOME 避免 credentials.md 被找到，同时清空 JMS_PASSWORD
+T_JMS2_OUT=$(HOME=/tmp/_jms_no_creds_$$ JMS_PASSWORD= db query "SELECT 1" 2>&1)
+T_JMS2_EXIT=$?
+if [ "$T_JMS2_EXIT" -ne 0 ] && echo "$T_JMS2_OUT" | grep -q "JMS 密码"; then
+    echo -e "${GREEN}PASS${NC} T_jms2: 缺少 JMS 密码报错 (exit=$T_JMS2_EXIT)"
+    PASS=$((PASS+1))
+else
+    echo -e "${RED}FAIL${NC} T_jms2: 缺少 JMS 密码未正确报错 (exit=$T_JMS2_EXIT)"
+    echo "  output: $T_JMS2_OUT"
+    FAIL=$((FAIL+1))
+    FAILED_TESTS+=("T_jms2")
+fi
+rm -rf /tmp/_jms_no_creds_$$ 2>/dev/null
+
+echo "--- T_jms3: mock WebSocket 返回查询结果 ---"
+db use jms-mysql > /dev/null 2>&1
+: > "$MOCK_DIR/engine.log"
+T_JMS3_OUT=$(JMS_PASSWORD=test_pass db query "SELECT id, name FROM users" 2>&1)
+T_JMS3_EXIT=$?
+# 验证 tab 分隔输出含列名和数据
+if [ "$T_JMS3_EXIT" -eq 0 ] && echo "$T_JMS3_OUT" | grep -q "col1" && echo "$T_JMS3_OUT" | grep -q "v1"; then
+    echo -e "${GREEN}PASS${NC} T_jms3: mock WS 返回结果正确解析 (exit=0, tab 分隔)"
+    PASS=$((PASS+1))
+else
+    echo -e "${RED}FAIL${NC} T_jms3: mock WS 返回结果解析失败 (exit=$T_JMS3_EXIT)"
+    echo "  output: $T_JMS3_OUT"
+    FAIL=$((FAIL+1))
+    FAILED_TESTS+=("T_jms3")
+fi
+# 验证 test 命令也能走 jms_exec 路径
+T_JMS3T_OUT=$(JMS_PASSWORD=test_pass db test 2>&1)
+T_JMS3T_EXIT=$?
+if [ "$T_JMS3T_EXIT" -eq 0 ]; then
+    echo -e "${GREEN}PASS${NC} T_jms3: db test 走 jms_exec 路径成功"
+    PASS=$((PASS+1))
+else
+    echo -e "${RED}FAIL${NC} T_jms3: db test 走 jms_exec 路径失败 (exit=$T_JMS3T_EXIT)"
+    echo "  output: $T_JMS3T_OUT"
+    FAIL=$((FAIL+1))
+    FAILED_TESTS+=("T_jms3 db-test")
+fi
+
+# 切回默认连接
+db use test-mysql > /dev/null 2>&1
 
 # ============ 总结 ============
 echo ""
