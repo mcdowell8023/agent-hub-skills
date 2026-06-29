@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+echo "MYSQL_ARGS: $*" >> "${MOCK_DIR:-.}/mysql.log"
+# 含 pass=wrong 时模拟失败（检测 -pwrong 参数）
+for arg in "$@"; do
+    case "$arg" in
+        -pwrong|pwrong|*wrong*)
+            echo "ERROR 1045 (28000): Access denied" >&2
+            exit 1
+            ;;
+    esac
+done
+exit 0

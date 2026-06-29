@@ -1,0 +1,4 @@
+databases.json
+exports/
+*.log
+.DS_Store

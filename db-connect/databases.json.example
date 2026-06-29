@@ -1,0 +1,39 @@
+{
+  "connections": {
+    "test-mysql": {
+      "type": "mysql",
+      "host": "127.0.0.1",
+      "port": 3306,
+      "user": "root",
+      "pass": "REPLACE_ME",
+      "db": "wb_project",
+      "permission": "readonly",
+      "ssl": false,
+      "label": "测试 MySQL（只读示例）"
+    },
+    "test-mysql-full": {
+      "type": "mysql",
+      "host": "127.0.0.1",
+      "port": 3306,
+      "user": "root",
+      "pass": "REPLACE_ME",
+      "db": "wb_project",
+      "permission": "full",
+      "ssl": false,
+      "label": "测试 MySQL（读写示例）"
+    },
+    "test-mongo": {
+      "type": "mongodb",
+      "uri": "mongodb://127.0.0.1:27017/crm_bridge",
+      "permission": "readonly",
+      "label": "测试 MongoDB（只读示例）"
+    },
+    "test-mongo-full": {
+      "type": "mongodb",
+      "uri": "mongodb://127.0.0.1:27017/crm_bridge",
+      "permission": "full",
+      "label": "测试 MongoDB（读写示例）"
+    }
+  },
+  "active": "test-mysql"
+}

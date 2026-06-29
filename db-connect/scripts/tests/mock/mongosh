@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+echo "MONGOSH_ARGS: $*" >> "${MOCK_DIR:-.}/mongosh.log"
+# 模拟连接失败
+for arg in "$@"; do
+    if [ "$arg" = "CONNECT_FAIL" ]; then
+        echo "MongoServerError: connect ECONNREFUSED" >&2
+        exit 1
+    fi
+done
+echo "mock mongosh result for: $*"
+exit 0
