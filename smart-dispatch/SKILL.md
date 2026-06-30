@@ -81,19 +81,40 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 - ConversationStats 基准（2026-06-20）
 - LRU + Bug诊断 + Kafka架构 三道题盲评（2026-06-28，GPT-5.5 裁判）
 
-**9 模型 GPT-5.5 盲评排名**（LRU Cache + 并发 Bug 诊断 + Kafka 架构设计）：
+**9 模型盲评排名 + 性价比**（GPT-5.5 裁判，2026-06-28）：
 
-| Tier | 模型 | 总分/120 | 强项 |
-|---|---|---|---|
-| S | MiniMax-M3 | 114 | Bug 诊断(38)、架构设计(39)、双方案洞察 |
-| A | GLM-5.2 | 101 | 架构深度(Outbox+SKIP LOCKED+CAP) |
-| B | Kimi-K2.7-Code | 94 | Outbox+手写 AsyncLock |
-| B | Hy3 preview | 92 | 均衡无短板 |
-| B | Qwen3.7-Max | 90 | Bug 诊断强(35) |
-| B | DeepSeek-V4-Pro | 86 | 全面均衡 |
-| B | Kimi-K2.6 | 82 | 合格 |
-| C | Sonnet 4.6 | 77 | LRU 代码质量最高(35)，但术语错+缺 Outbox |
-| C | Qwen3.7-Plus | 76 | 无泛型、去 async 方案弱 |
+| Tier | 模型 | 得分/120 | cb Credit | qcn Credit | 性价比(得分/credit) | 强项 |
+|---|---|---|---|---|---|---|
+| S | MiniMax-M3 | 114 | **0.25x** | — | **456** | Bug+架构全面最强 |
+| A | GLM-5.2 | 101 | 0.79x | 0.60x | 128(cb)/168(qcn) | 架构深度强 |
+| B | Kimi-K2.7-Code | 94 | 0.59x | — | 159 | AsyncLock+Outbox |
+| B | Hy3 preview | 92 | **0.18x** | — | **511** 🏆 | 均衡+性价比第一 |
+| B | Qwen3.7-Max | 90 | — | 0.25x(日)/0.10x(夜) | 360(日)/**900(夜)** | Bug 诊断强，夜间超值 |
+| B | DeepSeek-V4-Pro | 86 | **0.25x** | 0.50x | 344(cb) | 全面均衡 |
+| B | Kimi-K2.6 | 82 | 0.52x | 0.30x | 158(cb)/273(qcn) | qcn 便宜 42% |
+| C | Sonnet 4.6 | 77 | — | — | (订阅制) | LRU 最高但架构弱 |
+| C | Qwen3.7-Plus | 76 | — | 0.10x(日)/0.04x(夜) | 760(日)/**1900(夜)** | 夜间性价比之王 |
+
+> **费率数据来源**：Paseo `list_models` API 实时查询（2026-06-30）。费率会变，派发前可重新查询。
+
+**性价比排名**（得分÷credit，越高越好）：
+1. Qwen3.7-Plus: 760（轻量任务首选）
+2. **Hy3 preview: 511**（0.18x 降价后逆袭，B tier 但性价比超 M3）
+3. MiniMax-M3: 456（S tier，质量+性价比双优）
+4. Qwen3.7-Max: 360
+5. V4-Pro: 344
+6. Kimi-K2.6 qcn: 273
+7. GLM-5.2 qcn: 168
+8. Kimi-K2.7: 159
+9. GLM-5.2 cb: 128
+
+**性价比决策规则**：
+- 质量要求高 → M3（0.25x，S tier）
+- 质量够用 + 省钱 → Hy3（0.18x，B tier 92 分，性价比第一）
+- 轻量/批量 → Qwen3.7-Plus（0.10x）
+- GLM-5.2 必须走 qoderclicn（0.60x），cb 上 0.79x 贵 32%
+- V4-Pro 必须走 codebuddy（0.25x），qcn 上 0.50x 贵一倍
+- K2.6 走 qoderclicn（0.30x），cb 上 0.52x 贵 73%
 
 ```
 任务到达
@@ -105,54 +126,54 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
   ├─ batch / 批量？（区分调度层 vs 执行层）
   │    ├─ 调度编排（多 agent 并发分发）→ Sonnet 4.6 (Agent tool 原生并发)
   │    └─ 实际执行 worker
-  │         ├─ 质量优先 → M3
-  │         ├─ 架构类批量 → GLM-5.2
-  │         ├─ Bug/并发类批量 → Kimi-K2.7 / Qwen3.7-Max
-  │         └─ 轻量批量 → Qwen3.7-Plus
+  │         ├─ 质量优先 → M3（0.25x）
+  │         ├─ 省钱优先 → Hy3（0.18x，性价比 511）
+  │         ├─ 轻量批量 → Qwen3.7-Plus（0.10x qcn）
+  │         └─ 需中文结构化 → GLM-5.2 via qcn（0.60x）
   │
   ├─ 架构 / 系统设计？
-  │    ├─ 深度架构（分布式、Kafka、微服务、Outbox）→ M3 (S) / GLM-5.2 (A)
-  │    ├─ 实用容错设计 → M3
-  │    └─ 类型安全 / 防御性编码 → GLM-5.2
+  │    ├─ 默认 → M3（0.25x，S tier，性价比最优选择）
+  │    ├─ M3 不擅长的中文结构性设计文档 → GLM-5.2 via qoderclicn（0.60x）
+  │    └─ 类型安全 / 防御性编码 → GLM-5.2 via qoderclicn（0.60x）
   │
   ├─ bug 诊断 / 并发分析 / 调试？
-  │    ├─ 高风险 / 并发 / 竞态 → M3 (S)
-  │    ├─ 一般 bug 诊断 → Qwen3.7-Max / Kimi-K2.7
-  │    └─ 根因分析 → Qwen3.7-Max
+  │    ├─ 高风险 / 并发 / 竞态 → M3（0.25x，Bug=38 最高分）
+  │    ├─ 一般 bug → Qwen3.7-Max（0.10x qcn）或 V4-Pro（0.25x cb）
+  │    └─ 根因分析 → Qwen3.7-Max（0.10x）
   │
-  ├─ 算法 / 数据结构 / 精细编码？
-  │    ├─ 生产级实现 → M3
-  │    └─ 简单算法题（LRU 类）→ Sonnet 4.6 可接受
+  ├─ 算法 / 数据结构 / 精细编码？ → M3（0.25x，LRU=37）
   │
-  ├─ core / 快速交付 / 跨文件重构？ → Opus 4.6
+  ├─ core / 快速交付 / 跨文件重构？ → Opus 4.6（订阅制，不消耗 credit）
   │
   ├─ KB 整理 / 知识库 / 文档分类标签？
-  │    ├─ 7/1 前 + 轻量（摘要/标签/分类）→ xfyun/xopqwen36v35b（免费，/free-fleet）
-  │    ├─ 批量扫描 → xfyun（免费）或 Qwen3.7-Plus（qoderclicn 免费）
-  │    ├─ 深度整理（需要高质量归类建议）→ GLM-5.2 或 Qwen3.7-Plus
-  │    └─ 7/1 后 → Qwen3.7-Plus（qoderclicn 免费到 7/30）
+  │    ├─ 批量扫描 → Qwen3.7-Plus（0.04x，最省）
+  │    ├─ 深度整理 → Qwen3.7-Plus（0.04x，KB 实测质量够用）
+  │    └─ 高质量归类 → GLM-5.2 via qoderclicn（0.60x）
   │
   ├─ doc / 文档？
-  │    ├─ 重文档（>500 行，多章节重写）→ Opus 4.6
-  │    ├─ 结构性文档（中文技术方案、方案对比）→ GLM-5.2
-  │    └─ 状态更新、踩坑记录（需要全面不遗漏）→ v4-pro
+  │    ├─ 重文档（>500 行，多章节重写）→ Opus 4.6（订阅制）
+  │    ├─ 结构性文档 → GLM-5.2 via qoderclicn（0.60x，比 cb 1.06x 省 43%）
+  │    └─ 踩坑记录 → V4-Pro via codebuddy（0.25x，比 qcn 0.50x 省 50%）
   │
   ├─ test / 测试？
-  │    ├─ 生产级测试策略 → M3
-  │    ├─ 根因导向测试 → Qwen3.7-Max
-  │    └─ 实现级测试 → Kimi-K2.7
+  │    ├─ 生产级测试策略 → M3（0.25x）
+  │    ├─ 根因导向测试 → Qwen3.7-Max（0.25x qcn）
+  │    └─ 实现级测试 → Hy3（0.18x，性价比最高）或 V4-Pro（0.25x cb）
   │
   ├─ api / 接口设计？
-  │    ├─ 架构级 API → GLM-5.2
-  │    └─ 实现级接口 → Kimi-K2.7
+  │    ├─ 默认 → M3（0.25x，比 K2.7 的 0.76x 省 67% 且 S tier）
+  │    └─ 需要具体实现细节 → V4-Pro（0.25x）
   │
-  ├─ perf / 性能？ → M3
+  ├─ perf / 性能？ → M3（0.25x）
   │
   ├─ 轻量 / 低风险？
-  │    ├─ 日间 → Qwen3.7-Plus / v4-pro
-  │    └─ 夜间 → Qwen3.7-Max（优惠）
+  │    ├─ 日间最省 → Qwen3.7-Plus（0.10x qcn）
+  │    ├─ 日间常规 → Hy3（0.18x cb）或 V4-Pro（0.25x cb）
+  │    └─ 夜间(22-08) → Qwen3.7-Plus（**0.04x**）/ Qwen3.7-Max（**0.10x**）
   │
-  └─ 不确定？ → 进入默认决策树（§2.3）
+  └─ 不确定？
+       ├─ 质量优先 → M3（0.25x，S tier）
+       └─ 省钱优先 → Hy3（0.18x，B tier 92 分，性价比 511 最高）
 ```
 
 ### 2.3 默认决策（无明确任务类型时）
@@ -202,6 +223,10 @@ Provider 选择 = 任务类型决策树（§2.2）选出模型后，按场景选
 > - 2026-06-28 v1：GPT-5.5 审查后优化（batch 拆调度/执行、test 三级、新增 algorithm 分支）
 > - 2026-06-28 v2：删除臆想的"配额优先"分支，改为错误触发降级
 > - 2026-06-28 v3：qoderclicn 限时免费优先策略——默认先用 qoderclicn，报错再切 codebuddy
+> - 2026-06-30 v4：用 Paseo list_models 实时费率替换旧数据；加入性价比排名；
+>   Hy3 降价 51%(0.37→0.18x) 成性价比第一；GLM-5.2 降价 25%(1.06→0.79x)；
+>   Qwen 夜间费率独立标注（Max 0.25→0.10x，Plus 0.10→0.04x）；
+>   每个分支标注 credit 费率，同模型跨 provider 选最便宜的
 
 ### 2.4 思考强度建议
 
@@ -263,10 +288,10 @@ qoderclicn 的 `Timed out refreshing Qoder CLI CN after 60000ms` 属于 **provid
 
 ### 夜间优惠（北京时间 22:00 - 08:00）
 
-| 模型 | 日间 Credit | 夜间 Credit | 折扣 |
+| 模型 | 日间 Credit | 夜间 Credit (22:00-08:00 北京) | 折扣 |
 |---|---|---|---|
-| Qwen3.7-Max | 0.10x | ~0.02x | 降 80% |
-| Qwen3.7-Plus | 0.04x | ~0.016x | 降 60% |
+| Qwen3.7-Max | 0.25x | **0.10x** | 降 60% |
+| Qwen3.7-Plus | 0.10x | **0.04x** | 降 60% |
 
 ---
 
