@@ -196,7 +196,7 @@ Provider 选择 = 任务类型决策树（§2.2）选出模型后，按场景选
             ├─ 质量优先 → M3（0.25x，S tier，codebuddy 独占）
             ├─ 均衡性价比 → Hy3（0.18x，性价比第一，codebuddy 独占）
             ├─ 常规开发 → V4-Pro（0.25x cb，比 qcn 0.50x 便宜一半）
-            ├─ 中文结构文档 → GLM-5.2（例外走 qcn 0.60x，比 cb 0.79x 省 24%）
+            ├─ 中文结构文档 → GLM-5.2（cb 0.79x / qcn 0.60x，按实时费率选更便宜的）
             └─ 轻量 → Kimi-K2.6（0.30x qcn）或 Qwen3.7-Plus（0.10x qcn）
 
   任何 provider 报错(quota/rate limit)？ → 切另一个 provider 的同模型
