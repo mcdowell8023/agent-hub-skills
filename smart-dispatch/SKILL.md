@@ -184,15 +184,20 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 ```
 Provider 选择 = 任务类型决策树（§2.2）选出模型后，按场景选 provider：
 
-  关键任务 / 工作时间？
-  ├─ 是 → 按任务质量选最佳模型，provider 跟着模型走
-  │       （M3 只在 codebuddy → 用 codebuddy）
-  │       （两边都有的模型 → 哪边质量更好用哪边）
-  └─ 否（闲置时段 / 非关键 / 夜间）
-       └─ 优先用 qoderclicn 消耗免费额度
-            ├─ 夜间 22:00-08:00 → Qwen3.7-Max（优惠 80%）
-            ├─ 闲时一般任务 → qoderclicn 版 GLM-5.2 / V4-Pro / K2.6
-            └─ 轻量任务 → Qwen3.7-Plus / Qwen-Flash
+  第一层：时段判断
+  ├─ 夜间闲时（22:00-08:00 北京时间）
+  │    └─ 优先 qoderclicn 消耗免费额度（截止 2026-07-30）
+  │         ├─ Qwen3.7-Max（0.10x → 夜间 0.02x）
+  │         ├─ Qwen3.7-Plus（0.10x → 夜间 0.04x）
+  │         └─ 报错 → 降级到 codebuddy 同类模型
+  │
+  └─ 日间 / 非夜间闲时（08:00-22:00）
+       └─ 优先 codebuddy-code（质量更可控，thinking 可调）
+            ├─ 质量优先 → M3（0.25x，S tier，codebuddy 独占）
+            ├─ 均衡性价比 → Hy3（0.18x，性价比第一，codebuddy 独占）
+            ├─ 常规开发 → V4-Pro（0.25x cb，比 qcn 0.50x 便宜一半）
+            ├─ 中文结构文档 → GLM-5.2（例外走 qcn 0.60x，比 cb 0.79x 省 24%）
+            └─ 轻量 → Kimi-K2.6（0.30x qcn）或 Qwen3.7-Plus（0.10x qcn）
 
   任何 provider 报错(quota/rate limit)？ → 切另一个 provider 的同模型
   两边都报错？ → 报告用户
