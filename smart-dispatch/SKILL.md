@@ -116,8 +116,14 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 - V4-Pro 必须走 codebuddy（0.25x），qcn 上 0.50x 贵一倍
 - K2.6 走 qoderclicn（0.30x），cb 上 0.52x 贵 73%
 
+> **⚠️ 执行顺序：先判时段（§2.3），再选模型（下方决策树）。夜间 22:00-08:00 必须走 qoderclicn，不管任务类型多复杂。**
+> **thinking 支持：codebuddy 和 qoderclicn 都支持 `--thinking` 参数（low/medium/high/max），这是 Paseo 层控制的，不是 provider 限制。**
+
 ```
 任务到达
+  │
+  ├─ 【⚠️ 首先判时段】22:00-08:00？ → 直接走 §2.3 夜间路径（qoderclicn）
+  │
   │
   ├─ 用户显式指定模型？ → 用指定的，跳到 §3
   │
