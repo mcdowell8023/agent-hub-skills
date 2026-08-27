@@ -1,3 +1,8 @@
+---
+name: hub-comm
+description: "Agent Hub 双向通信参考：Mac ↔ Hub 的所有操作方式、推荐优先级、踩坑记录。 Triggers: '连接 Hub', '操作 Hub', 'Hub 通信', 'Hub 反向', 'Hub 回传', '交回 Mac', 'hub-comm'."
+---
+
 # hub-comm
 
 Agent Hub 双向通信参考。提供 Mac ↔ Hub 的所有操作方式、推荐优先级、踩坑记录。

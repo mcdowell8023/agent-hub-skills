@@ -107,15 +107,61 @@ def mysql_connect(config):
         err(f"MySQL 连接失败: {type(e).__name__}: {e}")
 
 
+# ⛔ 无 WHERE 的 UPDATE/DELETE 一律拒绝（用户 2026-08-13 拍板）。
+#
+# 与 db.sh 的守卫分工：db.sh 管**权限**（readonly 禁 DML :174 · DDL 永远禁 :149），
+# 这条管**影响面** —— 全表覆盖在任何环境都不该由 agent 随手执行，
+# 与连接是 full 还是 readonly 无关。守在引擎里是因为这层才真正 commit，离后果最近。
+#
+# ⚠️ 这道门在「写会静默回滚」的年代形同虚设（写了也不落）。commit 修好后才有牙。
+def _strip_sql_comments(sql):
+    """去掉注释，避免 `DELETE FROM t -- WHERE x` 用注释里的 WHERE 骗过检查。"""
+    sql = re.sub(r"/\*.*?\*/", " ", sql, flags=re.S)   # 块注释
+    sql = re.sub(r"--[^\n]*", " ", sql)                 # -- 行注释
+    sql = re.sub(r"#[^\n]*", " ", sql)                  # # 行注释
+    return sql
+
+
+def assert_write_is_bounded(sql):
+    """UPDATE / DELETE 必须带 WHERE，否则拒绝执行。⛔ 在 execute 之前调用。"""
+    body = _strip_sql_comments(sql)
+    if not re.match(r"^\s*(UPDATE|DELETE)\b", body, flags=re.I):
+        return  # INSERT / REPLACE / SELECT 等不受此门约束
+    if re.search(r"\bWHERE\b", body, flags=re.I):
+        return
+    verb = re.match(r"^\s*(\w+)", body).group(1).upper()
+    err(
+        f"拒绝执行：{verb} 没有 WHERE 条件，会影响全表。\n"
+        f"   这道门与连接权限无关 —— 全表覆盖不该由 agent 随手执行。\n"
+        f"   确实要全表操作：加显式条件（如 WHERE 1=1），或输出脚本交人工执行。"
+    )
+
+
 def mysql_query_rows(config, sql):
-    """执行查询，返回 (columns, rows)。列名 + 数据都是字符串。"""
+    """执行语句，返回 (columns, rows)。列名 + 数据都是字符串。
+
+    ⚠️ 写语句（无 description）必须 commit —— pymysql 默认 autocommit=False，
+    只 close 不 commit 会让事务在关连接时静默回滚，而调用方拿到空结果 + exit 0，
+    误以为写成功了。这个坑 2026-08-13 被 ACS 线在执行迁移 SQL 时踩到。
+    ⛔ 不要把 commit 去掉「简化」，回归测试见 tests/test-engine-commit.py。
+
+    安全边界不在本层，且**不因本函数会提交而放宽**：
+      - DDL 永远禁止 —— db.sh:149 MYSQL_DENY_REGEX
+      - readonly 禁 INSERT/UPDATE/DELETE/REPLACE —— db.sh:174-176
+    进得到这里的写语句，都是 permission=full 的连接被明确放行的。
+    """
+    assert_write_is_bounded(sql)          # ⛔ 必须在建连接/执行之前
     conn = mysql_connect(config)
     try:
         with conn.cursor() as cur:
             cur.execute(sql)
-            # SELECT 类才有 description；SHOW/DESCRIBE 也有
+            # SELECT / SHOW / DESCRIBE 有 description；写语句没有
             if cur.description is None:
-                return [], []
+                conn.commit()
+                affected = cur.rowcount if cur.rowcount is not None else 0
+                # 把影响行数回给调用方 —— 只回空结果的话，
+                # 「写成功 0 行」与「压根没写」在输出上不可区分。
+                return ["affected_rows"], [[str(affected)]]
             columns = [d[0] for d in cur.description]
             rows = cur.fetchall()
             # 转 str（处理 Decimal/date/datetime 等）
@@ -178,106 +224,177 @@ def mongo_connect(config):
         err(f"MongoDB 连接失败: {type(e).__name__}: {e}")
 
 
-def mongo_get_collection(config, name):
-    """从 URI 中提取 db 名，定位 collection。"""
+def _mongo_db_name(config):
+    """Extract database name from MongoDB URI."""
     uri = config.get("uri", "")
-    # 提取 mongodb://host:port/dbname?opts 中的 dbname
-    db_name = None
     try:
-        # 简单字符串解析：'mongodb://host:port/db?...' → 取 / 与 ? 之间
-        if "/" in uri:
-            after_scheme = uri.split("://", 1)[-1]
-            # 跳过 host:port，找第一个 /
-            path_start = after_scheme.find("/")
-            if path_start >= 0:
-                db_part = after_scheme[path_start + 1:]
-                # 去掉 ? 后的 query string
-                if "?" in db_part:
-                    db_part = db_part.split("?", 1)[0]
-                db_name = db_part.strip() or None
+        after_scheme = uri.split("://", 1)[-1]
+        path_start = after_scheme.find("/")
+        if path_start >= 0:
+            db_part = after_scheme[path_start + 1:]
+            if "?" in db_part:
+                db_part = db_part.split("?", 1)[0]
+            return db_part.strip() or "test"
     except Exception:
         pass
-    if not db_name:
-        err("无法从 URI 提取 database 名")
+    return "test"
+
+
+def _mongo_client(config):
+    """Get pymongo client and database."""
     client = mongo_connect(config)
-    return client, client[db_name][name]
+    db_name = _mongo_db_name(config)
+    return client, client[db_name]
+
+
+def _parse_json_arg(s):
+    """Parse a JSON-like argument, tolerating single quotes and unquoted keys."""
+    s = s.strip()
+    if not s:
+        return {}
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        pass
+    # Try replacing single quotes with double quotes
+    normalized = s.replace("'", '"')
+    try:
+        return json.loads(normalized)
+    except json.JSONDecodeError as e:
+        err(f"无法解析 JSON 参数: {e}\n  输入: {s[:120]}")
+
+
+def _serialize_doc(doc):
+    """Convert ObjectId and other BSON types to strings for JSON output."""
+    if doc is None:
+        return None
+    if isinstance(doc, dict):
+        return {k: _serialize_doc(v) for k, v in doc.items()}
+    if isinstance(doc, list):
+        return [_serialize_doc(v) for v in doc]
+    if hasattr(doc, '__str__') and type(doc).__module__ == 'bson':
+        return str(doc)
+    return doc
 
 
 def mongo_eval(config, js_code):
     """
-    评估 MongoDB shell 风格代码的子集。
-    支持：db.<coll>.find()、db.<coll>.findOne()、db.getCollectionNames()、
-          db.<coll>.countDocuments({})、db.runCommand({...})、db.adminCommand({...})。
-    返回 Python 对象（list / dict / int）。
+    评估 MongoDB shell 风格代码。
+    支持：
+      db.getCollectionNames()
+      db.<coll>.find()  /  db.<coll>.find({filter})
+      db.<coll>.find({filter}).sort({field:dir}).limit(n).skip(n)
+      db.<coll>.findOne()  /  db.<coll>.findOne({filter})
+      db.<coll>.countDocuments({})  /  db.<coll>.countDocuments({filter})
+      db.<coll>.aggregate([{...}, ...])
+      db.<coll>.distinct("field")  /  db.<coll>.distinct("field", {filter})
+      db.runCommand({...})  /  db.adminCommand({...})
     """
     import re
 
     code = js_code.strip()
-    client = mongo_connect(config)
 
-    # 简单解析；不实现完整 JS 引擎。
-    # 模式 1: db.getCollectionNames()
+    # db.getCollectionNames()
     if re.match(r"^db\.getCollectionNames\s*\(\s*\)\s*$", code):
-        # 拿 db name
-        uri = config.get("uri", "")
-        try:
-            db_name = uri.split("://", 1)[-1].split("/", 1)[-1].split("?", 1)[0] or "test"
-        except Exception:
-            db_name = "test"
-        return list(client[db_name].list_collection_names())
+        _, db = _mongo_client(config)
+        return list(db.list_collection_names())
 
-    # 模式 2: db.<coll>.find()（无 filter）
-    m = re.match(r"^db\.([\w-]+)\.find\s*\(\s*\)\s*$", code)
-    if m:
-        coll_name = m.group(1)
-        uri = config.get("uri", "")
-        try:
-            db_name = uri.split("://", 1)[-1].split("/", 1)[-1].split("?", 1)[0] or "test"
-        except Exception:
-            db_name = "test"
-        docs = list(client[db_name][coll_name].find().limit(100))
-        for d in docs:
-            d["_id"] = str(d["_id"])
-        return docs
-
-    # 模式 3: db.<coll>.findOne()
-    m = re.match(r"^db\.([\w-]+)\.findOne\s*\(\s*\)\s*$", code)
-    if m:
-        coll_name = m.group(1)
-        uri = config.get("uri", "")
-        try:
-            db_name = uri.split("://", 1)[-1].split("/", 1)[-1].split("?", 1)[0] or "test"
-        except Exception:
-            db_name = "test"
-        doc = client[db_name][coll_name].find_one()
-        if doc and "_id" in doc:
-            doc["_id"] = str(doc["_id"])
-        return doc
-
-    # 模式 4: db.<coll>.countDocuments({})
-    m = re.match(r"^db\.([\w-]+)\.countDocuments\s*\(\s*\{\s*\}\s*\)\s*$", code)
-    if m:
-        coll_name = m.group(1)
-        uri = config.get("uri", "")
-        try:
-            db_name = uri.split("://", 1)[-1].split("/", 1)[-1].split("?", 1)[0] or "test"
-        except Exception:
-            db_name = "test"
-        return client[db_name][coll_name].count_documents({})
-
-    # 模式 5: db.runCommand({...}) / db.adminCommand({...})
+    # db.runCommand({...}) / db.adminCommand({...})
     m = re.match(r"^db\.(runCommand|adminCommand)\s*\(\s*(\{.*\})\s*\)\s*$", code, re.DOTALL)
     if m:
         kind = m.group(1)
-        body = m.group(2)
-        try:
-            cmd = json.loads(body)
-        except json.JSONDecodeError as e:
-            err(f"runCommand 参数不是合法 JSON: {e}")
+        cmd = _parse_json_arg(m.group(2))
+        client = mongo_connect(config)
         target = client.admin if kind == "adminCommand" else client.get_default_database()
-        return dict(target.command(cmd))
+        return _serialize_doc(dict(target.command(cmd)))
 
-    err(f"不支持的 MongoDB 命令: {code[:80]}")
+    # db.<coll>.aggregate([...])
+    m = re.match(r"^db\.([\w-]+)\.aggregate\s*\(\s*(\[.*\])\s*\)\s*$", code, re.DOTALL)
+    if m:
+        coll_name = m.group(1)
+        pipeline = _parse_json_arg(m.group(2))
+        _, db = _mongo_client(config)
+        docs = list(db[coll_name].aggregate(pipeline))
+        return _serialize_doc(docs)
+
+    # db.<coll>.distinct("field") or db.<coll>.distinct("field", {filter})
+    m = re.match(r'^db\.([\w-]+)\.distinct\s*\(\s*["\'](\w+)["\']\s*(?:,\s*(\{.*?\}))?\s*\)\s*$', code, re.DOTALL)
+    if m:
+        coll_name = m.group(1)
+        field = m.group(2)
+        filt = _parse_json_arg(m.group(3)) if m.group(3) else {}
+        _, db = _mongo_client(config)
+        return db[coll_name].distinct(field, filt)
+
+    # db.<coll>.find(...) with optional .sort().limit().skip() chain
+    m = re.match(r"^db\.([\w-]+)\.find\s*\((.*)\)\s*$", code, re.DOTALL)
+    if m:
+        coll_name = m.group(1)
+        rest = m.group(2).strip()
+        _, db = _mongo_client(config)
+
+        # Parse chained modifiers: .sort({...}).limit(n).skip(n)
+        sort_spec = None
+        limit_val = 100
+        skip_val = 0
+        chain = rest
+
+        # Extract .sort()
+        sm = re.search(r'\.sort\s*\(\s*(\{[^)]*\})\s*\)', chain)
+        if sm:
+            sort_spec = _parse_json_arg(sm.group(1))
+            chain = chain[:sm.start()] + chain[sm.end():]
+
+        # Extract .limit()
+        lm = re.search(r'\.limit\s*\(\s*(\d+)\s*\)', chain)
+        if lm:
+            limit_val = int(lm.group(1))
+            chain = chain[:lm.start()] + chain[lm.end():]
+
+        # Extract .skip()
+        skm = re.search(r'\.skip\s*\(\s*(\d+)\s*\)', chain)
+        if skm:
+            skip_val = int(skm.group(1))
+            chain = chain[:skm.start()] + chain[skm.end():]
+
+        # Remaining should be the filter argument(s)
+        chain = chain.strip().rstrip(')')
+        if chain.startswith('('):
+            chain = chain[1:]
+        chain = chain.strip()
+
+        filt = {}
+        if chain and chain not in ('', '{}'):
+            # Take only the first JSON object (filter), ignore projection for now
+            filt = _parse_json_arg(chain.split(',')[0].strip())
+
+        cursor = db[coll_name].find(filt)
+        if sort_spec:
+            cursor = cursor.sort(list(sort_spec.items()))
+        if skip_val:
+            cursor = cursor.skip(skip_val)
+        cursor = cursor.limit(limit_val)
+        docs = list(cursor)
+        return _serialize_doc(docs)
+
+    # db.<coll>.findOne() or db.<coll>.findOne({filter})
+    m = re.match(r"^db\.([\w-]+)\.findOne\s*\(\s*(\{.*?\})?\s*\)\s*$", code, re.DOTALL)
+    if m:
+        coll_name = m.group(1)
+        filt = _parse_json_arg(m.group(2)) if m.group(2) else {}
+        _, db = _mongo_client(config)
+        doc = db[coll_name].find_one(filt)
+        return _serialize_doc(doc)
+
+    # db.<coll>.countDocuments({}) or db.<coll>.countDocuments({filter})
+    m = re.match(r"^db\.([\w-]+)\.countDocuments\s*\(\s*(\{.*?\})?\s*\)\s*$", code, re.DOTALL)
+    if m:
+        coll_name = m.group(1)
+        filt = _parse_json_arg(m.group(2)) if m.group(2) else {}
+        _, db = _mongo_client(config)
+        return db[coll_name].count_documents(filt)
+
+    err(f"不支持的 MongoDB 命令: {code[:120]}")
 
 
 def mongo_print(obj):

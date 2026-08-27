@@ -163,7 +163,9 @@ JINA_OK=$(curl -sf -o /dev/null -w "%{http_code}" -H "Accept: text/markdown" "ht
 if [ "$JINA_OK" = "200" ]; then
   check "jina-reader" "pass" "API 可达"
 else
-  check "jina-reader" "warn" "HTTP $JINA_OK（可能被限流或网络问题）" false
+  # 变量名必须加 {}：紧跟中文全角括号时，bash 会把多字节字符首字节（0xEF）
+  # 吞进变量名，配合 set -u 直接 unbound variable 崩溃
+  check "jina-reader" "warn" "HTTP ${JINA_OK}（可能被限流或网络问题）" false
 fi
 
 # ──────────── Hub 检查 ────────────

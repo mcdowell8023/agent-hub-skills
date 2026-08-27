@@ -20,17 +20,42 @@ Personal Agent Hub 的核心 skill 集合。提供跨设备 Agent 交接、浏�
 | [rift-integration-qa](rift-integration-qa/) | QA 统一入口：TDD · 三层一致(DB↔API↔FE) · 契约验证 · 假绿检测 · 真机回归 · 部署后验证 · 视觉验证<br>⚠️ 原 `integration-qa`，2026-08-27 更名 |
 
 
-## 安装
+## 安装 —— 🔴 软链到本仓库，不要 cp
+
+**本仓库是唯一源。** 各 agent 的 skills 目录全部软链过来，改一处五处生效，
+且改动立刻出现在 `git status` 里，不会漏提交。
 
 ```bash
-git clone https://github.com/mcdowell8023/agent-hub-skills.git
+git clone https://github.com/mcdowell8023/agent-hub-skills.git \
+  ~/AgentWorkspace/projects/skills/agent-hub-skills
 
-# 软链到 Claude Code skills 目录
-for skill in hub-handoff hub-comm browser-preflight db-connect \
-             rift-dispatch rift-free rift-integration-qa; do
-  ln -sfn "$(pwd)/agent-hub-skills/$skill" ~/.claude/skills/$skill
+REPO=~/AgentWorkspace/projects/skills/agent-hub-skills
+for s in hub-handoff hub-comm browser-preflight db-connect \
+         rift-dispatch rift-free rift-integration-qa; do
+  for d in ~/.claude/skills ~/.agents/skills ~/.config/opencode/skills ~/.codebuddy/skills; do
+    [ -d "$d" ] || continue
+    rm -rf "$d/$s"
+    ln -sfn "$REPO/$s" "$d/$s"
+  done
 done
 ```
+
+⛔ **不要用 `cp` 分发。** 2026-08-27 之前就是手工 cp 三份实体，结果本仓库落后本地
+**近两个月**（`hub-comm` / `hub-handoff` 的 SKILL.md 在 git 里连 frontmatter 都没有，
+`db_engine.py` 少 117 行）。改哪份、哪份生效、哪份是最新，全靠记忆。
+
+### 一致性自查
+
+```bash
+REPO=~/AgentWorkspace/projects/skills/agent-hub-skills
+for d in ~/.claude/skills ~/.agents/skills ~/.config/opencode/skills ~/.codebuddy/skills; do
+  for s in $(ls -1 $REPO | grep -vE '^(README|\.)'); do
+    [ -e "$d/$s" ] || continue
+    [ -L "$d/$s" ] || echo "🔴 实体副本（应为软链）: $d/$s"
+  done
+done
+```
+输出为空 ⇒ 全部走软链。有输出 ⇒ 那份是游离副本，改了不会同步。
 
 ## 测试
 

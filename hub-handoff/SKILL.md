@@ -1,3 +1,8 @@
+---
+name: hub-handoff
+description: "将当前或指定的 Paseo agent 工作交接到 Agent Hub 继续执行：自动处理仓库克隆、workspace 同步、环境检查，生成交接 prompt 并在 Hub 上创建新 agent。 Triggers: '在 Hub 继续', '交接到 Hub', 'hub handoff', '在 Agent Hub 继续这个工作', '让 Hub 接手'."
+---
+
 # hub-handoff
 
 将当前或指定的 Paseo agent 工作交接到 Agent Hub 继续执行。自动处理仓库克隆、workspace 同步、环境检查，生成交接 prompt 并在 Hub 上创建新 agent。

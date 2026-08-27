@@ -1,4 +1,13 @@
+# 凭据（含各种备份形态）
 databases.json
+databases.json.bak*
+*.bak-migrate-*
+*credential*
+*secret*
+
+# 运行产物
 exports/
 *.log
+__pycache__/
+*.pyc
 .DS_Store
