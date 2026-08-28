@@ -1,10 +1,12 @@
 {
-  "version": "4.6.0",
-  "lastUpdated": "2026-08-20",
+  "version": "5.3.0",
+  "lastUpdated": "2026-08-28",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。",
     "codebuddy-code": [
+      "hy4-preview",
       "hy3",
+      "glm-5.3-flash",
       "deepseek-v4-flash",
       "deepseek-v4-pro",
       "kimi-k3-2"
@@ -28,11 +30,7 @@
       "volcengine-chat": [
         "🔸 仅当需消耗 Agent Plan 额度且要控思考强度时：deepseek-v4-flash / deepseek-v4-pro / ark-code-latest（Chat API，--variant 有效）"
       ],
-      "github-copilot": [
-        "⭐ **审查通道**：gpt-5.5（⭐默认，与盲评评委同口径）/ gpt-5.4 / gpt-5.3-codex / gpt-5.4-mini / gpt-5-mini / gemini-3.1-pro-preview / gemini-3.5-flash",
-        "⛔ 仅审查，不做开发（用户 2026-08-20 明确）",
-        "🔴 claude-sonnet-4.6 属 Claude 族——主会话就是 Claude，⛔ 不得用它审主会话自己写的东西"
-      ],
+      "github-copilot": "⭐ 审查通道，⛔ 仅审查不做开发。可用模型以 ~/.pi/agent/models-store.json 为准：gpt-5.5 · gpt-5.6-sol · gpt-5.6-luna · gpt-5.6-terra · gpt-5.4 · gpt-5.3-codex · gpt-5.4-mini · gpt-5.4-nano · gpt-5-mini · gpt-5.2 · gpt-5.2-codex · gpt-4.1 · gemini-3.1-pro-preview · gemini-3.5-flash · gemini-3.6-flash · gemini-3.7-flash；🔴 claude-* 属 Claude 族不可审主会话产出",
       "claude": [
         "⚠️ 可派不推荐，消耗 Claude 订阅额度，建议留主会话"
       ],
@@ -53,7 +51,9 @@
         "glm-5.1",
         "glm-5v-turbo",
         "kimi-k2.7",
-        "kimi-k2.6"
+        "kimi-k2.6",
+        "hy4-preview-x",
+        "hy3-x"
       ],
       "qoderclicn": [
         "auto",
@@ -69,28 +69,33 @@
       ]
     },
     "consequences": [
-      "✅ minimax-m3 关闭留下的中间档空档，已由 deepseek-v4-pro 补上（2026-08-16 重测）：flash 0.05x → v4-pro 0.13x → K3 1.62x",
+      "✅ minimax-m3 关闭留下的中间档空档，已由 deepseek-v4-pro 补上（2026-08-16 重测）：flash 0.17x → v4-pro 0.51x → K3 1.62x",
       "🔴 K3 撞限额时无替代（白名单内唯一 S 级），只能报告用户",
       "✅ K3 于 2026-08-16 恢复启用，但用户明确要求『很贵很贵，不要随意使用』——见 models.kimi-k3-1.costWarning",
       "✅ deepseek-v4-pro 正式版重测后不再是『无推荐场景』，但角色是**升档档位**（flash 做砸才用），⛔ 不是任何类型的默认落点——2026-08-20 撤销了 v10.1 的 algorithm 直派"
-    ]
+    ],
+    "_pendingDecision": "⚠️ 待用户裁定（暂列 closed）：hy4-preview-x(0.29x 同名收费版) · hy3-x(0.05x)。⛔ 这两个的 label 与免费版完全相同，开启前必须确认派发侧按 id 匹配。✅ glm-5.3-flash 已于 2026-08-28 开启，见 models['glm-5.3-flash']"
   },
   "providerRateSnapshot": {
     "_note": "paseo list_models 实测，用于对照 models.*.providers.*.credit 是否过期",
-    "date": "2026-08-16",
+    "date": "2026-08-21",
     "codebuddy-code": {
+      "hy4-preview": 0.0,
+      "hy4-preview-x": 0.29,
       "hy3": 0.0,
-      "deepseek-v4-flash": 0.05,
-      "deepseek-v4-pro": 0.13,
-      "kimi-k3-2": 1.62,
-      "minimax-m3-pay": 0.25,
-      "minimax-m2.7": 0.26,
+      "hy3-x": 0.05,
       "glm-5.3": 0.79,
+      "glm-5.3-flash": 0.06,
       "glm-5.2": 0.79,
       "glm-5.1": 0.79,
       "glm-5v-turbo": 0.71,
+      "minimax-m3-pay": 0.25,
+      "minimax-m2.7": 0.26,
+      "kimi-k3-2": 1.62,
       "kimi-k2.7": 0.57,
-      "kimi-k2.6": 0.52
+      "kimi-k2.6": 0.52,
+      "deepseek-v4-pro": 0.51,
+      "deepseek-v4-flash": 0.17
     },
     "qoderclicn": {
       "qmodel_38max": 0.5,
@@ -106,56 +111,84 @@
       "auto": 0.5
     },
     "findings": [
-      "🔴 qcn 的 qmodel_preview 已不存在，改名 qmodel_38max（label 从 Qwen3.8-Max-Preview 变 Qwen3.8-Max）",
-      "🔴 qcn 限时1折结束：Qwen3.8-Max 0.05x日/0.01x夜 → 0.50x 基准价（0.50×10%=0.05，1折本就打在 0.50 上）。全表已无日/夜费率区分",
-      "⚠️ cb/deepseek-v4-flash 降价 0.06x → 0.05x",
-      "⚠️ qcn/kmodel 的 label 已从 Kimi-K2.6 变成 Kimi-K2.7-Code(0.30x)，本文件 kimi-k2.6 挂 kmodel 的映射是错的（该模型已关闭，不修）",
-      "⚠️ cb 侧 list_models 只有 minimax-m3-pay，没有 minimax-m3 —— 与 08-02『要用旧 id minimax-m3』的实测记录冲突，未复测；M3 已关闭故不影响派发",
-      "✅ 2026-08-16 同轮盲评：v4-pro 96 > v4-flash 89，v4-pro 正式版能力确有提升，旧的『86 分被取代』记录已失效"
+      "🔴 涨价：deepseek-v4-flash 0.05x→0.17x（3.4 倍）、deepseek-v4-pro 0.13x→0.51x（3.9 倍）。默认落点『性价比 1780 全场最高』的立论被动摇。⛔ 不要用跨轮分数重算性价比去排序，同口径结论见 h2hEval_20260828",
+      "🆕 hy4-preview 0.00x（免费至 2026-09-12 00:00）",
+      "⚠️ hy4-preview-x 0.29x —— 【同名收费版】。`-x` 后缀是新出现的命名模式：同 label、两个 id、一免费一收费。⛔ 派发必须认 id，按 label 匹配会选错",
+      "⚠️ hy3-x 0.05x —— Hy3 收费版（免费版 08-31 到期）",
+      "🆕 glm-5.3-flash 0.06x —— 新费率下最便宜的付费模型，比 v4-flash 便宜近 3 倍"
     ]
   },
   "dispatchDefaults": {
     "_note": "2026-08-12 用户决策（model-routing.md 硬性约束 4）+ 08-16 白名单（约束 6）。白名单优先级更高。",
-    "codebuddyDefaultModel": "deepseek-v4-flash",
+    "codebuddyDefaultModel": "glm-5.3-flash",
     "codebuddyDefaultThinking": "xhigh",
     "promoFirst": {
-      "model": "hy3",
+      "model": "hy4-preview",
       "provider": "codebuddy-code",
       "thinking": "high",
-      "thinkingNote": "固定 high：xhigh 从未在 Hy3 上测过，max 已被两轮盲评证伪（91.5 → 85.5）",
-      "rule": "限免期内（至 2026-08-31）Hy3 是全天候第一顺位。命中 excludeWhen 任意一条才降档。⚠️ 2026-08-16 起已无任何时段性折扣，不再区分日夜",
-      "excludeWhenSourceOfTruth": "model-routing.md 约束 4 第 3 条表；本数组必须与该表及 §1 表中标 ⛔ 的行一一对应，改一边要同步另一边",
-      "excludeWhen": [
-        "multimodal — 图像/视频/多模态任务会切多模态模型并正常计费，免费不成立 → 按任务需要选模型",
-        "quotaExhaustedOrQueued — 当日免费额度耗尽或探活未秒回（排队），长任务会卡住 → deepseek-v4-flash",
-        "algorithm — 算法/精细数据结构实现，盲评 LRU 仅 22 分（Hy3 唯一明显短板）→ deepseek-v4-flash （⛔ 2026-08-20 改回 flash：原指 v4-pro 属于预防性升档）",
-        "perf — 性能优化/大数据量，Hy3 无 perf 类实测支撑 → deepseek-v4-flash",
-        "architecture — 架构深度设计（选型/拓扑/一致性方案），avoidFor: architecture-deep → deepseek-v4-flash",
-        "alreadyFailedThisTask — Hy3 已在这个任务上做砸过一轮 → deepseek-v4-flash"
-      ],
-      "excludeFallbackNote": "⛔ 2026-08-20 统一：excludeWhen 全部六条一律落 **deepseek-v4-flash**。v10.1 曾把 algorithm 指向 deepseek-v4-pro（依据同轮重测 LRU 33 vs 25），但那违反本 catalog 自己的『不做预防性升档』——还没让 flash 试过就因为『这类任务它更强』而预升，与被两组实测（n=1、n=12）否掉的『高风险⇒升档位』是同一个推论。重测数据的正确用法是：**升档时该升到 v4-pro 而非跳 K3**，不是跳过 flash。"
+      "rule": "⭐ 2026-08-21 起第一顺位。免费 + 本轮盲评 103/120 三题全胜",
+      "timeline": "08-31 hy3 免费止 → 09-12 hy4 免费止 → 免费档清零，全部落付费",
+      "excludeWhenSourceOfTruth": "沿用 model-routing.md 约束 4-3 表（Hy3 的排除清单是否同样适用于 Hy4 ⚠️ 未验证——Hy4 的 LRU 35 分说明『algorithm 短板』这条对它可能不成立）"
     },
     "timeOfDayPolicy": {
       "status": "⛔ 已废止 2026-08-16",
       "reason": "qcn 限时1折结束、夜间折扣取消，credits 制通道已无任何时段性折扣。派发链 24 小时不变，决策树里的 is_night() 判断已删除",
       "historicalRates": "Qwen3.8-Max 0.05x日/0.01x夜 · Qwen3.7-Max 0.25x/0.10x夜 · Qwen3.7-Plus 0.10x/0.04x夜（仅供将来再出类似活动时对照）",
-      "mustNotDowngrade": "⚠️ 仍然成立且与时段无关：任何『换更便宜 provider』的替换只作用于默认落点 deepseek-v4-flash，⛔ 不得下调已按任务需要升上去的 kimi-k3-2。2026-08-12 异构审抓到伪代码原写法会无条件冲掉高档模型",
+      "mustNotDowngrade": "任何「换更便宜 provider」的替换只作用于【当前默认起步档】（2026-08-28 起是 glm-5.3-flash），⛔ 不得把已按需要升上去的档位降回来（2026-08-12 异构审抓到伪代码会无条件冲掉高档模型）",
       "stillValid": "opencode 官方 DeepSeek 的峰谷定价（高峰 09-12/14-18 ×2）是 DeepSeek 自己的 API 计价规则，与本条无关，仍然有效"
     },
     "escalation": {
-      "rule": "cb/hy3 (0.00x) → cb/deepseek-v4-flash (0.05x) → cb/deepseek-v4-pro (0.13x) → cb/kimi-k3-2 (1.62x)",
-      "toK3Condition": "⛔ 收紧：现在要 **v4-pro 也做砸**才升 K3（原为 flash 做砸即升）。⛔ 仍不做预防性升档（2026-08-02 n=1 + 2026-08-06 n=12 两次实测支撑）。K3 是 flash 的 32 倍、v4-pro 的 12 倍。",
+      "rule": "T0 cb/hy4-preview (0.00x，至 09-12) → cb/hy3 (0.00x，至 08-31) → T1 cb/glm-5.3-flash (0.06x) → T2 cb/deepseek-v4-flash (0.17x) → T3 cb/deepseek-v4-pro (0.51x) → T4 cb/kimi-k3-2 (1.62x)",
+      "toK3Condition": "⛔ 要 v4-pro 也做砸才升 K3。⛔ 不做预防性升档（2026-08-02 n=1 + 2026-08-06 n=12 两次实测支撑）。K3 是 v4-flash 的 9.5 倍、glm-5.3-flash 的 27 倍。",
       "k3Status": "✅ 2026-08-16 用户恢复启用，作为极致档 / 唯一升档目标。原 P5.4『0723 实测不可靠、定弃用、改派 M3』的结论失效（M3 也已关闭）。⚠️ 0723 观察到的现象保留为已知风险：反复空转、报进度就 idle、git 无产出 —— 派完必须核 git 是否真有 commit",
       "noFallbackForK3": "🔴 K3 撞限额时无替代（白名单内唯一 S 级），只能报告用户 —— 这是 M3 关闭后新出现的单点",
-      "toV4ProCondition": "⛔ 唯一入口：flash 已在这个任务上做砸过一轮。⛔ 不做预防性升档——不得因为『这类任务 v4-pro 更强』而预先选它（2026-08-20 用户决策）。升档时选 v4-pro 而非 K3 的依据：同轮重测 96 > flash 89、LRU 33 vs 25，且只贵 2.6 倍（K3 贵 32 倍）。"
+      "toV4ProCondition": "⛔ 唯一入口：上一档已在【本任务】做砸过一轮。它 0.51x、贵 deepseek-v4-flash(0.17x) **3.0 倍**、贵 glm-5.3-flash(0.06x) 8.5 倍；而 K3 贵 v4-flash **9.5 倍**。⇒ 升档时升 v4-pro、⛔ 不要跳 K3。⛔ 仍不做预防性升档。",
+      "entryTierSourceOfTruth": "dispatchDefaults.entryTier（⛔ 唯一真源，⛔ 不要在别处再写一份）"
     },
     "supersedes": "白名单（约束 6）吸收了 07-28『qcn 只准派 Qwen3.8-Max』与 08-02『GLM-5.2 全面禁用』；08-02『夜间默认 qcn』已作废（前提消失）",
     "modelFamilyPreference": {
-      "rule": "DeepSeek 系列是默认工作模型族（约束 7-1）；**族内优先 deepseek-v4-flash**（2026-08-20 用户明确）",
-      "primary": "deepseek-v4-flash",
-      "secondary": "deepseek-v4-pro —— ⛔ 仅升档用（flash 做砸过一轮），不预先选",
-      "hy3Relation": "⚠️ Hy3 不动，仍在 DeepSeek 之前（2026-08-20 用户确认）：0.00x 限免至 2026-08-31。链条 hy3 → deepseek-v4-flash → deepseek-v4-pro → K3。08-31 后 flash 自动接管第一顺位。"
-    }
+      "rule": "🔴 2026-08-28 改写。DeepSeek 仍是【族偏好】，但⛔ 不再是【第一落点】——08-21 涨价后 deepseek-v4-flash 从 0.05x 变 0.17x，「又强又便宜」的前提消失，h2hEval_20260828 显示同口径与 0.06x 的 glm-5.3-flash 打平（66 vs 67）",
+      "howItAppliesNow": "族偏好现在体现为：T1 做砸就升 T2 的 deepseek-v4-flash，⛔ 不跳去别的族。⛔ 不再体现为「一上来就用 DeepSeek」",
+      "primary": "glm-5.3-flash（T1 起步档）",
+      "deepseekRole": "deepseek-v4-flash = T2；deepseek-v4-pro = T3，⛔ 仅升档用",
+      "freeTierRelation": "T0 免费档（hy4-preview 至 09-12 · hy3 至 08-31）仍压在所有付费档之前。⛔ 09-12 后默认落点是 glm-5.3-flash，⛔ 不是 deepseek-v4-flash，也⛔不要自动落回 hy4-preview-x(0.29x)",
+      "supersedes": "本字段取代 2026-08-20「族内优先 deepseek-v4-flash」与「08-31 后 flash 自动接管第一顺位」两条"
+    },
+    "entryTier": {
+      "_note": "⛔ 每级上移的唯一入口仍是「上一档已在【本任务】做砸过一轮」。本表只定【起步档】",
+      "default": {
+        "skipFreeTier": false,
+        "paidEntry": "glm-5.3-flash"
+      },
+      "algorithm": {
+        "skipFreeTier": true,
+        "paidEntry": "deepseek-v4-flash",
+        "evidence": "hy3 盲评 LRU 22 ⇒ 跳免费档。⚠️ 付费起步档【无干净证据】——h2hEval_20260828 的 LRU 一格口径不同（v4-flash 在 agent 上下文按 TDD 真建工程并跑了测试），⛔ 不能引用。现有依据是并发题（同口径，v4-flash 35 > glm 31）作为『精细实现类』的最近代理。对口的 LRU 同口径数据待补测。"
+      },
+      "perf": {
+        "skipFreeTier": true,
+        "paidEntry": "deepseek-v4-flash",
+        "evidence": "⚠️ 从来没有 perf 类实测，按 algorithm 同类保守处理"
+      },
+      "architecture": {
+        "skipFreeTier": true,
+        "paidEntry": "glm-5.3-flash",
+        "evidence": "🔴 2026-08-28 修正：原为 deepseek-v4-flash。h2hEval_20260828 Kafka glm 36 > v4-flash 31，旧规则的依据（v4-flash 重测 Kafka 34 > v4-pro 31）说的是 v4-flash 与 v4-pro 的关系，⛔ 不涉及 glm。⚠️ n=1、单评委，待同口径复测——与 algorithm 一样标为待补"
+      },
+      "concurrency_diag": {
+        "skipFreeTier": false,
+        "paidEntry": "deepseek-v4-flash",
+        "evidence": "h2hEval_20260828 并发题 v4-flash 35 > glm 31（同口径）。⚠️ 旧依据『hy3 并发盲评 36.5 白名单内最高』是 07-20 单次——08-21 逐字同题复测 hy3 只得 29（三臂最低），⛔ 不再用它给规则承重"
+      },
+      "concurrency_impl": {
+        "skipFreeTier": false,
+        "paidEntry": "deepseek-v4-flash",
+        "evidence": "同 concurrency_diag；写并发原语实现比诊断更吃精细度"
+      },
+      "_taskTypeCodes": "⛔ classify() 必须产出本表里的代号。concurrency 要先判子类 → concurrency_diag / concurrency_impl，⛔ 不能产出裸的 'concurrency'（查表落空会退回 T1）。代号清单与 model-routing.md §6 表一一对应。",
+      "_failedTierCounting": "⛔ 计数口径：只数【付费阶梯内】做砸过的档数。T0 免费档做砸不计入（否则默认类会跳过 T1 的 glm-5.3-flash）；同一档重试不计入。"
+    },
+    "codebuddyDefaultModelNote": "🔴 2026-08-28 从 deepseek-v4-flash 改为 glm-5.3-flash（T1）。⛔ 这只是【默认起步档】——algorithm/perf/concurrency-实现 三类仍从 T2 的 deepseek-v4-flash 起步，见 entryTier。"
   },
   "benchmark": {
     "tasks": "LRU Cache + 并发 Bug 诊断 + Kafka 架构设计 (3 题盲评，各 40 分，合计 120)",
@@ -220,8 +253,8 @@
         }
       },
       "preferredProvider": "codebuddy-code",
-      "dispatchRank": 1,
-      "dispatchNote": "⭐ 限免期内 codebuddy 侧第一顺位（2026-08-12 用户决策，见 dispatchDefaults.promoFirst）。派发前先过 excludeWhen 五条 + 探活一次；命中任意一条降 deepseek-v4-flash。",
+      "dispatchRank": 2,
+      "dispatchNote": "⚠️ 2026-08-21 让位给 hy4-preview：同为免费但本轮盲评 84 < hy4 的 103（三题全负）。免费期 08-31 结束（早于 hy4 的 09-12）⇒ 09-01 起 hy3 退出免费档。原第一顺位地位由 hy4 接替",
       "promo": {
         "type": "free",
         "start": "2026-07-06",
@@ -302,7 +335,7 @@
         "cost-sensitive"
       ],
       "whitelisted": true,
-      "dispatchRank": 3,
+      "dispatchRank": 9,
       "dispatchNote": "✅ 2026-08-16 用户恢复启用，作为极致档 / 唯一升档目标（M3 关闭后白名单内唯一 S 级）。⛔ 但带使用红线：见 costWarning / allowedWhen / notAReason。派完必须核 git log 有无 commit（0723 空转前科）。",
       "caution": "⚠️ 两条已知风险叠加：① thinking=high 在复杂架构题偶发陷入长时间推理不输出（概率性，非必现）② 2026-07-23 实测出现反复空转——报进度就 idle、git 无产出。用户 08-16 恢复启用时知悉此风险。⇒ **派 K3 后必须核 git 是否真有 commit，不能只看它报进度**",
       "paseo": {
@@ -312,16 +345,16 @@
         "thinking": "xhigh"
       },
       "idNote": "cb model id 2026-07-30 核实为 kimi-k3-2（旧记录 kimi-k3-1 已失效）；2026-08-16 list_models 复核仍是 kimi-k3-2，x1.62",
-      "costWarning": "🔴 用户 2026-08-16 明确要求：**很贵很贵，不要随意使用**。1.62x 是全场最贵、白名单内唯一超过 1.0x 的模型——贵 deepseek-v4-flash(0.05x) **32 倍**；性价比 110.5/1.62 = 68，全场最低。它留在白名单里是因为『白名单内唯一 S 级』，不是因为划算。",
+      "costWarning": "🔴 用户 2026-08-16 要求：**很贵很贵，不要随意使用**。1.62x 是白名单内唯一 1.0x 以上的费率。⚠️ 2026-08-21 涨价后倍数变了：贵 deepseek-v4-flash(0.17x) **9.5 倍**（原 32 倍）、贵 glm-5.3-flash(0.06x) **27 倍**。⚠️ 旧记录写的『性价比 110.5/1.62 = 68，全场最低』是**跨轮口径**（分子出自 07-20 轮），⛔ 按本文件自己的纪律不能用它给模型排序——保留仅作量级参照。K3 留在白名单是因为『唯一 S 级』，⛔ 不是因为划算。",
       "allowedWhen": [
         "① 用户显式 --model k3（用户自己知道在花什么）",
-        "② **deepseek-v4-pro 也已经在这个任务上做砸过一轮**（升档唯一入口）。⚠️ 08-16 收紧：flash 做砸先升 v4-pro(0.13x)，不是直接上 K3"
+        "② **deepseek-v4-pro 也已经在这个任务上做砸过一轮**（升档唯一入口）。⚠️ 08-16 收紧：flash 做砸先升 v4-pro(0.51x)，不是直接上 K3"
       ],
       "notAReason": [
-        "❌ 任务看起来难/重要/风险高 —— 两组实测(n=1, n=12)都表明模型档位不是质量关口；该提的是 thinking 档位(xhigh)与审查强度(异构审)",
-        "❌ 是 algorithm/architecture 类，K3 分最高 —— 这两类都先走 deepseek-v4-flash(0.05x)，做砸了升 deepseek-v4-pro(0.13x)，还不行才轮到 K3。K3 的分数差换 32 倍成本要用户拍板",
-        "❌ 反正只跑一次 —— 一次 K3 ≈ 32 次 flash ≈ 无限次 Hy3",
-        "❌ 先用好的保险一点 —— 这就是『预防性升档』的原话，明令禁止"
+        "❌「任务看起来很难/很重要/风险高」→ 两组实测（n=1、n=12）都表明模型档位不是质量关口；该提的是 thinking 档位（xhigh）和审查强度（异构审），⛔ 不是模型档位",
+        "❌「这是 algorithm / architecture 类，K3 分最高」→ 这两类各有更便宜的起步档：algorithm 从 deepseek-v4-flash(0.17x) 起、architecture 从 glm-5.3-flash(0.06x) 起，做砸才升",
+        "❌「反正只跑一次」→ 一次 K3 ≈ **9.5 次** deepseek-v4-flash ≈ **27 次** glm-5.3-flash",
+        "❌「先用好的保险一点」→ 这就是「预防性升档」的原话，明令禁止"
       ]
     },
     "minimax-m3": {
@@ -477,7 +510,7 @@
       "preferredProvider": "qoderclicn",
       "whitelisted": true,
       "dispatchRank": 9,
-      "dispatchNote": "⚠️ 白名单内唯一的 qcn 模型，但**仅作 cb 侧整体断供时的降级落点**，不主动选。费率 0.50x 是 cb/deepseek-v4-flash(0.05x) 的 10 倍；性价比 101.5/0.50 = 203，远低于 flash 的 1920",
+      "dispatchNote": "⚠️ 白名单内唯一的 qcn 模型，但**仅作 cb 侧整体断供时的降级落点**，不主动选。🔴 2026-08-21 cb 涨价后倍数变了：0.50x 是 deepseek-v4-flash(0.17x) 的 **2.9 倍**（原 10 倍）、glm-5.3-flash(0.06x) 的 8.3 倍。⛔ 不要用跨轮分数算性价比排序——它的 101.5 分与 cb 侧各模型不同源。",
       "bestFor": [
         "fallback-only"
       ],
@@ -535,6 +568,51 @@
       "whitelisted": false,
       "closedNote": "⛔ 白名单外（07-28 起 qcn 只准 Qwen3.8-Max）。费率已从 0.25x/0.10x夜 变为 0.50x"
     },
+    "glm-5.3-flash": {
+      "label": "GLM-5.3-Flash",
+      "tier": "B+（按 2026-08-21 轮 91/120）",
+      "eval": {
+        "lru": 26,
+        "concurrency": 32,
+        "kafka": 33,
+        "total": 91,
+        "judge": "gpt-5.5",
+        "date": "2026-08-21",
+        "thinking": "high",
+        "note": "与 hy4(103)/hy3(84) 同轮同题。见 hy4Eval_20260821"
+      },
+      "shortNames": [
+        "glm53f",
+        "glm-flash"
+      ],
+      "providers": {
+        "codebuddy-code": {
+          "modelId": "glm-5.3-flash",
+          "credit": 0.06,
+          "creditNote": "2026-08-21 list_models 实测。⚠️ 与已关闭的 glm-5.3(0.79x) 是两个 id，别混"
+        }
+      },
+      "preferredProvider": "codebuddy-code",
+      "selectableByDefault": true,
+      "dispatchRank": 3,
+      "dispatchNote": "⭐ T1 付费起点（2026-08-28 用户开启）。免费档被排除或到期后的默认落点，⭐ architecture 类也从这里起步（h2hEval_20260828 Kafka 36 > v4-flash 31）。⛔ algorithm / perf / concurrency-实现 三类跳过它，直接从 T2 起步。做砸一轮才升 T2。thinking 用 xhigh。",
+      "costEffectiveness": "0.06x，比 deepseek-v4-flash(0.17x) 便宜 2.8 倍。⚠️ 不要用「总分÷费率」跨轮算性价比——本模型 08-21 轮 91 分、08-28 头对头 98 分，两个数不同源。可靠的结论只有：同口径两题与 v4-flash 打平、价格便宜 2.8 倍",
+      "whyOpened": "🔴 2026-08-21 全表涨价后 deepseek-v4-flash 从 0.05x 涨到 0.17x，「DeepSeek 又强又便宜」的前提消失。glm-5.3-flash 0.06x 是新费率下最便宜的付费模型，便宜 2.8 倍。用户 2026-08-28 决定开启。",
+      "familyNote": "🔴 属 GLM(智谱) 族 —— 用它实施时，异构评审⛔不得用 GLM 全族",
+      "eval_h2h_20260828": {
+        "lru": 31,
+        "concurrency": 31,
+        "kafka": 36,
+        "total": 98,
+        "vsDeepseekV4Flash": "同口径两题（并发+Kafka）67 vs 66 打平；⚠️ LRU 一格不同口径不可用作证据"
+      },
+      "paseo": {
+        "provider": "codebuddy-code/glm-5.3-flash",
+        "modeId": "bypassPermissions",
+        "thinkingOptionId": "xhigh",
+        "verifyAfterCreate": "⛔ 创建后核 runtimeInfo.model，list_models 里有 id 不代表派它会生效"
+      }
+    },
     "deepseek-v4-flash": {
       "label": "DeepSeek-V4-Flash",
       "tier": "A",
@@ -555,8 +633,8 @@
       "providers": {
         "codebuddy-code": {
           "modelId": "deepseek-v4-flash",
-          "credit": 0.05,
-          "creditNote": "2026-08-16 list_models 实测 0.05x（此前记 0.06x，已降价）"
+          "credit": 0.17,
+          "creditNote": "🔴 2026-08-21 实测 0.17x（原 0.05x，涨 3.4 倍）"
         },
         "deepseek": {
           "modelId": "deepseek-v4-flash",
@@ -596,9 +674,9 @@
         "deep-db-internals"
       ],
       "avoidFor": [],
-      "dispatchRank": 2,
-      "dispatchNote": "⭐⭐ **DeepSeek 系列首选 + codebuddy 默认落点**（2026-08-20 用户明确：deepseek 内优先 flash）。Hy3 被排除时接手；algorithm / perf / architecture 三类也**全部先落这里**，做砸才升 v4-pro。性价比 1780 全场最高。thinking 用 xhigh。",
-      "note": "三题均 32 分，是全部已测模型中最均衡的（无短板）。并发题正确识别'JS 单线程无需加锁'（Hy3 在 max 下此处翻车），且提出 Postgres READ COMMITTED 的 EvalPlanQual 机制论证条件 UPDATE 防超卖——评委确认该技术断言正确。⚠️ 原写『以 96 分 / 0.06x 全面取代 V4-Pro（86 分 / 0.13x）』——**该结论已于 2026-08-16 被 v4-pro 正式版重测推翻**（同轮 v4-pro 96 > flash 89），见 sameRoundEval_20260816 与 deepseek-v4-pro.statusNote。flash 保住默认落点靠的是性价比（1780 vs 738），不是绝对分。",
+      "dispatchRank": 4,
+      "dispatchNote": "⭐ T2 主力档 + DeepSeek 族首选。T1 做砸一轮后接手；⛔ algorithm / perf / concurrency-实现 三类直接从这里起步（h2hEval_20260828 这三类它领先）。⚠️ architecture 类 2026-08-28 改由 T1 的 glm-5.3-flash 起步（本轮 Kafka 31 < glm 36）。thinking 用 xhigh。",
+      "note": "三题均 32 分，是全部已测模型中最均衡的（无短板）。并发题正确识别'JS 单线程无需加锁'（Hy3 在 max 下此处翻车），且提出 Postgres READ COMMITTED 的 EvalPlanQual 机制论证条件 UPDATE 防超卖——评委确认该技术断言正确。⚠️ 原写『以 96 分 / 0.06x 全面取代 V4-Pro（86 分 / 0.13x）』——**该结论已于 2026-08-16 被 v4-pro 正式版重测推翻**（同轮 v4-pro 96 > flash 89），见 sameRoundEval_20260816 与 deepseek-v4-pro.statusNote。🔴 2026-08-21 涨价后它也不再是最省的落点，T2 定位靠的是 algorithm/并发两类的同口径领先，⛔ 不是性价比。",
       "paseo": {
         "provider": "codebuddy-code",
         "model": "deepseek-v4-flash",
@@ -619,9 +697,17 @@
         }
       },
       "whitelisted": true,
-      "sameRoundNote": "⚠️ 2026-08-16 同轮重测（重建 prompt，不与历史 96 直接可比）：flash 89 vs v4-pro 96。分项：LRU 25（明显落后，TTL 惰性清理把过期项仍计入 size/容量，违背题目语义）、并发 30、**Kafka 34（反超 v4-pro 的 31，架构题是它的强项）**。默认落点地位不变——性价比 1780 仍是全场最高。",
+      "sameRoundNote": "⚠️ 2026-08-16 同轮重测（重建 prompt，不与历史 96 直接可比）：flash 89 vs v4-pro 96。分项：LRU 25（明显落后，TTL 惰性清理把过期项仍计入 size/容量，违背题目语义）、并发 30、**Kafka 34（反超 v4-pro 的 31，架构题是它相对 v4-pro 的强项）**。🔴 ⚠️ 这个『Kafka 强项』只在与 v4-pro 之间成立——2026-08-28 头对头里 glm-5.3-flash 在同一题拿 36、反超 flash 的 31，所以 architecture 类的付费起步档已改为 glm-5.3-flash。⛔ 不要把『A 强于 B』推广成『A 强于所有更便宜的』。",
       "selectableByDefault": true,
-      "costEffectiveness": "89/0.05 = 1780，全场最高。⭐ 大部分场景够用（用户 2026-08-21 明确）"
+      "costEffectiveness": "🔴 2026-08-21 涨价 0.05x→0.17x，「性价比全场最高」的立论不再成立。⛔ 不要用「总分÷费率」跨轮算性价比去和别的模型比——它的 89 分出自 08-16 轮、glm-5.3-flash 的 91 分出自 08-21 轮，两个数不同源。唯一同口径的结论来自 h2hEval_20260828：并发+Kafka 两题 66 vs glm 的 67 打平，而 glm 便宜 2.8 倍。",
+      "eval_h2h_20260828": {
+        "lru": 36,
+        "concurrency": 35,
+        "kafka": 31,
+        "total": 102,
+        "note": "⚠️ LRU 一格不同口径——本臂在 agent 上下文里按 TDD 真建了工程并跑了 30/30 测试、还派了一轮交叉审，另一臂是聊天内作答。该格对本臂有利，⛔ 不能当同口径证据"
+      },
+      "behaviorNote": "🔴 2026-08-28 观察：在有 CLAUDE.md/AGENTS.md 的 agent 上下文里，它会**真的按 TDD 建工程**（建目录、装依赖、写测试、跑测试、自己派交叉审），而不是在回复里给代码。⇒ 派它做实现类任务是优点；⛔ 但做 chat 式盲评时会导致产物形态与其它臂不可比。"
     },
     "deepseek-v4-pro": {
       "label": "DeepSeek-V4-Pro",
@@ -642,7 +728,8 @@
       "providers": {
         "codebuddy-code": {
           "modelId": "deepseek-v4-pro",
-          "credit": 0.13
+          "credit": 0.51,
+          "creditNote": "🔴 2026-08-21 实测 0.51x（原 0.13x，涨 3.9 倍），贵 flash 3 倍"
         },
         "qoderclicn": {
           "modelId": "dmodel",
@@ -688,12 +775,12 @@
       },
       "whitelisted": true,
       "dispatchRank": 8,
-      "dispatchNote": "**升档档位，不是任何任务类型的默认落点**（2026-08-20 用户决策）。⛔ 只在 flash 已于本任务做砸过一轮时进入。⭐ 但升档时应升它、不要直接跳 K3：08-16 同轮重测 96 > flash 89、LRU 33 vs 25，只贵 2.6 倍（K3 贵 32 倍）。⚠️ 架构类升档收益有限——重测 Kafka 31 < flash 34。",
+      "dispatchNote": "**升档档位，不是任何任务类型的默认落点**（2026-08-20 用户决策）。⛔ 只在 flash 已于本任务做砸过一轮时进入。⭐ 但升档时应升它、不要直接跳 K3：08-16 同轮重测 96 > flash 89、LRU 33 vs 25，贵 deepseek-v4-flash 3.0 倍（K3 贵 9.5 倍）。⚠️ 架构类升档收益有限——重测 Kafka 31 < flash 34。",
       "statusNote": "旧记录『86 分 / 被 V4-Flash 全面取代』基于 2026-06-28 旧版本，已被 sameRoundEval_20260816 推翻；但 v10.1 据此把 algorithm 改派给它，2026-08-20 已撤销——数据支持的是『升档目标』，不是『默认落点』。",
       "selectableByDefault": false,
       "requiresPrecondition": "⛔ 唯一入口：deepseek-v4-flash 已在【本任务】做砸过一轮。派发理由里必须写明：哪一轮、砸在哪、为什么升档能解决。⛔ 写不出来就不许升。",
-      "costMultiplier": "2.6x vs deepseek-v4-flash（0.13x vs 0.05x）",
-      "costEffectiveness": "96/0.13 = 738；flash 是 89/0.05 = 1780。⇒ flash 性价比高 2.4 倍",
+      "costMultiplier": "3.0x vs deepseek-v4-flash（0.51x vs 0.17x）",
+      "costEffectiveness": "96/0.51 = 188；flash 是 89/0.17 = 524 ⇒ flash 性价比高 2.8 倍",
       "whyAgentsWronglyPickIt": "🔴 已知失效模式（用户 2026-08-21 反馈『很多 agent 还是喜欢用 v4-pro，消耗太快』）：agent 扫 catalog 时抓 sameRoundEval 的『v4-pro 96 > flash 89』当理由，忽略散文规则。⇒ 看到那组分数时必须同时读 costMultiplier 与本字段：那组数据说明的是【升档时该升谁】，⛔ 不是【该跳过 flash】。大部分场景 flash 够用。"
     },
     "kimi-k2.6": {
@@ -848,6 +935,47 @@
       "restriction": "⛔ Copilot 仅用于审查，不做开发（用户 2026-08-20 明确）",
       "correction": "🔴 2026-08-21 用户纠正：此前写 gpt-5.4 是【错的】。权威源 agent-review-protocol skill 明写 `github-copilot/gpt-5.5`（Development review），benchmark.judges 三轮也全是 gpt-5.5。memory feedback-hub-session-infra-loop 记录过同一个错：『opencode 审查用 gpt-5.4（过时），被用户纠正后才改 5.5』——根因是照 skill 旧字面值行事、没查 agent-review-protocol §8。",
       "promptLengthLimit": "🔴 ⛔ prompt 必须 ≤200 字符，背景让模型自己读文件。agent-review-protocol 实测：非交互模式下 800 字 prompt 让 GPT-5.5 挂 22 分钟，短 prompt 秒回。⚠️ 本 skill 2026-08-20 那轮审查出现的 300s/540s 超时，根因就是 prompt 过长。"
+    },
+    "hy4-preview": {
+      "label": "Hy4 preview",
+      "tier": "S（⚠️ 按 08-21 轮 103/120 定，与历史榜 M3 114 / Sonnet5 112 / K3 110.5 是**跨轮口径**，仅作量级参照）",
+      "eval": {
+        "lru": 35,
+        "concurrency": 34,
+        "kafka": 34,
+        "total": 103,
+        "judge": "gpt-5.5",
+        "date": "2026-08-21",
+        "thinking": "high",
+        "note": "三题全胜。见 hy4Eval_20260821"
+      },
+      "shortNames": [
+        "hy4"
+      ],
+      "providers": {
+        "codebuddy-code": {
+          "modelId": "hy4-preview",
+          "credit": 0.0,
+          "note": "⚠️ 免费至 2026-09-12 00:00。⛔ 别写成 hy4-preview-x —— 那是同名收费版 0.29x"
+        }
+      },
+      "preferredProvider": "codebuddy-code",
+      "selectableByDefault": true,
+      "dispatchRank": 1,
+      "dispatchNote": "⭐ 2026-08-21 起第一顺位：免费 + 本轮三题全胜（103/120，S 级区间）。⚠️ 09-12 免费结束，届时按 hy4-preview-x 的 0.29x 重新评估",
+      "promo": {
+        "type": "free",
+        "end": "2026-09-12T00:00",
+        "credit": 0.0,
+        "paidSuccessor": "hy4-preview-x @ 0.29x",
+        "note": "⚠️ 限免结束后若平台把 hy4-preview 直接切成收费，费率会从 0 跳到 0.29x —— 比现在的 v4-flash(0.17x) 还贵。09-12 前必须留切换预案"
+      },
+      "paseo": {
+        "provider": "codebuddy-code/hy4-preview",
+        "modeId": "bypassPermissions",
+        "thinkingOptionId": "high",
+        "verifyAfterCreate": "⛔ 创建后核 runtimeInfo.model，list_models 里有 id 不代表派它会生效"
+      }
     }
   },
   "claudeModels": {
@@ -1056,7 +1184,7 @@
       }
     },
     "verdict": "v4-pro 总分高 7 分，但分项高度分化：算法/精细实现 +8、并发诊断 +2、架构设计 -3。",
-    "costEffectiveness": "flash 89/0.05 = 1780 · v4-pro 96/0.13 = 738 ⇒ flash 仍是默认落点（性价比高 2.4 倍），v4-pro 作定向升档",
+    "costEffectiveness": "【当时费率下】flash 89/0.05 = 1780 · v4-pro 96/0.13 = 738 ⇒ flash 是默认落点，v4-pro 作定向升档。🔴 2026-08-21 涨价后这两个数字都失效（0.17x / 0.51x）。⛔ 本字段是历史存档，不要拿它算当前性价比，也不要与别轮分数横比。当前定位见 models.*.dispatchNote 与 h2hEval_20260828。",
     "keyImplication": "🔴 v4-pro 补上了 M3 关闭留下的空档：原本 flash(0.05x) 之上直接是 K3(1.62x)，32 倍跳变；现在**升档时先到 v4-pro(0.13x, 仅 2.6 倍)**，K3 退回真正的最后一档。⚠️ 2026-08-20 澄清：这说的是『升档目标』，⛔ 不是『algorithm 类默认直接派 v4-pro』——所有类型都先 flash，做砸才升（预防性升档已被两组实测否掉）。",
     "report": "~/AgentWorkspace/tmp/v4pro-benchmark-20260816/REPORT.md",
     "⚠️_READ_BEFORE_USING_THESE_SCORES": "🔴 这组分数的正确用法是【升档时该升 v4-pro 而不是跳 K3】，⛔ 不是【该跳过 flash 直接用 v4-pro】。v4-pro 贵 2.6 倍且 selectableByDefault=false，只有 flash 在本任务做砸过一轮才可升。⚠️ 另注意 flash 在架构题反超（Kafka 34 vs 31）。",
@@ -1205,7 +1333,7 @@
     "channelDisambiguation": {
       "_note": "⚠️ 本表描述的是【走 opencode 时】同一个 DeepSeek 的三条通道，⛔ 不代表 opencode 是默认——默认见 oneshotChannels.matrix。",
       "volcengine-coding/deepseek-v4-*": "⭐ opencode run --pure [--variant off|on] · Coding Plan【独立额度】· 一次性调用默认落点；1,024,000 context，思考强度可控",
-      "cb/deepseek-v4-*": "Paseo create_agent · codebuddy credits(0.05x/0.13x) · 【派发开发任务】——有 agent 会话、工具、worktree、git",
+      "cb/deepseek-v4-*": "Paseo create_agent · codebuddy credits(0.17x/0.51x) · 【派发开发任务】——有 agent 会话、工具、worktree、git",
       "volcengine-agent-plan/deepseek-v4-*": "opencode run --pure · 按月套餐 · 【一次性调用】只读分析/问答/长上下文(1M)",
       "deepseek/deepseek-v4-*": "🔴 【2026-08-20 用户已 disable，不可用】原为自费兜底，现已从 opencode 移除",
       "warning": "⛔ 派开发任务不要因为『volcengine 不耗 credits』就改用 opencode ——那是一次性文本调用，拿不到 agent 能力",
@@ -1303,22 +1431,20 @@
       "addedOn": "2026-08-20（用户在 pi 内 /login 接入 GitHub Copilot 订阅）",
       "auth": "~/.pi/agent/auth.json 已含 github-copilot",
       "models": [
-        "gpt-5.5（⭐审查默认，与盲评评委同口径）",
-        "gpt-5.5（历史盲评评委）",
-        "gpt-5.3-codex",
-        "gpt-5.4-mini",
-        "gpt-5-mini",
-        "gemini-3.1-pro-preview",
-        "gemini-3.5-flash",
-        "claude-sonnet-4.6（⚠️ Claude 族）"
+        "⭐ gpt-5.5 —— 审查默认",
+        "备选（同为 GPT 族）：gpt-5.6-sol · gpt-5.6-luna · gpt-5.6-terra · gpt-5.4 · gpt-5.3-codex · gpt-5.4-mini · gpt-5.4-nano · gpt-5-mini · gpt-5.2 · gpt-5.2-codex · gpt-4.1",
+        "Gemini 族（另一个异构选择）：gemini-3.1-pro-preview · gemini-3.5-flash · gemini-3.6-flash · gemini-3.7-flash",
+        "🔴 claude-* 全系也在同一 store —— 属 Claude 族，⛔ 审主会话产出时不可用"
       ],
       "restriction": "⛔ 仅用于审查，不做开发（用户 2026-08-20 明确）。开发一律走 volcengine-coding。Copilot 额度只留给审查。",
       "claudeFamilyWarning": "🔴 github-copilot/claude-sonnet-4.6 属 Claude 族。主会话本身就是 Claude ⇒ 主会话自己写的代码/文档/配置⛔不得用它审（自审）。审主会话产物请用 gpt-5.4 / gpt-5.5 / gemini-*。",
-      "verified": "✅ 2026-08-20 端到端实测：pi -p --provider github-copilot --model gpt-5.5 做真实审查任务，两轮分别 33s / 29s，正常返回分级结论。⇒ 此前『可能上百秒』的担心不成立——那是火山模型自身的延迟，不是 pi 的。"
+      "verified": "✅ 2026-08-20 端到端实测：pi -p --provider github-copilot --model gpt-5.5 做真实审查任务，两轮分别 33s / 29s，正常返回分级结论。⇒ 此前『可能上百秒』的担心不成立——那是火山模型自身的延迟，不是 pi 的。",
+      "modelsSourceOfTruth": "~/.pi/agent/models-store.json（2026-08-28 实测 33 个模型，非 Claude 族 22 个）。⛔ 本字段与 whitelist.exempt / routing §5 / SKILL §3.2c 必须一致，改一处要同步四处。",
+      "_fixedNote": "⚠️ 2026-08-28 修：本字段此前有两行重复的 gpt-5.5（gpt-5.4→gpt-5.5 全文替换的残留），v11.1 只修了 md 侧、漏了这份"
     },
     "whyNotPiCliForDev": "🔴 不是 pi 不行，是 pi -p 这条 CLI 路径你看不见：one-shot 进程不进 Paseo agent 列表 ⇒ Paseo Desktop 看不到进度、无法中途干预、拿不到 get_agent_status，只有日志文件。用户明确要求过『派发子任务走 paseo mcp，为的是能看进度、能干预』，memory 亦有『派发任务必须拆细+可见，不用黑盒』。✅ 正解 = Paseo MCP 派 pi，而不是在 Paseo 与 pi 之间二选一。",
     "paseoPiProvider": {
-      "exposes": "27 个模型 = 火山 19（coding 7 + agent-plan 12）+ Copilot 8",
+      "exposes": "Paseo 的 pi provider 暴露火山 19 个模型 + Copilot 全量。⚠️ 旧记录写「27 个 = 火山 19 + Copilot 8」，Copilot 侧现为 33 个，该数字已过期",
       "thinking": "off/minimal/low/medium/high/xhigh/max，默认 medium",
       "caveat": "⚠️ pi/volcengine-*/kimi-k2.7-code 的 thinkingOptions 为 null（官方注明不支持 reasoning summaries），派它时不要传 thinkingOptionId"
     },
@@ -1328,5 +1454,97 @@
       "审查类": "pi -p --provider github-copilot --model gpt-5.5 ⛔ Copilot 仅审查不做开发 ⛔ prompt ≤200 字符（800 字会挂 22 分钟）",
       "兜底": "opencode —— 🔻 无常规用途，仅在上面三条都不可用时"
     }
+  },
+  "hy4Eval_20260821": {
+    "_note": "三臂同轮盲评。题库复用 2026-08-16 存档原题（逐字同题）；thinking=high；创建后核 runtimeInfo 无静默降级；匿名 A/B/C 且位置逐题轮换；评委 github-copilot/gpt-5.5，prompt ≤200 字符",
+    "date": "2026-08-21",
+    "scores": {
+      "hy4-preview": {
+        "lru": 35,
+        "concurrency": 34,
+        "kafka": 34,
+        "total": 103
+      },
+      "hy3": {
+        "lru": 23,
+        "concurrency": 29,
+        "kafka": 32,
+        "total": 84
+      },
+      "glm-5.3-flash": {
+        "lru": 26,
+        "concurrency": 32,
+        "kafka": 33,
+        "total": 91
+      }
+    },
+    "verdict": "🏆 hy4-preview 三题全胜、总分 103/120，本轮三臂内的相对关系严格成立。⚠️ 「放进历史榜属 S 级区间」（M3 114 / Sonnet5 112 / K3 110.5）是**跨轮对照**，⛔ 只作量级参照，不构成排名。",
+    "methodologySelfCheck": "✅ hy3 本轮 LRU 23 分 vs 2026-07-20 原始盲评 22 分 —— 同题复现一致，题库与评分口径稳定",
+    "caveats": [
+      "n=1，每格单次运行",
+      "评委单一（gpt-5.5）",
+      "hy4 的 LRU 领先幅度最大（+12 over hy3），与 hy3 历来 LRU 是短板一致，但也意味着该项差距可能被单题放大"
+    ],
+    "processNote": "⚠️ 采集时曾把首轮中间态 `aborted`（7 字符）误判为终态失败并重派；复查发现 agent 自行重试成功。教训：判定产出前必须先确认 lastStatus 已是 idle/completed。诊断结论已撤回——无证据表明 hy4 有稳定性缺陷",
+    "report": "~/AgentWorkspace/tmp/hy4-benchmark-20260821/"
+  },
+  "h2hEval_20260828": {
+    "date": "2026-08-28",
+    "judge": "github-copilot/gpt-5.5",
+    "thinking": "high",
+    "n": 1,
+    "arms": {
+      "v4flash": "cb/deepseek-v4-flash @0.17x",
+      "glm53flash": "cb/glm-5.3-flash @0.06x"
+    },
+    "scores": {
+      "concurrency": {
+        "v4flash": 35,
+        "glm53flash": 31
+      },
+      "kafka": {
+        "glm53flash": 36,
+        "v4flash": 31
+      },
+      "lru": {
+        "v4flash": 36,
+        "glm53flash": 31
+      }
+    },
+    "totals_120": {
+      "v4flash": 102,
+      "glm53flash": 98
+    },
+    "comparableSubset_80": {
+      "v4flash": 66,
+      "glm53flash": 67
+    },
+    "mapping": {
+      "concurrency": {
+        "A": "v4flash",
+        "B": "glm53flash"
+      },
+      "kafka": {
+        "A": "glm53flash",
+        "B": "v4flash"
+      },
+      "lru": {
+        "A": "v4flash",
+        "B": "glm53flash"
+      }
+    },
+    "why": {
+      "lru": "A 核心实现和测试通过，回调重入更稳；仍有 size/stats 读触发回调、迭代中途淘汰非快照问题。B 测试有错误断言，迭代会吐出已淘汰节点。",
+      "concurrency": "A覆盖更全、修复更完整，但测试schema与旧实现不兼容；B核心正确但ID熵算错、cancel幂等和多处测试有硬伤。",
+      "kafka": "A覆盖更完整且技术更准，仅容量余量/存储表述有矛盾；B schema兼容性说反、补偿顺序和消费EOS不足，容量也不自洽。"
+    },
+    "caveats": [
+      "n=1，每格单次运行；单评委",
+      "⚠️ LRU 一格不同口径：deepseek-v4-flash 在 agent 上下文里按 TDD 真建了工程（352 行实现 + 344 行测试），自己跑了 30/30，还派了一轮交叉审；另一臂是聊天内作答。该格对 v4-flash 有利，⛔ 不能当同口径证据",
+      "⚠️ 本轮分数与 2026-08-21 三臂轮不同批评委会话，⛔ 不可跨轮横比（glm53flash 该轮 kafka 33，本轮 36）"
+    ],
+    "verdict": "同口径两题 66 vs 67 基本打平，而 glm-5.3-flash 便宜 2.8 倍 ⇒ 作为 T1 付费起点成立。分项反向分化：算法/并发 v4-flash 强，架构 glm-5.3-flash 强 5 分",
+    "_note": "二臂头对头：glm-5.3-flash vs deepseek-v4-flash。题库与 hy4Eval_20260821 逐字同题，thinking=high，创建后核 runtimeInfo 无静默降级，匿名 A/B 且位置逐题轮换，评委 github-copilot/gpt-5.5，prompt ≤200 字符，三题在同一次评分中完成",
+    "report": "~/AgentWorkspace/tmp/hy4-benchmark-20260821/"
   }
 }

@@ -1,5 +1,370 @@
 # Rift Dispatch — 变更记录
 
+## v11.1 (2026-08-28)
+
+用户三条指令：**开启 `glm-5.3-flash`** + **优化决策树** + **补 CHANGELOG 与整体瘦身**。
+
+### ⭐ `glm-5.3-flash` 开启，成为 T1 付费起点
+
+它 08-21 就被发现（0.06x，新费率下最便宜的付费模型），但当时**没有与 `deepseek-v4-flash`
+同轮比过** —— 它的 91 分出自 08-21 轮，flash 的 89 分出自 08-16 轮，⛔ 跨轮不可横比。
+本轮补测：把 `deepseek-v4-flash` 三题一并跑一遍，与已存档的 glm 产出做**二臂头对头**
+（同题、同 `thinking=high`、同评委 `gpt-5.5`、匿名 A/B 位置逐题轮换、三题在同一次评分中完成）。
+
+| 题目 | `deepseek-v4-flash` 0.17x | `glm-5.3-flash` 0.06x | |
+|---|---|---|---|
+| LRU（算法） | **36** | 31 | ⚠️ 不同口径，见下 |
+| 并发诊断 | **35** | 31 | 同口径 |
+| Kafka 架构 | 31 | **36** | 同口径 |
+| **同口径小计 /80** | 66 | **67** | 打平 |
+
+⇒ **同口径打平，而 glm-5.3-flash 便宜 2.8 倍**，作为 T1 付费起点成立。
+
+🔴 **LRU 那一格不能当证据**：`deepseek-v4-flash` 在 agent 上下文里**按 TDD 真建了工程**
+（352 行实现 + 344 行测试），自己跑了 30/30，还派了一轮交叉审；另外三臂是聊天内作答。
+这一格对它有利。⚠️ 但这个行为差异本身是有用信息——**派它做实现类任务是优点**，
+只是做 chat 式盲评时产物形态不可比。已记进 catalog `models['deepseek-v4-flash'].behaviorNote`。
+
+### 🔴 决策树：把「跳过免费档」和「付费从哪档起步」拆成两件事
+
+这两件事以前混成一件，后果是 `architecture` 因为「免费档做不了」被一路推到 v4-flash。
+拆开后按实测重定：
+
+| 代号 | 跳过 T0？ | 付费起步档 | 依据 |
+|---|---|---|---|
+| 默认 | 否 | **T1** glm-5.3-flash | — |
+| `algorithm` | ✅ | **T2** v4-flash | hy3 LRU 22 ⇒ 跳 T0；⚠️ 付费起步档**无干净证据**（LRU 那格不可用），取并发题作最近代理：同口径 v4-flash 35 > glm 31 |
+| `perf` | ✅ | **T2** v4-flash | ⚠️ 从来没有 perf 类实测，按 algorithm 同类保守处理 |
+| `architecture` | ✅ | **T1** glm-5.3-flash | 🔴 **改了**（原 T2）：头对头 Kafka **glm 36 > v4-flash 31** |
+| `concurrency` | 否 | **T2** v4-flash | 诊断类 hy3 36.5 白名单内最高 ⇒ 不跳 T0；实现类头对头 v4-flash 35 > glm 31 |
+
+🔴 **`architecture` 这条为什么之前是错的**：旧依据写「v4-flash 重测 Kafka 34，反超 v4-pro 的 31」——
+那句话讲的是 **v4-flash 与 v4-pro** 的关系，⛔ 从头到尾没涉及 glm。
+把一个「A 强于 B」的结论当成「A 强于所有更便宜的」用，是这次抓到的推理缺口。
+
+派发链现在是 5 档：
+
+```
+T0 hy4-preview 0.00x → hy3 0.00x → T1 glm-5.3-flash 0.06x
+   → T2 deepseek-v4-flash 0.17x → T3 deepseek-v4-pro 0.51x → T4 kimi-k3-2 1.62x
+```
+
+⛔ 每级上移的唯一入口不变：**上一档已在【本任务】做砸过一轮**。
+
+### 🔴 自查抓到的伪代码 bug：K3 守卫用错了判据
+
+重写阶梯时给 K3 加了守卫 `if i >= 3 and not (… or failed_rounds >= 3): i = 2`。
+**用失败次数的绝对值当「v4-pro 也做砸了」的替身是错的**——入口档不同，走到 T4 需要的失败数也不同：
+
+```
+core 类       入口 i=0，砸 3 轮 → i=3 → K3      守卫放行 ✓
+algorithm 类  入口 i=1，砸 2 轮 → i=3 → K3      守卫看 2>=3 为假 ⇒ 按回 i=2 = v4-pro ✗
+                                                 而 v4-pro 正是刚砸掉的那档 ⇒ 原地卡死
+```
+
+修法不是把 3 改成别的数，是**去掉守卫**：`i = 入口档 + 砸过的档数`，
+所以 **`i` 能走到 3 本身就意味着下面每一档都砸过了**，条件是冗余的。
+改成 `min(i, 3)` + 一条兜底断言，并把「同一档重试不计数」写进注释
+（否则同档重试两次会把任务一路顶到 K3）。
+
+⚠️ 这个 bug 是**改完自己逐路径验算时**发现的，不是审查发现的——
+加了入口档偏移之后，所有以「绝对失败次数」为条件的判断都要重新验，
+不能只验默认路径。
+
+### 异构审查抓到的两处（`github-copilot/gemini-3.1-pro-preview`，与实施侧 Claude 异族）
+
+**❌ 白名单可以被绕过。** 伪代码写的是：
+
+```python
+if provider in WHITELIST and model not in WHITELIST[provider]:
+    report_conflict_and_stop()
+```
+
+传一个**不在 `WHITELIST` 键里**的 provider（比如已被 disable 的 `deepseek`），
+`provider in WHITELIST` 求值为假，⇒ **整个校验静默跳过、直接放行**。
+改成三层依次判：`DISABLED_PROVIDERS` 先拦 → 在 `WHITELIST` 里就校验模型 →
+既不在白名单也不在 `EXEMPT_PROVIDERS`（pi/claude/codex/opencode，走别的钱包）的未知 provider 一律停。
+
+⚠️ 这是既有记录里「白名单缺口 = 绕过口」的第三种形状，前两种是「数参数≠检查内容」和「条件性显示=隐藏开关」。
+
+**❌ catalog 自己违反了跨轮比分纪律。** `models['deepseek-v4-flash'].costEffectiveness` 写着
+`已被 glm-5.3-flash（91/0.06 = 1517）反超`——flash 的 89 分出自 08-16 轮、glm 的 91 分出自 08-21 轮，
+**这正是同一个文件在 glm 条目下严词警告过的做法**。审查者原话：「文件刚刚在 glm 的条目下严正警告
+不要跨轮算性价比，却在 v4-flash 这里自己把两个不同源的分数除以费率并作比较」。
+
+顺着这条排查，又找出三处仍在用**涨价前的 0.05x** 支撑当前结论：
+
+| 位置 | 原文 | 现状 |
+|---|---|---|
+| `qwen3.8-max-preview.dispatchNote` | 「0.50x 是 flash(0.05x) 的 10 倍」 | 涨价后是 **2.9 倍** |
+| `deepseek-v4-flash.sameRoundNote` | 「性价比 1780 仍是全场最高」 | 立论已不成立 |
+| `deepseek-v4-flash.note` | 「保住默认落点靠的是性价比（1780 vs 738）」 | T2 定位改为靠同口径领先 |
+| `sameRoundEval_20260816.costEffectiveness` | 旧费率算出的两个比值 | 加标注：历史存档，⛔ 不得用于当前 |
+
+**教训**：改一个基础数值（费率）时，**派生结论散落在多个字段里不会跟着变**。
+涨价那一轮只改了费率本身和几处显眼的表格，这些藏在 `note` / `dispatchNote` 里的比值全留在旧世界。
+⇒ 改费率后要**按「这个数被谁引用过」逐字段扫**，不能只改费率字段。
+
+### ⚠️ 一处差点自相矛盾
+
+`algorithm` 的付费起步档最初写「依据：头对头 LRU v4-flash 36 > glm 31」——
+**而同一份 CHANGELOG 上一段刚说过那一格口径不同、不能当证据。**
+自查时抓到，改成诚实版本：**algorithm 的付费起步档没有干净证据**，
+现有依据是并发题（同口径，v4-flash 35 > glm 31）作为「精细实现类」的最近代理。
+真正对口的 LRU 数据要等一轮同口径补测。
+
+⚠️ 这类矛盾很难自己看见——因为**两句话都是我写的、都在同一次编辑里**，
+而它们的冲突要跨段落才显形。判据是：**一个数据我在 A 处标了「不可用」，
+就要回头搜它在 B 处有没有被当依据引用。**
+
+### ⚠️ 审查通道本身踩到的两件事
+
+**`hy4-preview` 撞 429。** 派它做本次复审，transcript 显示它做了 13 次工具调用后返回
+`429 too many requests`，`status=incomplete`，agent 随即 idle。
+⚠️ **Paseo 的完成通知里只有它的开场白「I'll start by reading the brief.」**——
+不看 transcript 会以为它答了一句就交差。这是「收割前先确认 lastStatus」之外的第二层：
+`lastStatus=idle` 也可能是**被限流打断后的 idle**，得看最后一条消息的 `status`。
+
+⇒ 这条正好现实印证了规则里「免费额度耗尽会进排队/限流，长任务派进去会卡住」——
+派免费档做长任务前**先探活**不是纸面纪律。
+
+**`pi -p` + `gpt-5.5` 跑满 17 分钟无输出。** prompt 只有 26 字符（背景全在 BRIEF 文件里，
+符合「≤200 字符」纪律），但任务本身要读约 2000 行跨 4 个文件。进程活着、0% CPU、等网络。
+⇒ 按既有纪律**没有收窄 prompt 重试，而是换通道**（gemini → hy4 → glm-5.3-flash）。
+⚠️ 「prompt ≤200 字符」能防住 prompt 过长这一种成因，⛔ 防不住任务本身太大。
+
+### 二轮异构审查：`glm-5.3-flash` 复审（VERDICT: FAIL，4 ❌ + 6 ⚠️）
+
+首轮 gemini 的修复本身没被审过，所以做了第二轮——**审查人换成本轮刚开启的 `glm-5.3-flash`**，
+既是异族复审（GLM ≠ Claude），也顺带实地验了一把新的 T1 默认档。
+它跑了 26+ 次工具调用，逐条对照 `/tmp/rift-bak/`、`h2h-20260828.json`、`~/.pi/agent/models-store.json`
+和三份运行时副本，独立复核了首轮三条修复，然后抓出 4 个新 ❌。
+
+**❌1 修白名单缺口时把合法通道堵死了（回归）。**
+`EXEMPT_PROVIDERS` 只写了 `['pi','claude','codex','opencode']`，
+漏掉 `github-copilot` 和 `volcengine-coding`/`-agent-plan`/`-chat`。
+后果：`--provider volcengine-coding`（§3.2b 只读通道的标准命令）和 `--provider github-copilot`
+（审查主通道）会被第三层当「未知 provider」拦停——**而它上面两行的注释正写着这些不进白名单校验**。
+bak 里的豁免集是完整的，是本轮重写丢的。
+
+⚠️ **补缺口时把邻近的合法路径一起堵上，是「加校验」这个动作的固定失败形态。**
+判据：新增一条拒绝分支后，要把**文档里列过的每一条合法调用**手动过一遍。
+
+**❌2 两个机器可读字段对同一问题给出相反答案。**
+`dispatchDefaults.escalation.entryTier` 说「architecture 从 T2 起步」，
+而同一对象里新加的 `dispatchDefaults.entryTier.architecture.paidEntry` 是 `glm-5.3-flash`。
+**是我自己造的**——先写了前者，拿到头对头数据后加了后者，没回头删前者。
+v11.0 刚立下「数值字段的权重高于散文」，那么两个数值字段打架就比散文矛盾更危险。
+已删除重复真源，并加 `entryTierSourceOfTruth` 指向唯一那份。
+连带修 `codebuddyDefaultModel`（仍是 flash）、`modelFamilyPreference`（仍写「08-31 后 flash 接管第一顺位」）、
+`timeOfDayPolicy.mustNotDowngrade`（模型名过期）。
+
+**❌3 旧费率清扫没扫完。** 上一节刚写完「改费率后要按『这个数被谁引用过』逐字段扫」，
+实际只扫了 4 处。复审又找出 5 处按现行口径陈述的旧值：
+`escalation.toV4ProCondition`「只贵 2.6 倍 / K3 贵 32 倍」、`kimi-k3-1.notAReason` 两条
+「0.05x / 0.13x / 一次 K3 ≈ 32 次 flash」、`deepseek-v4-pro.dispatchNote`、`channelDisambiguation`。
+实锤是同一个模型条目内部打架：`kimi-k3-1.costWarning` 已是「9.5 倍（原 32 倍）」，
+紧挨着的 `notAReason` 还停在 32 倍。
+
+**❌4 `concurrency` 这条路径走不通。** 伪代码查 `ENTRY['concurrency_impl']`，
+但 routing §6 代号列里只有 `concurrency`——`classify()` 根本产不出 `concurrency_impl`，
+查表落空退回 T1，违反「写并发原语实现从 T2 起步」。
+另外 `failed_rounds` 是否计入 T0 失败没定义，计了会让默认类跳过 T1 的 glm。
+已把 §6 拆成 `concurrency_diag` / `concurrency_impl` 两行、伪代码加子类判定、
+并把计数口径写死为「只数付费阶梯内做砸的档数，T0 不计、同档重试不计」。
+
+**⚠️ 一条重要的：「hy3 并发诊断 36.5 白名单内最高」被自家数据推翻了。**
+那是 07-20 轮的单次值，而 08-21 逐字同题复测里 hy3 并发只有 **29**，三臂最低（hy4 34 · glm 32）。
+它当时还在给两条规则承重。⇒ 三处引用都补了口径，规则改为「仍可先试，⛔ 但不再宣称它最强」。
+⚠️ 这与本轮的 architecture 是同一个病：**一个单次测量被当成 standing 事实，
+之后所有引用都不再回头看它的出处**。
+
+其余已修：`piCopilot.models` 的双 `gpt-5.5`（v11.1 声称修了，实际只修了 md 侧、漏了 catalog 这份）；
+Copilot 清单三份互相矛盾 ⇒ 收敛为一份并注明以 `models-store.json` 为准；
+K3 的「性价比 68 全场最低」与 hy4 的「S 级」都是跨轮口径 ⇒ 加限定语；
+`clamp_to_supported()` 引用的「§3.2 能力表」在所有现行文件里都不存在（**bak 里也不存在**，
+是既有悬挂引用）⇒ 从 CHANGELOG v10.3 取回数据、补成 §3.2e；
+`args.model == 'k3'` 是死代码（P1 早就 goto EXECUTE 了）⇒ 删；
+T4 也做砸时 `min(i,3)` 会静默重派 K3 ⇒ 改为报告用户。
+
+复审判定 architecture→T1 的**证据成立**：h2h 原始 json 与文件陈述逐字段一致，
+n=1 已如实标注，且「起步档」是可逆决策、有升档纪律兜底。
+
+### 🔻 三文件职责重划 + 瘦身
+
+`model-routing.md` 此前按时间轴倒序堆了 8 条「硬性约束」，同一条事实反复出现——
+派发链写了 7 处、免费档排除清单 4 处、K3 红线 3 处、时段策略废止 3 处。
+更根本的问题是**它在替 CHANGELOG 承担历史职责**（大段「已废止 / 旧记录已失效 / 存档理由」），
+而这些内容 CHANGELOG 本来就有。
+
+重划职责：
+
+| 文件 | 职责 |
+|---|---|
+| `SKILL.md` | **怎么做** —— 伪代码 · 命令 · prompt 模板 · 自查表 |
+| `model-routing.md` | **选什么 + 为什么** —— 路由规则 · 门禁 · 证据 |
+| `model-catalog.json` | **数值** |
+| `CHANGELOG.md` | **历史** |
+
+按主题（而非时间）重组 routing，历史全部交回 CHANGELOG：
+
+| 文件 | 前 | 后（交付实测） |
+|---|---|---|
+| `model-routing.md` | 895 行 | **541 行**（−40%） |
+| `SKILL.md` | 601 行 | **512 行**（−15%） |
+
+⚠️ 中途写过 500/453，那是首轮瘦身刚完成时的数——两轮审查的修复又补回了行数
+（补回的都是**缺失内容**：thinking 档位能力表、Claude 模型「何时选」、约束 3-2、
+concurrency 子类拆分）。以交付实测为准。
+
+⛔ **删的只是重复与历史，规则一条没少**：白名单、排除清单、v4-pro 门禁、K3 红线、
+thinking 两组反例、异构对照表、降级链、探活纪律、`-x` 陷阱全部保留。
+
+### ⚠️ 顺带修掉的三个 sed 残留
+
+上一轮 `gpt-5.4 → gpt-5.5` 全文替换是无差别的，撞坏了三处：
+
+| 位置 | 坏成什么样 | 修 |
+|---|---|---|
+| Copilot 模型表 | `gpt-5.5` 出现两行，一行标「审查默认」一行标「历史盲评评委」 | 合成一行；按 `~/.pi/agent/models-store.json` 实测重列 |
+| Copilot 模型清单 | `gpt-5.5-mini`（**不存在这个 id**） | 实际是 `gpt-5.4-mini` |
+| 涨价对照表 | `deepseek-v4-pro \| 0.51x \| 0.51x`（08-16 列被一起改了，看不出涨了多少） | 该表随本次重构移出 routing，正确版本落在本文件 v11.0，08-16 列为 `0.13x` |
+
+**教训**：全文替换一个版本号时，**被替换的旧值可能出现在「历史对照」语境里**——
+那里的旧值是数据不是错字。改完要按语境抽查，不能只看替换计数。
+
+### catalog 5.3.0
+
+`whitelist.codebuddy-code` 加入 `glm-5.3-flash`（`closed` 移除）；新增 `models['glm-5.3-flash']`；
+新增 `h2hEval_20260828`；新增 `dispatchDefaults.entryTier`（`skipFreeTier` / `paidEntry` 两个字段
+把上面那件混淆的事拆开）；`escalation.rule` 改成 5 档链；`dispatchRank` 按阶梯重排
+（hy4=1 · hy3=2 · glm-5.3-flash=3 · v4-flash=4 · v4-pro=8 · k3=9）。
+
+二轮审查后追加：删除重复的 `escalation.entryTier`（与 `dispatchDefaults.entryTier` 矛盾）；
+`entryTier` 拆出 `concurrency_diag` / `concurrency_impl` 并加 `_taskTypeCodes` / `_failedTierCounting` 口径说明；
+`codebuddyDefaultModel` 改 `glm-5.3-flash`；`modelFamilyPreference` 按 5 档链重写；
+`piCopilot.models` 去重并以 `models-store.json` 为唯一真源；
+`glm-5.3-flash` / `hy4-preview` 补 `paseo` 块。
+
+⚠️ `hy4-preview-x`(0.29x) 与 `hy3-x`(0.05x) **仍在 `closed`**，待用户裁定——
+它们的 label 与免费版完全相同，开启前必须先确认派发侧按 id 匹配。
+
+
+## v11.0 (2026-08-21)
+
+三件事同时发生：**codebuddy 新增 Hy4 preview（免费）** + **🔴 全表涨价** + **v4-pro 门禁从散文改成机器可读字段**。
+
+### 🏆 Hy4 preview 三题全胜，接替第一顺位
+
+用户告知 codebuddy 新增 Hy4 preview，免费至 2026-09-12 00:00。同轮三臂盲评（题库逐字复用
+08-16 存档原题，`thinking=high`，创建后核 `runtimeInfo` 确认无静默降级，匿名 A/B/C 且位置逐题轮换，
+评委 `github-copilot/gpt-5.5`，prompt ≤200 字符）：
+
+| 题目 | hy4-preview | hy3 | glm-5.3-flash |
+|---|---|---|---|
+| LRU（算法） | **★35** | 23 | 26 |
+| 并发 Bug 诊断 | **★34** | 29 | 32 |
+| Kafka 架构 | **★34** | 32 | 33 |
+| **总分 /120** | **103** | 84 | 91 |
+| 费率 | **0.00x** | 0.00x | 0.06x |
+
+103 分放进历史榜属 **S 级区间**（M3 114 · Sonnet5 112 · K3 110.5），而它当前免费。
+⇒ hy4-preview 接替 hy3 成为第一顺位；hy3 同为免费但三题全负，且免费期早 12 天结束。
+
+✅ **方法论自校验**：hy3 本轮 LRU 23 分 vs 2026-07-20 原始盲评 22 分——同题复现一致，
+说明题库与评分口径稳定，这一轮的分数可以和 08-16 轮内部比较结构做对照。
+
+⚠️ **一处未验证**：Hy3 的「做不了清单」是否同样适用于 Hy4。Hy4 的 LRU 拿了 35 分（hy3 仅 23），
+「algorithm 是短板」这条对它**很可能不成立**。在补测前 Hy4 沿用该清单属于保守处理，可能低估它。
+
+### 🔴 全表涨价，默认落点的立论被动摇
+
+`paseo list_models` 复核时发现远不止多了一个模型：
+
+| 模型 | 08-16 | 08-21 | |
+|---|---|---|---|
+| `deepseek-v4-flash` | 0.05x | **0.17x** | 涨 3.4 倍 |
+| `deepseek-v4-pro` | 0.13x | **0.51x** | 涨 3.9 倍 |
+
+`deepseek-v4-flash` 的性价比从 **1780 掉到 524**。「DeepSeek 优先」（约束 7，2026-08-16）
+成立时的前提是它**又强又便宜**，涨价后这个前提不再成立。
+同时发现 `glm-5.3-flash` **0.06x**——新费率下最便宜的付费模型，本轮一并测评（91/120）。
+
+K3 的倍数也跟着变了：贵 v4-flash 从 **32 倍**降到 **9.5 倍**。倍数虽降，
+但性价比 110.5/1.62 = 68 仍是全场最低，红线不变。
+
+### ⚠️ `-x` 后缀：新出现的命名陷阱
+
+| id | 费率 | |
+|---|---|---|
+| `hy4-preview` | **0.00x** | 免费至 09-12 |
+| `hy4-preview-x` | **0.29x** | ⚠️ 同名收费版 |
+| `hy3` / `hy3-x` | 0.00x / 0.05x | 同一模式 |
+
+**同一个 label、两个 id、一免费一收费。** 🔴 派发必须认 id，按 label 匹配会选错。
+⚠️ 附带风险：09-12 限免结束后若平台把 hy4-preview 直接切成收费，费率会从 0 跳到 **0.29x**，
+比当时的 v4-flash(0.17x) 还贵——⛔ 不能想当然地「免费结束就自动落回同名收费版」。
+
+### 🔴 v4-pro 门禁：从散文改成机器可读字段
+
+用户反馈**「很多 agent 还是喜欢用 v4-pro，消耗太快」**。规则早已写在十几处仍拦不住。
+根因**不是规则不够，是数据在反着劝**：
+
+```
+blindEval        v4-flash 96  >  v4-pro 86      ← 支持 flash
+sameRoundEval    v4-pro  96  >  v4-flash 89     ← agent 抓这个当理由 ⚠️
+```
+
+分数是结构化数据、规则是散文，agent 扫 catalog 时只抓分数。⇒ 改成机器可读门禁：
+
+| catalog 字段 | 值 |
+|---|---|
+| `selectableByDefault` | **`false`** |
+| `dispatchRank` | 8（刻意与默认落点拉开） |
+| `requiresPrecondition` | 上一档已在**本任务**做砸过一轮，派发理由必须写明哪一轮、砸在哪 |
+| `costMultiplier` | 3.0x vs v4-flash |
+| `whyAgentsWronglyPickIt` | 把失效模式本身写进数据，钉在那组误导分数旁边 |
+
+**教训**：规则写在散文里改十二处不如把数值字段改对一处。
+数值字段的权重高于散文，警告要**钉在会误导的那个数字旁边**。
+
+### ⚠️ 纠错：审查模型是 gpt-5.5，不是 gpt-5.4
+
+用户指出审查通道写成了 `gpt-5.4`。**这个错犯了两次**，两次都由用户抓到。
+全文 35 处替换为 `gpt-5.5`。同时重申两条既有约束：
+
+- 🔴 **prompt ≤200 字符** —— 非交互模式下 800 字让 GPT-5.5 挂 22 分钟，短 prompt 秒回
+- ⛔ **撞超时不要收窄 prompt 重试** —— 极小 prompt 也超时属另一种根因，换通道
+
+### ⚠️ 过程纠错：`aborted` 是中间态，不是终态（诊断结论已撤回）
+
+采集盲评产出时，`hy4-kafka` 与 `hy4-concurrency` 的最后一条 assistant 消息都是
+**7 字符 `aborted`**（`status=incomplete`），我据此判为「中止、需重派」并重派了两个 agent。
+
+**这个判断下早了。** 复查 transcript 逐条消息：
+
+```
+hy4 并发 首轮  assistant#1  status=incomplete      7 字符 'aborted'
+              assistant#2  status=completed   24471 字符 完整答复   ← 自己重试成功了
+```
+
+⇒ 根因是**我在 `running` 状态下取了「当前最后一条消息」，把它当成了「最终产出」**。
+✅ **诊断结论撤回**：没有证据表明 hy4-preview 有稳定性缺陷。
+
+⚠️ 这个失败模式很危险：产出**非空**（7 字符），提取器若只判「非空」就会把 `aborted`
+送去评分，得出「Hy4 得分极低」的错误结论。⇒ `collect.py` 已加护栏：
+`len < 500` 或内容为 aborted/cancelled/interrupted 一律判无效。
+
+**教训**：判定 agent 产出前必须先确认 `lastStatus` 已是 `idle`/`completed`。
+与既有记录「请求返回 ≠ 产出有效」同类。
+
+### catalog 5.0.0
+
+新增 `models['hy4-preview']` · `hy4Eval_20260821`（含 `processNote` 记录上述撤回）；
+`providerRateSnapshot` 全表刷新到 08-21；`promoFirst` 改指 hy4-preview；
+`whitelist.closed` 新增 `hy4-preview-x` / `hy3-x` / `glm-5.3-flash` 三个待裁定 id。
+
+
 ## v10.8 (2026-08-20)
 
 一次性调用 / 并发任务的通道换成 **pi**；opencode 不禁用、降为兜底；codex 那条撤销。

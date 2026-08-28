@@ -1,6 +1,6 @@
 ---
 name: rift-dispatch
-description: "Rift Dispatch: analyze task → recommend model → create Paseo sub-session or opencode --pure call. Triggers: 'rift-dispatch', 'rift dispatch', 'dispatch', '派任务', '派个子会话', '选模型', '用 codebuddy', '用 v4-pro', '用 GLM', 'model dispatch', '调度', 'dev sub-session'."
+description: "Rift Dispatch: analyze task → recommend model → create Paseo sub-session or pi -p call. Triggers: 'rift-dispatch', 'rift dispatch', 'dispatch', '派任务', '派个子会话', '选模型', '用 codebuddy', '用 v4-pro', '用 GLM', 'model dispatch', '调度', 'dev sub-session'."
 user-invocable: true
 argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>] [--free] <task description>"
 ---
@@ -9,29 +9,31 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 
 > 🔗 **rift 家族**：**`/rift-dispatch`（派发）** · `/rift-free`（免费通道）· `/rift-integration-qa`（测试验收）
 
-分析任务 → 选模型 → 选 provider → 创建子会话（Paseo）或执行 opencode --pure。
+分析任务 → 选模型 → 选 provider → 创建子会话（Paseo）或执行 `pi -p`。
 
 **用户请求:** $ARGUMENTS
 
-## ⛔ 开工前三条硬默认（看完这段再往下读）
+> **本文件 = 怎么做**（伪代码 · 命令 · prompt 模板 · 自查表）。
+> **选什么 + 为什么** 在 `model-routing.md`；**数值**在 `model-catalog.json`；**历史**在 `CHANGELOG.md`。
+> 同一条规则只在一处展开，本文件出现的规则以 routing 为准。
+
+## ⛔ 开工前三条硬默认
 
 | # | 规则 | 落点 |
 |---|---|---|
-| 1 | **DeepSeek 优先，族内认准 `deepseek-v4-flash`** | 默认 `deepseek-v4-flash`（0.05x）——**大部分场景够用**。🔴 `deepseek-v4-pro` 的 `selectableByDefault = false`：⛔ 唯一入口是「flash 已在**本任务**做砸过一轮」，**且派发理由里要写明哪一轮、砸在哪**；写不出来就不许升。它贵 **2.6 倍**，性价比只有 flash 的 42%。⚠️ 别拿 `sameRoundEval` 的「v4-pro 96 > flash 89」当理由——那组数据说的是**升档时该升谁**，不是该跳过 flash |
-| 2 | 🔴 **按「要不要看得见」分通道，不是按工具分** | **开发实施类 → Paseo `create_agent`**（provider `pi/…` 或 `codebuddy-code/…`）——你能在 Paseo Desktop 看进度、中途干预、拿结构化状态。**只读/短/审查类 → `pi -p` CLI**——省机器、不堆 serve。⛔ **开发任务不要走 `pi -p`**：它是 CLI one-shot，**不进 Paseo agent 列表**，你看不见也打不断 |
-| 3 | 🔴 **审查的硬约束是「异构」** | ⛔ **评审模型族 ≠ 实施模型族**（全局红线 #8）——是**不变量**，不是针对某个模型的禁令。🔴 **含主会话：主会话就是 Claude，我自己写的东西不得派 `claude/*` 去审**。实施 Hy3/K3 时 DeepSeek 可以审；实施 DeepSeek 时 GLM/MiniMax/Claude 可以审。族清单与对照表见 model-routing.md。⭐ 当前审查通道：**`pi -p --provider github-copilot --model gpt-5.5`**。⛔ **prompt ≤200 字符**，背景让它自己读文件（实测 800 字会挂 22 分钟）；⛔ Copilot 仅审查、不做开发|
+| 1 | **便宜优先，逐级升档** | 免费档（`hy4-preview` → `hy3`，0.00x）先试 → 付费从 **`glm-5.3-flash`（0.06x）** 起步 → `deepseek-v4-flash`（0.17x）→ `deepseek-v4-pro`（0.51x）→ `kimi-k3-2`（1.62x）。⛔ **每一级向上的唯一入口是「上一档已在本任务做砸过一轮」**，理由里要写明哪一轮、砸在哪。写不出来不许升。⚠️ 例外：`algorithm`/`perf`/并发实现 直接从 `deepseek-v4-flash` 起步（routing §6） |
+| 2 | 🔴 **按「要不要看得见」分通道，不是按工具分** | **开发实施类 → Paseo `create_agent`**——能看进度、中途干预、拿结构化状态。**只读/短/审查类 → `pi -p` CLI**——跑完即退不堆 serve。⛔ **开发任务不要走 `pi -p`**：它不进 Paseo agent 列表，你看不见也打不断 |
+| 3 | 🔴 **审查的硬约束是「异构」** | ⛔ **评审模型族 ≠ 实施模型族**（全局红线 #8），是**不变量**，不是针对某个模型的禁令。🔴 **含主会话：主会话就是 Claude，我自己写的东西不得派 `claude/*` 去审**。族对照表见 routing §5。⭐ 通道：**`pi -p --provider github-copilot --model gpt-5.5`**，⛔ **prompt ≤200 字符** |
 
-Hy3（0.00x，限免至 2026-08-31）仍在 flash 之前，限免结束后 flash 自动接管第一顺位。
-> ℹ️ opencode 的**全局默认模型**已于 2026-08-20 设为 `volcengine-coding/deepseek-v4-flash`，
-> 与上表三条规则完全一致 ⇒ **不带 `-m` 直接跑 opencode 也自动符合策略**，无需每次显式指定。
+⚠️ **派发认 model id，⛔ 不认 label**：`hy4-preview`(0.00x) 与 `hy4-preview-x`(**0.29x**) 的 label 完全相同。
 
-完整规则见 model-routing.md 约束 4 / 6 / 7。
+⚠️ **免费档时间线**：`08-31 hy3 止` → `09-12 hy4 止` → 免费档清零，默认落点变成 `glm-5.3-flash`。
 
 ## Prerequisites
 
-1. Read **model-routing.md**（同目录，模型选择 + provider 路由 + 降级链）。
-2. Read **model-catalog.json**（同目录，模型结构化数据：费率/限免/盲评分数/provider 映射）。
-3. Read the **paseo** skill（Paseo 创建子会话的具体 API）。
+1. Read **model-routing.md**（模型选择 + provider 路由 + 降级链 + 门禁依据）。
+2. Read **model-catalog.json**（费率 / 盲评分数 / provider 映射 / 机器可读门禁字段）。
+3. Read the **paseo** skill（创建子会话的具体 API）。
 4. Read `~/.paseo/orchestration-preferences.json`（除非用户显式指定了 provider）。
 
 ---
@@ -40,8 +42,8 @@ Hy3（0.00x，限免至 2026-08-31）仍在 flash 之前，限免结束后 flash
 
 | 参数 | 解析方式 | 默认 |
 |---|---|---|
-| `--model <name>` | 短名或完整 model ID（映射见 model-catalog.json `shortNames`） | 自动推荐 |
-| `--thinking <level>` | minimal / low / medium / high / xhigh / max | 按模型定：`hy3`→`high`，`v4-flash`/`v4-pro`/`k3`→`xhigh`（见 model-routing.md 约束 4-4）。**三条通道都必须传**，opencode 通道的档位映射见 §3.2 |
+| `--model <name>` | 短名或完整 model ID（映射见 catalog `shortNames`） | 自动推荐 |
+| `--thinking <level>` | minimal / low / medium / high / xhigh / max | 按模型定：`hy4-preview`/`hy3`→`high`，付费档→`xhigh`（routing §4）。**三条通道都必须传** |
 | `--hub` | 标记 | 否（本地） |
 | `--worktree <path>` | 路径 | 当前目录 |
 | `--provider <name>` | 强制指定 provider | 按 model 自动选 |
@@ -49,9 +51,10 @@ Hy3（0.00x，限免至 2026-08-31）仍在 flash 之前，限免结束后 flash
 | 其余文本 | 任务描述 | (必填) |
 
 参数缺失处理：
-- 任务描述缺失 → 要求用户补充，不猜
-- `--thinking` 非法值 → 回退到该模型的默认档（`hy3`→`high`，其余→`xhigh`）
-- `--thinking` 合法但**目标模型没有该档** → 按 §3.2 能力表**降到最近可用档**，⛔ 不得静默升档，且必须在输出里回显实际生效档位
+
+- 任务描述缺失 → 要求用户补充，⛔ 不猜
+- `--thinking` 非法值 → 回退到该模型默认档（`hy4-preview`/`hy3`→`high`，其余→`xhigh`）
+- `--thinking` 合法但**目标模型没有该档** → 按 §3.2e 能力表**降到最近可用档**，⛔ 不得静默升档，且必须在输出里回显实际生效档位
 - `--provider` 与 `--model` 不匹配 → 报告冲突，让用户选
 - `--worktree` 路径不存在 → 报错
 
@@ -59,140 +62,137 @@ Hy3（0.00x，限免至 2026-08-31）仍在 flash 之前，限免结束后 flash
 
 ## 2. 决策流程（伪代码）
 
-```
+```python
 parse_args(user_input)
 
-# 0. ⛔ Provider 白名单（model-routing.md 约束 6）—— 一切选择都先过这一关
+# ── P0 白名单：一切选择先过这一关（routing §1）────────────────────────
 WHITELIST = {
-  'codebuddy-code': ['hy3', 'deepseek-v4-flash', 'deepseek-v4-pro', 'kimi-k3-2'],
+  'codebuddy-code': ['hy4-preview', 'hy3', 'glm-5.3-flash',
+                     'deepseek-v4-flash', 'deepseek-v4-pro', 'kimi-k3-2'],
   'qoderclicn':     ['qmodel_38max'],
 }
-# ⚠️ WHITELIST 只约束【消耗 cb/qcn 额度】的两个 provider。以下 provider 走别的钱包，⛔ 不进白名单校验：
-EXEMPT_PROVIDERS = {
-  'pi',                       # ⭐ 主力：Paseo 派 pi（开发）/ pi -p CLI（只读·审查）；模型见其 models.json 27 个
-  'volcengine-coding',        # ⭐ 火山首选（Coding Plan，独立额度）
-  'volcengine-agent-plan',    # 🔸 次选：只为 Coding Plan 没有的 5 个模型
-  'volcengine-chat',          # 🔸 需消耗 Agent Plan 额度且要控思考强度时
-  'github-copilot',           # ⭐ 审查通道 ⛔ 仅审查不做开发
-  'claude',                   # ⚠️ 可派不推荐（消耗 Claude 订阅额度）
-  'opencode',                 # 🔻 兜底，无常规用途
-}
-# ⛔ deepseek/*（官方 API）已被用户加入 disabled_providers，不可用
+# ⚠️ 只约束【消耗 cb/qcn 额度】的两个 provider。以下走别的钱包，⛔ 不进白名单校验：
+#     pi/volcengine-*/*  · pi -p --provider github-copilot  · claude/*  · codex/*
+# ⛔ 认 id 不认 label：hy4-preview(0.00x) 与 hy4-preview-x(0.29x) 的 label 一模一样
+DISABLED_PROVIDERS = ['deepseek']        # 🔴 官方 API，2026-08-20 用户已 disable
+EXEMPT_PROVIDERS   = [                   # 走别的钱包，不校验模型（清单必须与 routing §8 provider 表一致）
+  'pi', 'claude', 'codex', 'opencode',                          # Paseo/CLI 宿主
+  'github-copilot',                                             # 审查通道
+  'volcengine-coding', 'volcengine-agent-plan', 'volcengine-chat',   # 火山三套餐
+]
 
-# 1. 用户显式指定
+# ── P1 用户显式指定 ────────────────────────────────────────────────
 if args.model:
-    entry    = resolve_shortname(args.model)        # → catalog 条目（对象）
-    provider = args.provider ?? entry.preferredProvider
-    # ⚠️ 白名单存的是【该 provider 下的 model id 字符串】，不是 catalog 的 key。
-    #    必须取 entry.providers[provider].modelId 再比，⛔ 别拿对象或 catalog key 去比
-    #    （2026-08-20 第六轮异构审抓到：直接用 entry 比会恒失败）
-    # ⚠️ 先校验该模型确实在这个 provider 上有条目，否则取 .modelId 会直接崩
-    #    （典型：--model hy3 --provider pi —— hy3 只在 codebuddy-code 上）
-    if provider not in entry.providers:
-        report_to_user_and_stop(
-            f"{entry.label} 在 {provider} 上没有条目；可用: {list(entry.providers)}")
-    model_id = entry.providers[provider].modelId    # 如 'deepseek-v4-flash' / 'qmodel_38max'
-    # 🔴 先判豁免，再查白名单 —— 否则 WHITELIST['pi'] 会 KeyError/取空，
-    #    把 pi、github-copilot 等合法通道误拦（第五轮异构审抓到）
-    if provider not in EXEMPT_PROVIDERS:
-        if model_id not in WHITELIST.get(provider, []):   # ⛔ 显式指定也不能突破 cb/qcn 白名单
-            report_to_user_and_stop(f"{provider}/{model_id} 不在白名单，需你先确认是否开放")
-    model = model_id
-    # ⚠️ EXECUTE 依赖 task_type 判可见性，显式指定也必须先分类，⛔ 不能裸跳
-    task_type = classify(args.description)
+    model = resolve_short_name(args.model)
+    # 🔴 三层依次判，⛔ 不能只写「provider 在白名单里才校验」——
+    #    那样传一个不在 WHITELIST 键里的 provider（如 deepseek）会让整个校验静默跳过
+    if provider in DISABLED_PROVIDERS:
+        report_disabled_and_stop()          # ⛔ 已停用，不给降级建议之外的出路
+    elif provider in WHITELIST:
+        if model not in WHITELIST[provider]:
+            report_conflict_and_stop()      # ⛔ 不擅自替换成相近模型
+    elif provider not in EXEMPT_PROVIDERS:
+        report_unknown_provider_and_stop()  # ⛔ 未知 provider 一律停，不放行
+    use(model); goto EXECUTE
+
+# ── P2 --free → 交给 rift-free skill ───────────────────────────────
+if args.free: delegate('rift-free'); return
+
+# ── P3 任务分类（routing §6）───────────────────────────────────────
+task_type = classify(user_input)
+# 多标签取主标签：实现动词 > 领域关键词 > 修饰词
+
+# ── P4 硬例外（不进常规阶梯）───────────────────────────────────────
+if task_type == 'review':
+    # ⛔ 唯一约束是「评审族 ≠ 实施族」，不是钦定某模型（routing §5）
+    #    主会话自己写的 ⇒ ⛔ 不得用 claude/* 或 github-copilot/claude-*
+    channel = 'pi -p --provider github-copilot --model gpt-5.5'   # ⛔ prompt ≤200 字符
     goto EXECUTE
+# ⚠️ claude/* 可派发但不推荐——消耗 Claude 订阅额度，建议留给主会话
 
-# 2. --free flag → 走 rift-free skill
-if args.free:
-    invoke rift-free skill with args
-    return
+# ── P5 选档位：T0 免费 → T1..T4 阶梯（routing §0）──────────────────
+LADDER = [('glm-5.3-flash',    0.06),   # T1 付费起点
+          ('deepseek-v4-flash', 0.17),  # T2 DeepSeek 族首选
+          ('deepseek-v4-pro',   0.51),  # T3 ⛔ selectableByDefault=false
+          ('kimi-k3-2',         1.62)]  # T4 🔴 红线
 
-# 3. 任务分类（见 model-routing.md §1）
-task_type = classify(args.description)
-# 多标签时取主标签：实现动词 > 领域关键词 > 修饰词
+# T0 免费档：命中排除清单（routing §2 唯一真源）才跳过
+if not excluded_from_free(task_type, args):
+    for m in ('hy4-preview', 'hy3'):        # 顺位固定
+        if promo_active(m) and probe_ok(m): # ⚠️ 长任务必须先探活，怕撞排队
+            return (m, 'codebuddy-code', 'high')
+# ⚠️ 排除清单是给 Hy3 定的，对 Hy4 未验证——Hy4 的 LRU 拿 35 分（hy3 仅 23），
+#    「algorithm 是短板」这条对它很可能不成立。补测前按保守处理
 
-# 4. 硬例外（不进常规路由）
-if task_type == "review":
-    # ⛔ 硬约束是【评审模型族 ≠ 实施模型族】，不是「禁用 DeepSeek 审查」。
-    #    reviewer = pick_review_model(implementer_family)   # 族不同即可
-    #    当前默认实施族 = DeepSeek ⇒ 该路评审排除 DeepSeek；实施若是 Hy3/K3，DeepSeek 可以审。
-    #    github-copilot/gpt-5.5 是当前满足约束且有额度的通道
-    result = pi_run('github-copilot', 'gpt-5.5', args)   # ⛔ Copilot 仅审查，不做开发
-    goto REPORT                                          # 统一走 §10 输出，⛔ 别直接 return
-# ⚠️ Claude 模型（Opus/Sonnet）可派发但不推荐——消耗 Claude 订阅额度，建议留给主会话
+# T1..T4：入口档由任务类型定（catalog dispatchDefaults.entryTier），⛔ 只能因「本任务做砸过」上移
+# ⚠️ 「跳过免费档」和「付费从哪档起步」是两件事，别混（routing §6）：
+#     algorithm / perf          → 跳 T0，付费 T2 起步（h2h 这两类 v4-flash 领先）
+#     architecture              → 跳 T0，付费 **T1** 起步（🔴 08-28 改：h2h Kafka glm 36 > v4-flash 31）
+#     concurrency 诊断          → 不跳 T0（hy3 盲评 36.5 白名单内最高）
+#     concurrency 写实现        → 不跳 T0，付费 T2 起步
+# ⚠️ concurrency 要先判子类：诊断 or 写实现（routing §6 同名两行）
+if task_type == 'concurrency':
+    task_type = 'concurrency_impl' if writes_concurrency_primitives(user_input) else 'concurrency_diag'
 
-# 5. 限免活动（P5，Hy3 优先，压过时段 —— model-routing.md 约束 4）
-#    hy3_excluded() 命中排除清单任意一条即为 true（清单以 model-routing.md 约束 4-3 表为准）：
-#      多模态 / 额度耗尽或探活未秒回 / algorithm / perf / architecture / 本任务 Hy3 已做砸过
-if active_promo('hy3') and not hy3_excluded(task_type, args):
-    model, provider, thinking = 'hy3', 'codebuddy-code', 'high'   # 0.00x，全天候第一顺位
-else:
-    model, provider = select_model(task_type)  # 按 §1-§2 映射，cb 侧默认落 deepseek-v4-flash
-# ⚠️ K3 (1.62x S-tier) 仅在用户显式 --model k3 或任务需要极致质量时选用
+ENTRY = {'algorithm': 1, 'perf': 1,          # 付费从 T2 (deepseek-v4-flash) 起
+         'concurrency_impl': 1, 'concurrency_diag': 1}
+#   ⛔ concurrency 两个子类【付费起步档都是 T2】——差别只在跳不跳 T0：
+#      诊断类不跳 T0（hy3 在这类上有数据），实现类也不跳 T0，但两者进付费后都从 T2 起
+#   其余（含 architecture）= 0，从 T1 (glm-5.3-flash) 起
 
-# 6. ⛔ 时段优化（原 P6）2026-08-16 整步删除
-#    qcn 限时1折结束、夜间折扣取消，credits 制通道已无任何时段性折扣。
-#    ⚠️ 不要再写 is_night() 分支——它曾把按类型选出的高档模型无条件冲掉（2026-08-12 异构审）。
-#    仍然成立的原则：任何"换更便宜 provider"的替换只作用于默认落点 flash，不下调已升上去的 K3。
+i = ENTRY.get(task_type, 0) + failed_paid_tiers_in_this_task
+#   ⛔ failed_paid_tiers 只数【LADDER 内】做砸过的档数：
+#      · T0 免费档做砸 ⛔ 不计入 —— 否则默认类会直接跳到 T2，绕过 T1 的 glm-5.3-flash
+#      · 同一档重试 ⛔ 不计入 —— 否则同档重试两次会把任务一路顶到 K3
 
-# 7. Provider 降级（见 model-routing.md §4）
-if not available(provider):
-    model, provider = fallback(model, provider)
+# 🔴 K3 守卫：⛔ 不要用 failed_rounds 的绝对值当条件——入口档不同，到 T4 需要的失败数也不同
+#    （algorithm 从 i=1 起步，砸两轮就该到 T4；写成 failed>=3 会把它按回刚砸掉的 v4-pro，原地卡死）
+#    正确判据是：i 能走到 3，本身就意味着 LADDER[2] (v4-pro) 已经砸过 —— 无需额外守卫。
+if i > 3:
+    # ⛔ T4 也做砸了 —— 阶梯到顶，⛔ 不要静默重派 K3（那是把 1.62x 再烧一遍）
+    report_ladder_exhausted_and_stop()   # 报告用户：已到 K3 仍未解决，需要人介入
+if i == 3:
+    assert failed(LADDER[2][0])          # 兜底断言：能到 T4，v4-pro 必已砸过（routing §3.3）
+    warn('🔴 K3 1.62x，派完必须核 git log 是否真有 commit（0723 空转前科）')
+model, provider, thinking = LADDER[i][0], 'codebuddy-code', 'xhigh'
+# ⛔ 这里没有 `or args.model == 'k3'` 分支 —— 用户显式指定在 P1 就 goto EXECUTE 了，走不到这。
 
-# 8. 选 thinking 强度（hy3 分支已在第 5 步定死 high，别覆盖掉）
-thinking = args.thinking ?? thinking ?? model_default_thinking(model)  # hy3→high，其余→xhigh
+# ⛔ 没有时段分支。credits 制通道已无任何时段性折扣，⛔ 不要再写 is_night()——
+#    它曾把按类型选出的高档模型无条件冲掉（2026-08-12 异构审）。
+#    仍然成立：任何「换更便宜 provider」只作用于当前落点，⛔ 不下调已升上去的档位。
 
-# 8-1. 折算目标模型实际支持的档位（v10.3 新增；能力表与映射表见 §3.2）
-#      Paseo/Hub 通道用 thinkingOptionId，档位由 provider 侧解释，直接传 thinking；
-#      opencode 通道用 --variant，档位是 per-model 的，必须先折算。
-effective_thinking = clamp_to_supported(model, thinking)   # ⛔ 只降不升
-if effective_thinking != thinking:
-    note_downgrade(thinking, effective_thinking)           # §5 输出里必须回显
+# ── P6 Provider 降级（routing §8）─────────────────────────────────
+if not provider_available(provider): model, provider = downgrade(model)
 
-EXECUTE:
-# 9. 执行适配器（见 §通道判据总表 + §3）
-#    🔴 先定「要不要看得见」，再定跑在哪 —— 这是通道判据总表的两个维度
-needs_visibility = task_type not in ('review', 'readonly', 'qa')   # 开发实施类 ⇒ True
+# ── P7 折算 thinking 实际档位（§3.2e 能力表）────────────────────────
+# Paseo/Hub 通道用 thinkingOptionId，档位由 provider 侧解释，直接传；
+# opencode 通道用 --variant，档位是 per-model 的，必须先折算。
+thinking = clamp_to_supported(model, thinking)   # ⛔ 只降不升，降了必须回显
 
-if args.hub and needs_visibility:
-    # Hub 上的开发实施类：远程 Paseo 派发（Hub 侧同样可见）
-    result = hub_remote_create(provider, model, thinking, args)
-elif args.hub:
-    # ⚠️ Hub 上的只读/审查类不必占一个远程 agent，仍走一次性 CLI
-    result = hub_run_oneshot(provider, model, args)
+# ── EXECUTE 执行适配器（§通道判据总表 + §3）───────────────────────
+# 🔴 先定「要不要看得见」，再定跑在哪
+...
 
-elif needs_visibility:
-    # ⭐ 开发实施类一律走 Paseo（可见 / 可干预 / get_agent_status）
-    #    pi 也从这里派：provider 串写成 "pi/<pi内部provider>/<model>"
-    if provider in ('volcengine-coding', 'volcengine-agent-plan', 'volcengine-chat', 'github-copilot'):
-        result = paseo_create_agent(f"pi/{provider}/{model}", thinking, args)  # Paseo 的 pi provider
-    else:                                   # codebuddy-code / qoderclicn / claude / codex
-        result = paseo_create_agent(provider, model, thinking, args)
-
-else:
-    # 只读 / 短 / 审查类 —— 一次性 CLI，跑完看结论
-    if provider in ('volcengine-coding', 'volcengine-agent-plan', 'volcengine-chat', 'github-copilot'):
-        result = pi_run(provider, model, args)   # pi -p --provider <provider> --model <model>
-    elif provider in ('opencode', 'openrouter'):
-        result = opencode_run_pure(provider, model, effective_thinking, args)  # 🔻 兜底；档位必须用折算后的
-    else:                                   # cb/qcn/claude/codex 没有 CLI 形态 ⇒ 仍走 Paseo
-        result = paseo_create_agent(provider, model, thinking, args)
-
-REPORT:
-# 10. 输出 + 记录
-#    ⚠️ 只有 Paseo/Hub 派发才有 agent_id；CLI（pi -p / opencode）是一次性进程，没有 agent_id
-agent_id = result.agentId if result.kind in ('paseo', 'hub') else None   # Hub 也是 Paseo 派发，有 agent_id
-cwd      = args.worktree ?? current_worktree() ?? repo_root()
-print_dispatch_result(agent_id, model, provider, thinking, task_type)
-if agent_id:
-    save_memory(agent_id, model, task_type, cwd)     # 见 §6；CLI 无子会话可记，跳过
+# ── 输出 + 记录 ───────────────────────────────────────────────────
+print_summary()                                  # §5
+save_memory(agent_id, model, task_type, cwd)     # §6
+# ⚠️ 只有 Paseo/Hub 派发才有 agent_id；CLI（pi -p）是一次性进程，没有 agent_id
 ```
 
 ---
 
 ## 3. 执行适配器
 
-### 3.1 Paseo 创建（codebuddy / qoderclicn / codex）
+### 📌 通道判据总表（唯一真源，三文件以此为准）
+
+| 任务类型 | 走哪条 |
+|---|---|
+| **开发实施类**（改代码/跑测试/提交） | ⭐ **Paseo `create_agent`** — `provider: "pi/volcengine-coding/deepseek-v4-flash"` 或 `codebuddy-code/*`。可见 / 可干预 |
+| **只读 / 短 / 分析类** | `pi -p --provider volcengine-coding --model deepseek-v4-flash` |
+| **审查类** | `pi -p --provider github-copilot --model gpt-5.5` ⛔ Copilot 仅审查不做开发 |
+| **兜底** | `opencode` 🔻 **无常规用途**，仅在上面三条都不可用时 |
+
+### 3.1 Paseo 创建
 
 ```
 create_agent({
@@ -203,28 +203,21 @@ create_agent({
   initialPrompt: "{dispatch_prompt}",
   notifyOnFinish: true,
   settings: {
-    modeId: "{permission_mode}",         // 见 model-routing.md §4
+    modeId: "{permission_mode}",         // routing §8
     thinkingOptionId: "{thinking}"
   },
   labels: { "rift-dispatch": "true" }
 })
 ```
 
-#### ⛔ 创建后必须核实实际生效的模型（2026-08-02 栽过）
+#### ⛔ 创建后必须核实实际生效的模型
 
 `list_models` 里存在某个 id **不代表派发它会生效**。静默回退有**两种模式**：
 
 ```
-模式 1  id 不存在        → 请求被改写，顶层 model 字段就显示 hy3（可见）
+模式 1  id 不存在        → 请求被改写，顶层 model 字段就显示回退目标（可见）
 模式 2  id 存在但服务不了 → 请求照录，运行时降级 ⚠️ 顶层 model 字段【看不出来】
-```
-
-模式 2 实例：派 `codebuddy-code/minimax-m3-pay`（该 id 在 `list_models` 里）→
-
-```
-get_agent_status:
-  snapshot.model             = "minimax-m3-pay"   ← 请求值，照录
-  snapshot.runtimeInfo.model = "hy3"              ← 实际在跑的
+                            snapshot.model = 请求值 / snapshot.runtimeInfo.model = 实际值
 ```
 
 **创建后立刻做这个检查**：
@@ -237,41 +230,38 @@ mcp__paseo__get_agent_status({ agentId })
 ```
 
 ⛔ **不要用 `list_agents` 的 `model` 字段验** —— 模式 2 下它是请求值不是运行值。
+🔴 白名单里 `kimi-k3-2` 与 `qmodel_38max` 都**没实测过 runtimeInfo**，派完务必核一次。
 
-⚠️ 上面这个 M3 案例本身已随 2026-08-16 白名单关闭 M3 而失效，但**教训仍然适用**：
-`list_models` 里有某个 id ≠ 派它会生效。当前白名单五个 id 中，`kimi-k3-2` 与 `qmodel_38max`
-都**没有实测过 runtimeInfo**——派完务必核一次。
-🔴 `qmodel_38max` 尤其要核：它是 2026-08-16 才发现的改名（旧 id `qmodel_preview` 已不存在）。
+#### ⛔ 收割前先确认 `lastStatus`
 
-### 📌 通道判据总表（唯一真源，三文件以此为准）
+```
+lastStatus ∈ (idle, completed)  ← 才可以取产出
+lastStatus == running           ⛔ 此时取到的是【中间态】，不是结论
+```
 
-| 任务类型 | 走哪条 |
-|---|---|
-| **开发实施类**（改代码/跑测试/提交） | ⭐ **Paseo MCP 派 pi** — `create_agent` + `provider: "pi/volcengine-coding/deepseek-v4-flash"`（或 `codebuddy-code/*` 等原有通道）。可见 / 可干预 |
-| **只读 / 短 / 分析类** | `pi -p --provider volcengine-coding --model deepseek-v4-flash` |
-| **审查类** | `pi -p --provider github-copilot --model gpt-5.5` ⛔ Copilot 仅审查不做开发 |
-| **兜底** | `opencode` — 🔻 **无常规用途**，仅在上面三条都不可用时 |
+2026-08-21 踩过：在 `running` 状态取最后一条 assistant 消息，拿到 7 字符的 `aborted`
+（`status=incomplete`），据此判「模型有稳定性缺陷」并重派。复查发现 agent 随后自行重试成功，
+诊断结论已撤回。⚠️ 产出**非空不等于有效**——护栏要判「长度 + 内容」，不能只判非空。
 
-### 3.2 pi 的两种启动方式 —— ⚠️ 不是「Paseo 还是 pi」的二选一
+### 3.2 pi 的两种启动方式 —— ⚠️ 不是二选一
 
-🔴 **两种都是 pi 这个 agent，跑的是同一套能力（同样读 AGENTS.md、同样 22 个 skill、同样 read/bash/edit/write）。**
-唯一区别是**怎么把它启动起来**，进而决定你能不能看见它。
+🔴 **两种都是 pi，跑的是同一套能力**（同样读 AGENTS.md、同样的 skill、同样 read/bash/edit/write）。
+唯一区别是**怎么启动**，进而决定你能不能看见它。
 
-| | **Paseo MCP 派 pi**（`create_agent` + `provider: "pi/…"`） | **pi -p CLI 直跑** |
+| | **Paseo 派 pi**（`create_agent` + `provider: "pi/…"`） | **`pi -p` CLI 直跑** |
 |---|---|---|
 | 跑的是谁 | **pi** | **pi**（同一个） |
-| 你能看见 / 能干预 | ✅ Paseo Desktop 里可见、可中止 | ❌ CLI one-shot，不进 agent 列表 |
+| 能看见 / 能干预 | ✅ Paseo Desktop 可见、可中止 | ❌ one-shot，不进 agent 列表 |
 | 结构化状态 | ✅ `get_agent_status` | ❌ 只有日志文件 |
 | 开销 | 每 agent 一个 serve | 无，跑完即退 |
-| **用在哪** | ⭐ **开发实施类**（要改代码/跑测试/提交，你可能想中途看一眼甚至叫停） | **只读 / 短 / 审查类**（跑完看结论就行，本来也不需要盯） |
+| **用在哪** | ⭐ **开发实施类** | **只读 / 短 / 审查类** |
 
-⛔ **别把开发任务丢给 `pi -p`** —— 不是因为 pi 不行，而是因为 CLI 这条路**你看不见**。
-你之前明确要求过「派发子任务走 paseo mcp，为的是能看进度、能干预」。
-✅ **正确做法就是 Paseo MCP 派 pi** —— 可观测性和 pi 的能力两样都要，本来就不冲突。
+⛔ **别把开发任务丢给 `pi -p`** —— 不是 pi 不行，是 CLI 这条路**你看不见**。
+✅ 正确做法是 **Paseo 派 pi**：可观测性和 pi 的能力两样都要，本来就不冲突。
 
-#### 3.2a 开发实施类 → **Paseo MCP 派 pi**（`create_agent`）
+#### 3.2a 开发实施类 → Paseo 派 pi
 
-⭐ **Paseo 的 `pi` provider 已把 27 个模型全暴露**（火山 19 + Copilot 8），且带完整 thinking 档位：
+⭐ Paseo 的 `pi` provider 已把 **27 个模型**全暴露（火山 19 + Copilot 8），带完整 thinking 档位：
 
 ```
 create_agent({ provider: "pi/volcengine-coding/deepseek-v4-flash",
@@ -281,55 +271,46 @@ create_agent({ provider: "pi/volcengine-coding/deepseek-v4-flash",
 | 用途 | provider 串 |
 |---|---|
 | ⭐ 默认 | `pi/volcengine-coding/deepseek-v4-flash` |
-| 升档（flash 做砸过一轮） | `pi/volcengine-coding/deepseek-v4-pro` |
-| Agent Plan 独有 5 个 | `pi/volcengine-agent-plan/ark-code-latest` · `…/kimi-k3` · `…/doubao-seed-evolving` · `…/glm-latest` · `…/doubao-seed-2.0-mini` |
-| 原有通道（不变） | `codebuddy-code/hy3` · `codebuddy-code/deepseek-v4-flash` · `qoderclicn/qmodel_38max` · `claude/*` · `codex/*` |
+| 升档（上一档做砸过一轮） | `pi/volcengine-coding/deepseek-v4-pro` |
+| Agent Plan 独有 5 个 | `pi/volcengine-agent-plan/{ark-code-latest,kimi-k3,doubao-seed-evolving,glm-latest,doubao-seed-2.0-mini}` |
+| 原有通道（不变） | `codebuddy-code/*` · `qoderclicn/qmodel_38max` · `claude/*` · `codex/*` |
 
 ⚠️ `pi/volcengine-*/kimi-k2.7-code` 的 `thinkingOptions` 为 `null`（官方注明不支持 reasoning summaries），
-派它时不要传 `thinkingOptionId`。
+派它时**不要传** `thinkingOptionId`。
 
 **pi 的能力已对齐 codebuddy 子会话**（2026-08-20 实测，主会话独立核验、不采信自述）：
 读文件 → 改代码 → 写测试 → `bash` 跑测试 → `git commit`（中文 commit message 合规）。
-读 `~/.pi/agent/AGENTS.md` + 项目 `AGENTS.md`/`CLAUDE.md` + `~/.agents/skills/` 全部 22 个 skill。
+读 `~/.pi/agent/AGENTS.md` + 项目 `AGENTS.md`/`CLAUDE.md` + `~/.agents/skills/` 全部 skill。
 
-#### 3.2b 只读 / 短 / 审查类 → **pi -p CLI 直跑**（同一个 pi，只是不进 Paseo）
+#### 3.2b 只读 / 短 / 分析类 → `pi -p` 直跑
 
 ```bash
 pi -p --provider volcengine-coding --model deepseek-v4-flash "{prompt}"
 ```
 
-适合：审查、方案评估、只读分析、短问答——**这些你本来就不需要中途盯**，跑完看结论即可。
-⚠️ `pi -p` 实测偏慢（简单请求也可能上百秒），留足超时。
-
 ⚠️ 配置注意（`~/.pi/agent/models.json`）：必须有 `compat.supportsDeveloperRole: false`
-（火山不认 OpenAI 的 `developer` role）；⛔ 不要加 `compat.thinkingFormat`（填 `"zai"` 会让请求全部挂起）。
+（火山不认 OpenAI 的 `developer` role，不加则 reasoning 模型全部 400）；
+⛔ **不要加** `compat.thinkingFormat`（填 `"zai"` 会让请求全部挂起跑满超时）。
 
-### 3.2c review 通道 —— ⭐ pi + Copilot（⛔ 仅审查，不做开发）
+#### 3.2c 审查通道 —— ⭐ pi + Copilot（⛔ 仅审查，不做开发）
 
 ```bash
-pi -p --provider github-copilot --model gpt-5.5 "{review_prompt}"
+pi -p --provider github-copilot --model gpt-5.5 "{≤200 字符的 review_prompt}"
 ```
 
-用户 2026-08-20 在 pi 里 `/login` 接入了 GitHub Copilot 订阅（`~/.pi/agent/auth.json` 已有 `github-copilot`），
-**33 个模型可见**（`~/.pi/agent/models-store.json`，2026-08-20 拉取）。常用的 8 个：
+| 约束 | 说明 |
+|---|---|
+| 🔴 **prompt ≤200 字符** | 背景让它自己读文件。实测 800 字让 GPT-5.5 挂 22 分钟，短 prompt 秒回 |
+| ⛔ **撞超时不要收窄 prompt 重试** | 极小 prompt 也超时属另一种根因，换通道 |
+| ⛔ **仅审查不做开发** | 用户 2026-08-20 明确。开发走 §3.2a 火山通道 |
+| 🔴 **`claude-*` 属 Claude 族** | 主会话就是 Claude ⇒ 审我写的东西⛔不能用它 |
 
-| 模型 | context | 备注 |
-|---|---|---|
-| ⭐ `gpt-5.5` | 1M | **审查默认** —— 与历史审查同口径 |
-| `gpt-5.5` | 1M | 历史盲评评委，需要更强时用 |
-| `gpt-5.3-codex` · `gpt-5.5-mini` · `gpt-5-mini` | 1M / 400K / 264K | 备选 |
-| `gemini-3.1-pro-preview` · `gemini-3.5-flash` | 1M / 200K | 异构族备选 |
-| ⚠️ `claude-sonnet-4.6` | 1M | **Claude 族** —— 见下方红字 |
+可用异族评审（以 `~/.pi/agent/models-store.json` 为准）：
+`gpt-5.5`(⭐默认) · `gpt-5.6-sol` · `gpt-5.6-luna` · `gpt-5.6-terra` · `gpt-5.4` · `gpt-5.3-codex`
+· `gpt-5.4-mini` · `gpt-5-mini` · `gemini-3.1-pro-preview` · `gemini-3.5-flash` · `gemini-3.6-flash`
+⛔ 不用 `codex/gpt-5.6-sol`——实测该 workspace `out of credits`。
 
-### ⛔ Copilot 这条通道**只做审查，不做开发**（用户 2026-08-20 明确）
-
-开发/实施一律走 §3.2 的火山通道（`volcengine-coding/deepseek-v4-flash`）。
-Copilot 额度留给审查这一件事，⛔ 不要拿它跑实现、重构、批量改。
-
-🔴 **`github-copilot/claude-sonnet-4.6` 是 Claude 族** —— 主会话本身就是 Claude，
-凡是**主会话自己写的东西**，⛔ 不得用它审（自审）。审我写的东西请用 `gpt-5.5` / `gpt-5.5` / `gemini-*`。
-
-✅ **已端到端计时**（2026-08-20 实测，含 bug 的 JS 文件 + 要求 `VERDICT:` 行）：
+✅ **端到端计时**（2026-08-20 实测，含 bug 的 JS 文件 + 要求 `VERDICT:` 行）：
 
 | 通道 | 耗时 | 峰值 RSS | 结果 |
 |---|---|---|---|
@@ -337,35 +318,41 @@ Copilot 额度留给审查这一件事，⛔ 不要拿它跑实现、重构、�
 | `volcengine-coding/deepseek-v4-flash` | 12.7s | 216MB | exit 0，3/3 抓全 |
 | `volcengine-coding/deepseek-v4-pro` | 17.7s | 199MB | exit 0，2/3 |
 
-⇒ 「可能上百秒」的担心不成立。**跑完零残留进程**——`pi` 是 one-shot，
-无 serve / daemon / port 任何子命令，这正是它比 opencode 更省机器的原因：
-opencode 每个 Paseo agent 起一个独立 serve（实测 1-1.5GB，agent idle 后不回收），
-pi 处理完即退出。
+⇒ **跑完零残留进程** —— `pi` 是 one-shot，无 serve / daemon / port 子命令。
+这正是它比 opencode 省机器的原因：opencode 每个 Paseo agent 起一个独立 serve
+（实测 1–1.5GB，agent idle 后不回收），pi 处理完即退出。
 
-#### 旧通道（仍可用，作对照）
+#### 3.2d opencode（🔻 兜底，排最后）
 
-```bash
-opencode run --pure -m github-copilot/gpt-5.5 --variant xhigh "{review_prompt}"
-```
+**没有禁用**，但排在 pi 之后。卡死根因见 routing §7：
+`opencode run --pure` 每次拉起一个 serve，反复调用则 **serve 堆叠**吃穿内存。
+⇒ 单次偶发调用安全；⛔ **循环里反复 `opencode run` 是危险动作**，改用 `pi -p`。
 
-⛔ 硬约束是 **评审模型族 ≠ 实施模型族**（全局红线 #8），**不是「DeepSeek 不许审查」**。
-当前默认实施落点是 `deepseek-v4-flash` ⇒ **那一路**的评审才要排除 DeepSeek 族；
-若本次实施用的是 Hy3 / K3 / GLM，DeepSeek 反而是合格的异构评审。
-⛔ 也不能用 codex 默认的 `gpt-5.6-sol` —— 实测该 workspace `out of credits`。
+### 3.2e thinking 档位能力表 + `clamp_to_supported()`
 
-### 3.2d opencode（🔻 兜底，排最后）
+伪代码 P7 折算的依据。**本 skill 的默认档 `xhigh` 只在 gpt 系成立**，其余族压根没这一档。
 
-**没有禁用**，但排在 pi 之后。⚠️ 用之前先知道卡死的根因：
+| 模型 | 支持档位 |
+|---|---|
+| `gpt-5.5` · `gpt-5.4` · `gpt-5.4-mini` | `none` `low` `medium` `high` `xhigh` |
+| `gpt-5.3-codex` | `low` `medium` `high` `xhigh` |
+| `claude-sonnet-4.6` 等 claude 系 | `low` `medium` `high` `max` |
+| `gemini-3.5-flash` | `minimal` `low` `medium` `high` |
+| `gemini-3.1-pro-preview` · `gpt-5-mini` | `low` `medium` `high` |
+| `pi/volcengine-*/kimi-k2.7-code` | ⚠️ `thinkingOptions` 为 `null`，⛔ 不要传 |
 
-> 用户 2026-08-20 定位：**opencode 卡死电脑是「纯命令方式」造成的** ——
-> 每次 `opencode run --pure` 都会拉起一个 serve，反复调用则 **serve 堆叠**，内存被吃穿。
-> 这与既有记录一致（`oc-review` v1.13.0 就是靠「共享 serve + `--attach`」消掉 per-run serve 堆叠的）。
+**折算规则：只降不升。** `xhigh` → claude 系落 `max`、gemini 系落 `high`。
+⛔ **禁止静默升档**（会造成超预期 token 消耗）；降档必须在 §7 输出里回显，
+memory 记 `effectiveThinking` 字段留痕。
 
-⇒ **单次、偶发调用本身是安全的**；⚠️ 但 **review 已于 2026-08-20 迁到 `pi -p` + Copilot（§3.2c）**，
-opencode 现在**没有任何常规用途**，纯兜底。
-⛔ **循环里反复 `opencode run` 是危险动作** —— 那种场景改用 `pi -p`，或复用共享 serve + `--attach`。
+⚠️ 火山通道（`volcengine-*`）只有 `off` / `on` / `auto` 三态，⛔ 不是六档；
+且 `volcengine-agent-plan` 上 `--variant` **静默失效**（实测：`@ai-sdk/openai` 的参数白名单
+把 `thinking` 丢掉了），要控思考强度得走 `volcengine-coding` 或 `volcengine-chat`。
 
-### 3.3 Hub 远程（--hub）
+> 这条和「⛔ 创建后必须核实实际生效的模型」是同一类问题：**请求值 ≠ 运行值**。
+> 那次是静默降级到别的模型，这次是档位不存在被静默忽略。
+
+### 3.3 Hub 远程（`--hub`）
 
 ```bash
 scp /tmp/prompt.txt hub:/tmp/
@@ -377,9 +364,12 @@ ssh hub "paseo run --detach \
   \"\$(cat /tmp/prompt.txt)\""
 ```
 
-Hub `--cwd` 必须是 `/home/mcdowell/...`（不是 `/Users/mcdowell/...`）。
+⚠️ Hub `--cwd` 必须是 `/home/mcdowell/...`（不是 `/Users/mcdowell/...`）。
+⚠️ 中文 prompt 先 `scp` 成文件再 `$(cat …)`，⛔ 不要内联进 SSH 引号（转义会炸）。
 
-### Dispatch Prompt 模板
+---
+
+## 4. Dispatch Prompt 模板
 
 ```
 ## 任务
@@ -404,13 +394,13 @@ Hub `--cwd` 必须是 `/home/mcdowell/...`（不是 `/Users/mcdowell/...`）。
 - 全量测试无回归，报告实际通过数（当前基线：{N} suites / {M} tests）
 - 完成后 `git add -A && git commit`，中文 commit message
 - **删除 TASK.md 和所有调试脚手架再提交**
-- 遇到不确定的设计决策 → 停下来描述选项，不自行决定
-- 不做任务范围外的修改，不放宽既有测试断言
+- 遇到不确定的设计决策 → 停下来描述选项，⛔ 不自行决定
+- ⛔ 不做任务范围外的修改，不放宽既有测试断言
 
-## ⛔ 交付协议（2026-08-02 加：这一条被丢过两次）
-- **不许在 commit + push + 报告写完之前结束这一轮。**
+## ⛔ 交付协议（这一条被丢过两次）
+- **不许在 commit + 报告写完之前结束这一轮。**
   ⚠️ 你跑的测试是**本会话前台命令**，跑完不会有任何异步通知——
-  不要说「等自动通知」或「现在去跑 X」然后结束回复，那等于把活丢在半路。
+  ⛔ 不要说「等自动通知」或「现在去跑 X」然后结束回复，那等于把活丢在半路。
 - 测试结果**必须用 `--json --outputFile=<path>` 取计数**，⛔ 不许用 `| tail`
   （会把 jest 汇总截掉，只剩一行 PASS 却看不到失败数；退出码可能仍是 0）
 - 跑测试用 `--runInBand`（并行会因多个 mongodb-memory-server 撞端口出假红）
@@ -421,133 +411,60 @@ Hub `--cwd` 必须是 `/home/mcdowell/...`（不是 `/Users/mcdowell/...`）。
 若本任务改了 API 返回结构 / 数据契约 / 共享类型定义：
 - [ ] grep 出**所有消费方**并逐一列出（含前端页面、导出、详情页、其它卡片、其它服务）
 - [ ] 说明每个消费方是否需要同步改，不需要的说明理由
-- [ ] 报告里写"已查无其它消费方"或列出清单——**不许省略这一节**
+- [ ] 报告里写"已查无其它消费方"或列出清单——⛔ 不许省略这一节
 ```
 
-**总 prompt ≤ 2000 字。** 超过时提示拆分任务。
+**总 prompt ≤ 2000 字。** 超过时提示拆分任务
+（曾用 5700 字 prompt 耗尽子会话 budget，只拿回半成品）。
 
-### 🔴 模型档位：**Hy3 能做的先给 Hy3 → 兜底 `cb/deepseek-v4-flash@xhigh`，不做预防性升档**
+---
 
-```
-⛔ 白名单（约束 6）：cb 只有 hy3 / deepseek-v4-flash / deepseek-v4-pro / kimi-k3-2；qcn 只有 qmodel_38max
+## 5. 派发前后自查
 
-第一顺位  cb/hy3@high                  （0.00x 限免至 2026-08-31）← 先问「这活 Hy3 能不能做」
-          ⛔ 排除清单（命中即跳下一档）：多模态 / 额度耗尽或排队 / algorithm / perf
-             / architecture / 本任务 Hy3 已做砸过一轮。唯一真源见 model-routing.md 约束 4-3
-默认落点  cb/deepseek-v4-flash@xhigh   （A 级 / 0.05x）← ⭐ **DeepSeek 系列首选**，Hy3 被排除时接手
-                                        含高风险任务；性价比 1780 全场最高
-                                        ⛔ algorithm / perf / architecture **全部先落这档**，不预先升 v4-pro
-中间档    cb/deepseek-v4-pro@xhigh     （A 级 / 0.13x，仅贵 flash 2.6 倍）
-          ⛔ **只在 flash 已于本任务做砸过一轮时进入，不预先选**（08-20 用户决策）
-          ⭐ 但升档时**升它、别直接跳 K3**——08-16 同轮重测 LRU 33 vs flash 25、总分 96 vs 89，
-             而它只贵 2.6 倍，K3 贵 32 倍
-          ⚠️ 架构类即使升档收益也有限：重测 Kafka 31 < flash 34
-🔴 极致档  cb/kimi-k3-2@xhigh           （S 级 110.5 / **1.62x 全场最贵**）⛔ **不得随意使用**
-          只有两种情况可派：① 用户显式 `--model k3`  ② **v4-pro 也已做砸**（不再是 flash 做砸就上 K3——
-             08-16 重测后中间多了 v4-pro 这一档，先走它）
-          ⛔ 不构成理由：「任务难/重要/风险高」「是 algorithm/architecture 类」「反正只跑一次」
-             「先用好的保险点」——最后一条就是「预防性升档」的原话，明令禁止
-          🔴 贵 flash **32 倍**（M3 关闭后中间没档了）；性价比 68 全场最低
-          ⚠️ 0723 有空转前科（报进度就 idle、git 无产出）——花 32 倍还可能拿不到产出，
-             派完**必须核 `git log` 有无 commit**
-          ⚠️ id 是 kimi-k3-2 不是 kimi-k3-1
-          详见 model-routing.md 约束 6 §K3 使用红线
-⛔ 上面「中间档 v4-pro」已取代此处原有的「备用/无推荐场景」写法（08-16 重测推翻旧结论）
-⛔ 写实现代码不要用 max 档（见 model-routing.md §Thinking 强度建议 的两组实测）
-⚠️ Hy3 固定 `high`：`xhigh` 从没在 Hy3 上测过，`max` 已被两轮盲评证伪（91.5 → 85.5）
-```
-
-⛔ **「任务高风险 ⇒ 升模型档位」这个推论没有实测支撑，两次实测都推翻它。**
-风险高该提的是 **thinking 档位（用 xhigh）和审查强度（异构审）**，**不是模型档位**。
-
-#### 实测依据（两次，方向一致）
-
-**2026-08-02（n=1）**：五臂同题，那道题命中「会自动修改业务数据」这条高风险条件，
-而 `m3@high` 与 `flash@high` **收敛到同一方案、零差异**；`flash@xhigh` 是五个里实现质量最高的。
-全文 `~/wb/docs/technical/模型AB评测-v4flash与m3-20260802.md`。
-
-**2026-08-06（n=12，同一天同一批任务）**：
-```
-flash（0.06x）8 件   P6 三修/四修 · P5 修 · 第五批验收 · 第八批部署验收
-                    · Dialog 定性 · 第六批验收 · 补验收
-m3（0.25x）  4 件   A.29 二修/三修 · acs-contract 评估 · session-auth 修
-```
-⇒ **质量看不出差异，m3 贵 4 倍**。且当天**最有价值的两个产出都是 flash 做的**：
-「Dialog 定性推翻前轮错误归因」（12 格排他矩阵 + 读 TDesign 源码 + DB 实证）、
-「第六批验收纠正了任务书里的错误前提」。
-
-#### 下面这张表**只用来提高 thinking 档位和审查强度**，⛔ 不用来升模型档位
-
-| 触发条件 | 该做什么 |
-|---|---|
-| **会自动修改业务数据** | thinking=xhigh · 任务书写死「不许丢掉的现有行为」清单 · 必须异构审 |
-| **涉及权限 / 隔离 / 安全边界** | 同上 + 要求「权限等价性证据」（改前改后可见集合逐条相同） |
-| **需要在多个方案间做架构取舍** | 先出方案 → 异构审方案 → 再实现 |
-| **改动会渗透到多个消费方** | 任务书要求 grep 出所有消费方并逐一说明 |
-| **前一轮已被 flash 做砸过** | ⇒ **这条才是升档的唯一入口** |
-
-⚠️ 2026-08-06 的十一条阻断**全部由异构审抓到，测试零发现**，
-而实施者用 flash 还是 m3 与被抓到的阻断数量**没有相关性**。
-⇒ **质量关口在「审」，不在「作者用什么模型」。**
-
-### ⭐ 更省的打法：低档做 + 异构审（实测有效）
-
-```
-低档模型【调查 + 出方案 + 实现】→ opencode 异构模型【只读审查】→ 低档模型【按审查意见修】
-```
-
-2026-08-02 实测印证：opencode/GPT-5.5 的异构审查抓到了
-「blocker 查询漏 trim」「读取侧未复用校验函数」，并修正了一份验收报告的举证口径。
-**质量关口靠「审」，不靠让作者用最贵的模型。**
-
-**折中打法（推荐）**：低档模型做**调查 + 出方案**，方案交给 S 级或异构模型**审**，审过了再让低档模型按方案实现。既省额度又守住质量关口。
-
-⚠️ **别只看盲评分数**：Hy3 是 B 级（91.5），但在有充分上下文、任务边界清晰、且要求"先出方案再实现"时，实测表现可以超过分数预期。**看它的中间推理质量再决定要不要换**，不要一见低档就杀。
-这也是「Hy3 优先」（约束 4-2）成立的理由：它 0.00x，做砸了换 flash 重来的成本仍低于一开始就用 flash。
-⛔ 但别把这条推到 `algorithm` / `architecture` 上——那两类是有盲评数据支撑的排除项（LRU 22、arch 33）。
-
-### 派发前自查（主会话侧，逐条过）
+### 派发前（主会话侧，逐条过）
 
 | 检查 | 为什么 |
 |---|---|
-| **要派 Hy3？先探活**（发一条极短 prompt 看是否秒回） | 免费额度当日耗尽会**进排队**，长任务丢进去会卡住且 Paseo 侧未必立刻可见 |
-| **要派 Hy3？先过一遍排除清单**（约束 4-3） | 多模态任务派 Hy3 **照常计费**；algorithm/perf/architecture 有盲评数据支撑的排除理由 |
-| worktree 是否已建、是否有 `node_modules` | 缺依赖时 `npx jest` **零输出**，agent 会把空跑当全绿 |
+| **要派免费档？先探活**（发一条极短 prompt 看是否秒回） | 当日额度耗尽会**进排队**，长任务丢进去会卡住且 Paseo 侧未必立刻可见 |
+| **要派免费档？先过排除清单**（routing §2） | 多模态任务派 Hy 系**照常计费**；algorithm/perf/architecture 有盲评数据支撑 |
+| worktree 是否已建、有无 `node_modules` | 缺依赖时 `npx jest` **零输出**，agent 会把空跑当全绿 |
 | 是否给了当前测试基线数字 | 没有基线，"全绿"无法证伪 |
 | 是否写明已排除的错误方向 | 否则 agent 会顺着前任的错误假设做下去 |
 | 改返回结构？→ 是否要求消费方自查 | 高频事故：后端改了前端没跟上 |
 | 是否要求真实浏览器验证 | happy-dom 里 `getBoundingClientRect()` 恒 0×0，TDesign 浮层会被 `isHidden` guard 立刻关闭，导致"点不动"假阴性 |
+| **permission_mode 传了吗** | 漏传导致整批任务卡在权限询问上不执行 |
 
-### 收割时必查（不能只看 agent 的报告）
+### 收割时（⛔ 不能只看 agent 的报告）
 
 | 检查 | 为什么 |
 |---|---|
+| **`lastStatus` 已是 idle/completed** | running 时取到的是中间态（§3.1） |
 | `git log` 核对 HEAD **真的有新 commit** | 高频：agent 报"全绿"但改动全躺工作区没提交 |
 | `git status` 有无未提交残留 | 同上 |
 | 有无误提交的调试脚手架 | 出现过一次提交 13 个 debug spec |
-| **合并后重跑全量**，不信单分支的绿 | 单分支各自绿 ≠ 合到一起绿 |
-| 异构交叉审（不能同模型审自己） | 抓到过"修复引入新回退"，同模型审不出来 |
+| **合并后重跑全量**，⛔ 不信单分支的绿 | 单分支各自绿 ≠ 合到一起绿 |
+| 异构交叉审（⛔ 不能同族审自己） | 抓到过"修复引入新回退"，同模型审不出来 |
+| 派了 K3？**必须核 `git log`** | 0723 有空转前科：报进度就 idle、git 无产出 |
 
 ---
 
-## 4. 前置检查
+## 6. 前置检查
 
 | 检查项 | 方法 | 失败处理 |
 |---|---|---|
-| Provider 可用 | `paseo list_providers` 或 `which opencode` | 走降级链 |
-| 准备用 opencode？ | 先考虑 `pi -p` | opencode 已排最后（卡死根因见 §3.2d）。**review 也已改走 `pi -p` + Copilot**（§3.2c），opencode 仅剩兜底 |
+| Provider 可用 | `paseo list_providers` | 走降级链（routing §8） |
+| 准备用 opencode？ | 先考虑 `pi -p` | opencode 已排最后（§3.2d） |
 | Agent-gates | `ls {cwd}/.agent-gates/` | 警告但不阻断 |
 | 工作目录 | `--worktree` > 当前 worktree > 主仓 | 主仓时提醒用 worktree |
 
 ---
 
-## 5. 输出
+## 7. 输出
 
 ```
 子会话已创建
   Agent:  {short_id} — {title}
   Model:  {provider}/{model} · thinking: {thinking}{降档时追加 " → {effective_thinking}（该模型无 {thinking} 档）"}
-          {opencode 通道且 provider=volcengine-agent-plan 且用户指定了 --thinking 时追加："⚠️ 该 provider 的 --variant 静默失效，要控思考强度请改用 volcengine-chat/*，见 §3.2"}
   任务类型: {task_type}（{推荐理由}）
   CWD:    {cwd}
   Gates:  agent-gates ✓ / ⚠ 未安装
@@ -560,7 +477,7 @@ m3（0.25x）  4 件   A.29 二修/三修 · acs-contract 评估 · session-auth
 
 ---
 
-## 6. Memory 记录
+## 8. Memory 记录
 
 完成后立即写 memory（防上下文压缩丢失子会话 ID）。最小字段：
 
@@ -570,8 +487,7 @@ m3（0.25x）  4 件   A.29 二修/三修 · acs-contract 评估 · session-auth
   "model": "{provider}/{model}",
   "taskType": "{task_type}",
   "thinking": "{thinking}",
-  "effectiveThinking": "{effective_thinking}",   // 与 thinking 不同即发生了降档
-
+  "effectiveThinking": "{effective_thinking}",
   "cwd": "{cwd}",
   "status": "dispatched",
   "dispatchedAt": "{ISO timestamp}",
@@ -581,14 +497,16 @@ m3（0.25x）  4 件   A.29 二修/三修 · acs-contract 评估 · session-auth
 
 ---
 
-## 7. 审查集成
+## 9. 审查集成
 
-子会话完成后，按 `agent-review-protocol` 的规则做交叉审查：
+子会话完成后，按 `agent-review-protocol` 做交叉审查：
 
-- 代码变更 → `pi -p --provider github-copilot --model gpt-5.5` 审查（§3.2b；opencode 通道降为兜底 §3.2c）
-  ⛔ **不要改用 `volcengine-agent-plan/deepseek-*`**：实施侧已是 DeepSeek（约束 7-1），
-  ⛔ 真正的约束是 **评审族 ≠ 实施族**；只有当本次实施就是 DeepSeek 时，评审才排除 DeepSeek
-- 文档变更 → 同样用不同模型审查
+- 代码变更 → `pi -p --provider github-copilot --model gpt-5.5`（§3.2c）
+- 文档变更 → 同样换族审查
 - 审查发现按 ❌/⚠️/💡 分级，❌ 必须修复
 
-**Skill 完成定义**：子会话创建成功 + 输出已打印 + memory 已记录。子会话的完成跟踪和审查是后续独立步骤，不阻塞本 skill 返回。
+⛔ 真正的约束是 **评审族 ≠ 实施族**（routing §5）。实施是 DeepSeek 时评审才排除 DeepSeek 族；
+实施是 Hy4/K3/GLM 时，DeepSeek 反而是合格的异构评审。
+
+**Skill 完成定义**：子会话创建成功 + 输出已打印 + memory 已记录。
+子会话的完成跟踪和审查是后续独立步骤，不阻塞本 skill 返回。
