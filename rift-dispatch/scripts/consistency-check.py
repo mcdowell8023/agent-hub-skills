@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""rift-dispatch 跨文件一致性机械校验 —— 每次改路由规则后跑一遍。
+"""rift-dispatch 跨文件一致性校验（**数据层**）—— 每次改路由规则后跑一遍。
+
+🔴 **覆盖面如实说明**：本脚本比对的是 `SKILL.md` 与 `model-catalog.json` 的**结构化数据**
+（豁免集 / 白名单 / 钱包顺序与 modelId / providers map / pi 侧配置）。
+⛔ `model-routing.md` 只被用来**搜旧语残留**，⛔ 不做表格级比对 —— 别把注释里的
+「三处一致」理解成三份都做了结构比对。
+
+🔴 **§2 伪代码的行为正确性⛔不在本脚本** —— 那由 `scripts/pipeline-test.py` 负责：
+   它直接【执行】markdown 里的伪代码并跑 17 条用例断言落点。两个都要跑。
+
 
 ⚠️ 三条自身教训（都踩过）：
 1. 正则字符类记得带 `_`（`qmodel_38max` 的下划线漏了导致 3 条误报）
@@ -19,7 +28,7 @@ e = []
 def chk(cond, msg):
     if not cond: e.append(msg)
 
-# ── 1. 豁免集三处一致，且 pi / jdcloud / deepseek 都不在里面 ──
+# ── 1. 豁免集：SKILL 与 catalog 一致，且 pi / jdcloud / deepseek 都不在里面 ──
 sk  = set(re.findall(r"'([a-z0-9._\-]+)'",
       re.search(r"EXEMPT_PROVIDERS\s*=\s*\[(.*?)\]", S, re.S).group(1)))
 cat = set(k for k in d['whitelist']['exempt'] if not k.startswith('_'))
@@ -28,7 +37,7 @@ for bad in ('pi', 'jdcloud-joyagent', 'deepseek'):
     chk(bad not in sk,  f"⛔ {bad} 不该在 SKILL EXEMPT")
     chk(bad not in cat, f"⛔ {bad} 不该在 catalog exempt")
 
-# ── 2. 白名单三处一致 ──
+# ── 2. 白名单：SKILL 与 catalog 一致 ──
 for prov in ('codebuddy-code', 'qoderclicn', 'jdcloud-joyagent'):
     w = set(d['whitelist'][prov])
     m = re.search(rf"'{re.escape(prov)}':\s*\[(.*?)\]", S, re.S)
@@ -37,16 +46,28 @@ for prov in ('codebuddy-code', 'qoderclicn', 'jdcloud-joyagent'):
         chk(w == set(re.findall(r"'([A-Za-z0-9._\-]+)'", m.group(1))),
             f"{prov} 白名单 SKILL≠catalog")
 
-# ── 3. 钱包首选三处一致 + JD 必须大写 modelId ──
+# ── 3. 钱包：SKILL 与 catalog 全序 + modelId 一致 + JD 必须大写 modelId ──
 wp = d['walletPriority']['modelProviderPreference']
 wpref = re.search(r"WALLET_PREF = \{(.*?)\n\}", S, re.S).group(1)
 for m, v in wp.items():
-    seg = wpref.split(f"'{m}'")
+    # ⚠️ 必须带冒号切 —— 键和元组里的 modelId 字面相同（'deepseek-v4-pro' 出现两次），
+    #    不带冒号会切在 modelId 上，只截到第一个元组。本轮踩过（第三次栽在正则太朴素）。
+    seg = wpref.split(f"'{m}':")
     chk(len(seg) > 1, f"SKILL WALLET_PREF 缺 {m}")
     if len(seg) > 1:
-        first = re.search(r"\('([a-z0-9._\-]+)'", seg[1])
-        chk(first and first.group(1) == v['first'],
-            f"{m} 首选 SKILL={first.group(1) if first else None} catalog={v['first']}")
+        # ⚠️ 比【全序 + 每个 provider 的真实 modelId】，⛔ 不只比 first
+        #    （只比 first 会漏掉「首选没变、次选或 modelId 错」）
+        block = seg[1].split('],')[0]
+        pairs = re.findall(r"\('([a-z0-9._\-]+)',\s*'([A-Za-z0-9._\-]+)'\)", block)
+        got_order = [u for u, _ in pairs]
+        want_order = [v['first']] + list(v.get('then', []))
+        chk(got_order == want_order,
+            f"{m} provider 顺序 SKILL={got_order} catalog={want_order}")
+        for u, mid in pairs:
+            expect = d['models'].get(m, {}).get('providers', {}).get(u, {})
+            if isinstance(expect, dict) and expect.get('modelId'):
+                chk(mid == expect['modelId'],
+                    f"{m}@{u} modelId SKILL={mid} catalog={expect['modelId']}")
 chk("('jdcloud-joyagent',  'DeepSeek-V4-pro')" in S, "⛔ JD modelId 必须是大写 DeepSeek-V4-pro")
 chk(wp['deepseek-v4-flash'].get('noJdcloud') is True, "flash 必须标 noJdcloud")
 chk('jdcloud' not in re.search(r"'deepseek-v4-flash':.*?\],", S, re.S).group(0),

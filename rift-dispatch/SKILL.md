@@ -68,7 +68,9 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 
 ## 2. 决策流程（伪代码）
 
-> 🔴 **这是一条单一线性管线**：⛔ 无 `goto`、⛔ 无提前 `return`、⛔ 无「某分支自己返回结果」。
+> 🔴 **这是一条单一线性管线**：⛔ 无 `goto`、⛔ 无「某分支自己算出落点就返回」。
+> ⚠️ **唯一的提前退出是 `--free`** —— 它是把**整个任务**委派给 `rift-free` skill，
+> 由那个 skill 自己负责校验、输出和 memory。⛔ 除此之外任何分支都不许提前 return。
 > 变量在第 0 段**全部初始化**，⛔ 后面不许凭空冒出新变量；
 > 用户显式给的值存进 `explicit_*`，**后续阶段只读不写**；
 > 所有路径最后汇到同一个收尾（第 6 段）。
@@ -129,6 +131,11 @@ explicit_thinking = args.thinking                                # 可为 None
 
 task_type = classify(user_input)          # routing §6；⚠️ concurrency 要先判子类
 scope     = estimate_scope(user_input, args)   # 文件数 / 预计工具调用数 —— 供 is_large_review
+cwd       = resolve_worktree(args.worktree)
+agent_id  = None                          # 🔴 只有 Paseo 派发才会被赋上，CLI 路径保持 None
+failed_paid_tiers_in_this_task = count_failed_paid_tiers(task_context)
+#   ⛔ 只数【付费阶梯内】做砸的档数：T0 免费档失败⛔不计、同一档重试⛔不计
+#   ⚠️ 数不出来（无本任务历史）就是 0，⛔ 不要凭「任务看着难」估一个值
 upstream, model, thinking = explicit_upstream, explicit_model, explicit_thinking
 
 # ═══ 1. 显式 provider 先过 P0 ═══ 此时 model 可能仍是 None，validate 允许
@@ -142,7 +149,10 @@ if args.free and explicit_model is None:
 # ═══ 3. review 硬例外 ═══ 只定【模型】，⛔ 不在这里定通道（通道统一在第 5 段定）
 if task_type == 'review' and explicit_model is None:
     upstream, model = 'github-copilot', 'gpt-5.5'
-    # ⛔ 评审族 ≠ 实施族（routing §5）。主会话是 Claude ⇒ ⛔ 不用 claude/*
+    # ⚠️ 措辞校准：是「**未显式指定时**默认固定 gpt-5.5」，⛔ 不是「不可覆盖」——
+    #    P1 显式优先仍然成立（routing 附录 P1 在 P2 之前）。
+    # ⛔ 但显式指定同族模型时必须报冲突：评审族 ≠ 实施族（routing §5）是不变量。
+    #    主会话是 Claude ⇒ ⛔ 不用 claude/*
 
 # ═══ 4. 选模型：T0 免费档 → T1..T4 阶梯 ═══ ⛔ 只赋值，不 return
 elif model is None:
@@ -176,10 +186,13 @@ if not provider_available(upstream):
     validate(upstream, model)
 provider = normalize_provider(upstream, channel)
 thinking = clamp_to_supported(model, thinking or default_thinking(model))  # §3.2e，⛔ 只降不升
-execute(channel, provider, model, thinking)          # §3
+result   = execute(channel, provider, model, thinking)    # §3
+agent_id = result.agent_id if channel == 'paseo' else None
+# ⚠️ `pi -p` 是一次性进程，⛔ 没有 agent_id —— 用 result.run_id 留痕
+save_memory(agent_id=agent_id, run_id=(None if channel == 'paseo' else result.run_id),
+            provider=provider, model=model, task_type=task_type,
+            thinking=thinking, cwd=cwd)              # §8
 print_summary()                                      # §7
-save_memory(agent_id, provider, model, task_type, cwd)   # §8
-# ⚠️ 只有 Paseo 派发才有 agent_id；`pi -p` 是一次性进程，没有
 
 # ⛔ 没有时段分支。credits 制通道已无任何时段性折扣，⛔ 不要再写 is_night()——
 #    它曾把按类型选出的高档模型无条件冲掉（2026-08-12 异构审）。
@@ -209,7 +222,12 @@ save_memory(agent_id, provider, model, task_type, cwd)   # §8
 
 模型侧不变：审查⛔用同族；⭐ 默认 `github-copilot/gpt-5.5`（Paseo 串为 `pi/github-copilot/gpt-5.5`）。
 
-### 📌 派发路径用例（照着自查，⛔ 出现偏差就是有 bug）
+### 📌 派发路径用例 —— 🔴 **这张表有可执行测试**
+
+⛔ 别只照着人眼自查：`scripts/pipeline-test.py` 会**直接执行 §2 的伪代码**跑这些用例并断言落点。
+改了 §2 就跑它（连同 `scripts/consistency-check.py`）。
+✅ 已验证它能抓住 5 类真实破坏：channel 写死 · 入口档改错 · 审查换模型 · 丢 `pi/` 前缀 · 新增未赋值变量。
+
 
 | 输入 | 期望结果 |
 |---|---|
