@@ -367,11 +367,20 @@ Kafka 架构题上 max 两次都高于 high（36、35 vs 33）——**架构/方
 ⇒ ⛔ **不要把它记成「DeepSeek 不许审查」**。实施是 Hy4 或 K3 时，DeepSeek 是完全合格的异构评审。
 只因为付费主力档是 `deepseek-v4-flash`，**那一路**的评审才要排除 DeepSeek 族。
 
-### ⭐ 当前审查通道
+### ⭐ 当前审查通道（模型固定，⚠️ **通道按规模分流**）
+
+🔴 **模型固定 `github-copilot/gpt-5.5`；通道按 §7 的规模判据选**，⛔ 别把两者写成一个原子。
 
 ```bash
+# 大审查（多文件 / 读大量源 / 预计 20+ 工具调用）—— ⭐ 走 Paseo，可见可中止
+create_agent(provider="pi/github-copilot/gpt-5.5", settings={"thinkingOptionId": "xhigh"})
+
+# 短审查（单文件 / 明确问题）—— 走 CLI，跑完即退
 pi -p --provider github-copilot --model gpt-5.5 "<≤200 字符的 prompt>"
 ```
+
+⚠️ 实测：大审查走 `pi -p` 曾跑满 **35 分钟零输出、全程不可见只能盲杀**；
+同期 Paseo 派的审查 agent 能看到它们各自在第 13 / 22 步撞 429。
 
 | 约束 | 说明 |
 |---|---|
@@ -525,7 +534,8 @@ review 已迁到 Copilot：开发实施类 + 大审查 → Paseo；短任务 / �
 | `qoderclicn` | Paseo `create_agent` | bypassPermissions |
 | `pi/<火山 provider>/<model>` | Paseo `create_agent` | ⚠️ **无 mode**：pi provider 在 Paseo 里 `availableModes` 为空，⛔ 传 `modeId` 会报 `Invalid mode` |
 | `pi -p --provider volcengine-coding` | CLI one-shot | — |
-| `pi -p --provider github-copilot` | CLI one-shot | — ⭐ 审查主通道 |
+| `pi/github-copilot/gpt-5.5` | Paseo `create_agent` | ⭐ **大审查**主通道（可见可中止） |
+| `pi -p --provider github-copilot` | CLI one-shot | 🔸 **短审查**主通道 |
 | `pi/jdcloud-joyagent/<model>` · `pi -p --provider jdcloud-joyagent` | Paseo / CLI | ⚠️ **无 mode** —— 京东云 JoyAgent，积分制第三钱包 |
 | `claude` | Paseo `create_agent` | auto |
 | `codex` | Paseo `create_agent` | auto |

@@ -68,187 +68,122 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 
 ## 2. 决策流程（伪代码）
 
-```python
-parse_args(user_input)
+> 🔴 **这是一条单一线性管线**：⛔ 无 `goto`、⛔ 无提前 `return`、⛔ 无「某分支自己返回结果」。
+> 变量在第 0 段**全部初始化**，⛔ 后面不许凭空冒出新变量；
+> 用户显式给的值存进 `explicit_*`，**后续阶段只读不写**；
+> 所有路径最后汇到同一个收尾（第 6 段）。
+> ⚠️ 2026-09-08 重写 —— 原版有 goto 跳过初始化、T0 提前 return 绕过校验、显式值被覆盖，
+> 三轮异构审查都栽在这上面，⛔ 补丁修不好，只能重写。
 
-# ── P0 白名单：一切选择先过这一关（routing §1）────────────────────────
-WHITELIST = {
+```python
+# ═══ 0. 初始化 ═══ 所有变量在这里出现
+args = parse_args(user_input)
+
+WHITELIST = {                                   # P0，routing §1
   'codebuddy-code':   ['hy4-preview', 'hy3', 'glm-5.3-flash',
                        'deepseek-v4-flash', 'deepseek-v4-pro', 'kimi-k3-2'],
   'qoderclicn':       ['qmodel_38max'],
-  # 🔴 京东云是【积分制第三个钱包】，但同样受白名单约束：⛔ 只准 DeepSeek
-  'jdcloud-joyagent': ['DeepSeek-V4-pro', 'DeepSeek-V4-Flash'],
+  'jdcloud-joyagent': ['DeepSeek-V4-pro', 'DeepSeek-V4-Flash'],   # 🔴 只准 DeepSeek
 }
-# ⚠️ 只约束【消耗 cb/qcn 额度】的两个 provider。以下走别的钱包，⛔ 不进白名单校验：
-#     pi/volcengine-*/*  · pi -p --provider github-copilot  · claude/*  · codex/*
-# ⛔ 认 id 不认 label：hy4-preview(0.00x) 与 hy4-preview-x(0.29x) 的 label 一模一样
-DISABLED_PROVIDERS = ['deepseek']        # 🔴 官方 API，2026-08-20 用户已 disable
-EXEMPT_PROVIDERS   = [                   # 走别的钱包，不校验模型（清单必须与 routing §8 provider 表一致）
-  'claude', 'codex', 'opencode',                                # 宿主，本身不带上游 provider
-  'github-copilot',                                             # 审查通道
-  'volcengine-coding', 'volcengine-agent-plan', 'volcengine-chat',   # 火山三套餐
-]
-# 🔴 `pi` ⛔ 不在豁免集里 —— 它是【宿主】不是钱包。Paseo 串形如 pi/<upstream>/<model>，
-#    若按顶层 `pi` 豁免，`pi/jdcloud-joyagent/GLM-5.2` 就会绕过 JD 白名单。
-def split_provider(s):
-    """pi/jdcloud-joyagent/DeepSeek-V4-pro → host='pi', upstream='jdcloud-joyagent'
-       codebuddy-code                       → host=None, upstream='codebuddy-code'"""
-    parts = s.split('/')
-    return ('pi', parts[1]) if parts[0] == 'pi' and len(parts) >= 2 else (None, parts[0])
-# ⚠️ jdcloud-joyagent ⛔ 不在豁免集里 —— 它有自己的白名单（只准 DeepSeek 两个），见上。
-#    2026-09-08 用户明确：「JD 云仍然只使用 DeepSeek」。平台上另有 GLM/Kimi/MiniMax/Qwen 共 8 个
-#    已在 ~/.pi/agent/models.json 配好且实跑通过，⛔ 但不派发。
-
-# 🔴 Paseo 通道下这些上游必须带 `pi/` 前缀；CLI 通道⛔不带
+DISABLED_PROVIDERS = ['deepseek']               # 🔴 官方 API，现金兜底，当前被 disable
+EXEMPT_PROVIDERS   = ['claude', 'codex', 'opencode', 'github-copilot',
+                      'volcengine-coding', 'volcengine-agent-plan', 'volcengine-chat']
+# 🔴 `pi` ⛔ 不在豁免集 —— 它是【宿主】不是钱包。豁免顶层 pi 会让
+#    pi/jdcloud-joyagent/GLM-5.2 绕过京东白名单。⚠️ 本清单必须与 catalog whitelist.exempt 一致。
 PI_HOSTED = ('jdcloud-joyagent', 'volcengine-coding', 'volcengine-agent-plan',
              'volcengine-chat', 'github-copilot')
+LADDER = [('glm-5.3-flash', 0.06), ('deepseek-v4-flash', 0.17),
+          ('deepseek-v4-pro', 0.51), ('kimi-k3-2', 1.62)]      # T1..T4
+ENTRY  = {'algorithm': 1, 'perf': 1, 'concurrency_impl': 1, 'concurrency_diag': 1}
+WALLET_PREF = {                                 # (upstream, 该 provider 上的真实 modelId)
+  'deepseek-v4-pro':   [('jdcloud-joyagent',  'DeepSeek-V4-pro'),   # 🥇 7 折，护 cb credits
+                        ('codebuddy-code',    'deepseek-v4-pro'),
+                        ('volcengine-coding', 'deepseek-v4-pro')],
+  'deepseek-v4-flash': [('volcengine-coding', 'deepseek-v4-flash'), # 🥇 已付费套餐
+                        ('codebuddy-code',    'deepseek-v4-flash')],# ⛔ 不走京东（routing §3.5）
+  'glm-5.3-flash':     [('volcengine-coding', 'glm-5.3-flash'),
+                        ('codebuddy-code',    'glm-5.3-flash')],
+}
+
+def split_provider(s):
+    """pi/jdcloud-joyagent/X → ('pi','jdcloud-joyagent')；codebuddy-code → (None,'codebuddy-code')"""
+    parts = s.split('/')
+    return ('pi', parts[1]) if parts[0] == 'pi' and len(parts) >= 2 else (None, parts[0])
+
 def normalize_provider(upstream, channel):
     return f'pi/{upstream}' if (channel == 'paseo' and upstream in PI_HOSTED) else upstream
 
 def validate(upstream, model):
-    """🔴 P0 校验。⛔ 三层依次判 —— 不能只写「provider 在白名单里才校验」，
-       那样传一个不在 WHITELIST 键里的 provider（如 deepseek）会让整个校验静默跳过。
-       ⚠️ model 允许为 None（此时只校验 provider 本身）。"""
-    if upstream in DISABLED_PROVIDERS:
-        report_disabled_and_stop()          # ⛔ 已停用
+    """🔴 P0。⛔ 三层依次判——只写「在白名单里才校验」会让未知 provider 静默跳过。
+       ⚠️ model 为 None 时只校验 provider 本身。"""
+    if upstream in DISABLED_PROVIDERS:      report_disabled_and_stop()
     elif upstream in WHITELIST:
         if model is not None and model not in WHITELIST[upstream]:
             report_conflict_and_stop()      # ⇒ pi/jdcloud-joyagent/GLM-5.2 在这里被拦
-    elif upstream not in EXEMPT_PROVIDERS:
-        report_unknown_provider_and_stop()  # ⛔ 未知 provider 一律停
+    elif upstream not in EXEMPT_PROVIDERS:  report_unknown_provider_and_stop()
 
-# ── P1 用户显式指定 ────────────────────────────────────────────────
-# 🔴 provider 与 model 各自独立地可能被指定，⛔ 不能只判 args.model：
-#    只给 --provider 时，那个 provider 同样必须过 P0。
-upstream = model = None
-if args.provider:
-    _, upstream = split_provider(args.provider)      # 🔴 一律先拆，⛔ 别拿整串去比
-if args.model:
-    model = resolve_short_name(args.model)
-if upstream is not None:
-    validate(upstream, model)                        # model 可为 None，只校验 provider
-if upstream is not None and model is not None:
-    goto CHANNEL                                     # 两个都给了 ⇒ 直接进通道选择
-# 只给其一时⛔不在这里补另一半 —— 让它继续走 P3~P5b 的正常流程，
-# 选完之后在 P5b 末尾再 validate 一次（见下）。
+# 🔴 显式值单独存，⛔ 后续阶段只读不写
+explicit_upstream = split_provider(args.provider)[1] if args.provider else None
+explicit_model    = resolve_short_name(args.model)   if args.model    else None
+explicit_thinking = args.thinking                                # 可为 None
 
-# ── P2 --free → 交给 rift-free skill ───────────────────────────────
-if args.free: delegate('rift-free'); return
+task_type = classify(user_input)          # routing §6；⚠️ concurrency 要先判子类
+scope     = estimate_scope(user_input, args)   # 文件数 / 预计工具调用数 —— 供 is_large_review
+upstream, model, thinking = explicit_upstream, explicit_model, explicit_thinking
 
-# ── P3 任务分类（routing §6）───────────────────────────────────────
-task_type = classify(user_input)
-# 多标签取主标签：实现动词 > 领域关键词 > 修饰词
+# ═══ 1. 显式 provider 先过 P0 ═══ 此时 model 可能仍是 None，validate 允许
+if explicit_upstream is not None:
+    validate(explicit_upstream, explicit_model)
 
-# ── P4 硬例外（不进常规阶梯）───────────────────────────────────────
-if task_type == 'review':
-    # 🔴 通道与模型正交：通道按【规模】定，模型按【异构族】定（routing §5 / §7）
-    #    ⛔ 别把「审查 → pi -p + gpt-5.5」写成一个原子
-    model_choice = 'github-copilot/gpt-5.5'    # 异构侧：⛔ 不得与实施同族
-                                               #   主会话自己写的 ⇒ ⛔ 不用 claude/*
-    if is_large_review(scope):                 # 多文件 / 读大量源 / 预计 20+ 工具调用
-        create_agent(provider=f'pi/{model_choice}',
-                     settings=build_settings(f'pi/{model_choice}', 'gpt-5.5', 'xhigh'))
-        # 🔴 大审查必须走 Paseo —— 实测 pi -p 跑满 35 分钟零输出、全程不可见只能盲杀
-    else:
-        run(f'pi -p --provider github-copilot --model gpt-5.5')   # ⛔ prompt ≤200 字符
-    goto EXECUTE
-# ⚠️ claude/* 可派发但不推荐——消耗 Claude 订阅额度，建议留给主会话
+# ═══ 2. --free ═══
+if args.free and explicit_model is None:
+    delegate('rift-free'); return          # ⚠️ 唯一的提前退出：整个任务交给别的 skill
 
-# ── P5 选档位：T0 免费 → T1..T4 阶梯（routing §0）──────────────────
-LADDER = [('glm-5.3-flash',    0.06),   # T1 付费起点
-          ('deepseek-v4-flash', 0.17),  # T2 DeepSeek 族首选
-          ('deepseek-v4-pro',   0.51),  # T3 ⛔ selectableByDefault=false
-          ('kimi-k3-2',         1.62)]  # T4 🔴 红线
+# ═══ 3. review 硬例外 ═══ 只定【模型】，⛔ 不在这里定通道（通道统一在第 5 段定）
+if task_type == 'review' and explicit_model is None:
+    upstream, model = 'github-copilot', 'gpt-5.5'
+    # ⛔ 评审族 ≠ 实施族（routing §5）。主会话是 Claude ⇒ ⛔ 不用 claude/*
 
-# T0 免费档：命中排除清单（routing §2 唯一真源）才跳过
-if not excluded_from_free(task_type, args):
-    for m in ('hy4-preview', 'hy3'):        # 顺位固定
-        if promo_active(m) and probe_ok(m): # ⚠️ 长任务必须先探活，怕撞排队
-            return (m, 'codebuddy-code', 'high')
-# ⚠️ 排除清单是给 Hy3 定的，对 Hy4 未验证——Hy4 的 LRU 拿 35 分（hy3 仅 23），
-#    「algorithm 是短板」这条对它很可能不成立。补测前按保守处理
+# ═══ 4. 选模型：T0 免费档 → T1..T4 阶梯 ═══ ⛔ 只赋值，不 return
+elif model is None:
+    if explicit_upstream is None and not excluded_from_free(task_type, args):
+        for m in ('hy4-preview', 'hy3'):            # T0，顺位固定
+            if promo_active(m) and probe_ok(m):     # ⚠️ 长任务必须探活，怕撞排队
+                upstream, model, thinking = 'codebuddy-code', m, thinking or 'high'
+                break
+    if model is None:                                # T1..T4
+        i = ENTRY.get(task_type, 0) + failed_paid_tiers_in_this_task
+        # ⛔ failed_paid_tiers 只数【付费阶梯内】做砸的档数：T0 不计、同档重试不计
+        if i > 3: report_ladder_exhausted_and_stop()  # ⛔ 不静默重派 K3
+        if i == 3: warn('🔴 K3 1.62x，派完必须核 git log 有无 commit（0723 空转前科）')
+        model = LADDER[i][0]
+        thinking = thinking or 'xhigh'
 
-# T1..T4：入口档由任务类型定（catalog dispatchDefaults.entryTier），⛔ 只能因「本任务做砸过」上移
-# ⚠️ 「跳过免费档」和「付费从哪档起步」是两件事，别混（routing §6）：
-#     algorithm / perf          → 跳 T0，付费 T2 起步（h2h 这两类 v4-flash 领先）
-#     architecture              → 跳 T0，付费 **T1** 起步（🔴 08-28 改：h2h Kafka glm 36 > v4-flash 31）
-#     concurrency 诊断          → 不跳 T0（hy3 盲评 36.5 白名单内最高）
-#     concurrency 写实现        → 不跳 T0，付费 T2 起步
-# ⚠️ concurrency 要先判子类：诊断 or 写实现（routing §6 同名两行）
-if task_type == 'concurrency':
-    task_type = 'concurrency_impl' if writes_concurrency_primitives(user_input) else 'concurrency_diag'
-
-ENTRY = {'algorithm': 1, 'perf': 1,          # 付费从 T2 (deepseek-v4-flash) 起
-         'concurrency_impl': 1, 'concurrency_diag': 1}
-#   ⛔ concurrency 两个子类【付费起步档都是 T2】——差别只在跳不跳 T0：
-#      诊断类不跳 T0（hy3 在这类上有数据），实现类也不跳 T0，但两者进付费后都从 T2 起
-#   其余（含 architecture）= 0，从 T1 (glm-5.3-flash) 起
-
-i = ENTRY.get(task_type, 0) + failed_paid_tiers_in_this_task
-#   ⛔ failed_paid_tiers 只数【LADDER 内】做砸过的档数：
-#      · T0 免费档做砸 ⛔ 不计入 —— 否则默认类会直接跳到 T2，绕过 T1 的 glm-5.3-flash
-#      · 同一档重试 ⛔ 不计入 —— 否则同档重试两次会把任务一路顶到 K3
-
-# 🔴 K3 守卫：⛔ 不要用 failed_rounds 的绝对值当条件——入口档不同，到 T4 需要的失败数也不同
-#    （algorithm 从 i=1 起步，砸两轮就该到 T4；写成 failed>=3 会把它按回刚砸掉的 v4-pro，原地卡死）
-#    正确判据是：i 能走到 3，本身就意味着 LADDER[2] (v4-pro) 已经砸过 —— 无需额外守卫。
-if i > 3:
-    # ⛔ T4 也做砸了 —— 阶梯到顶，⛔ 不要静默重派 K3（那是把 1.62x 再烧一遍）
-    report_ladder_exhausted_and_stop()   # 报告用户：已到 K3 仍未解决，需要人介入
-if i == 3:
-    assert failed(LADDER[2][0])          # 兜底断言：能到 T4，v4-pro 必已砸过（routing §3.3）
-    warn('🔴 K3 1.62x，派完必须核 git log 是否真有 commit（0723 空转前科）')
-model, thinking = LADDER[i][0], 'xhigh'
-# ⛔ 这里没有 `or args.model == 'k3'` 分支 —— 用户显式指定在 P1 就 goto EXECUTE 了，走不到这。
-
-# ── P5b 选 provider：钱包优先级（routing §3.5，与档位正交）────────────
-# 🔴 档位决定【用哪个模型】，钱包决定【从哪个 provider 拿】。⛔ 别混成一件事。
-#    钱包顺序：① 火山/cb 已付费套餐（边际成本≈0） → ② 京东积分 → ③ 官方 API（现金，⛔ 永远兜底）
-# 🔴 每一项是 (upstream, 该 provider 上的真实 modelId) —— ⛔ 不能只列 provider 名：
-#    京东的 id 是 **DeepSeek-V4-pro**（大小写不同），拿阶梯里的小写去拼会得到「模型不存在」
-WALLET_PREF = {
-  'deepseek-v4-pro':   [('jdcloud-joyagent',  'DeepSeek-V4-pro'),    # 🥇 7 折，且挪走能护住 cb credits
-                        ('codebuddy-code',    'deepseek-v4-pro'),
-                        ('volcengine-coding', 'deepseek-v4-pro')],
-  'deepseek-v4-flash': [('volcengine-coding', 'deepseek-v4-flash'),  # 🥇 已付费套餐
-                        ('codebuddy-code',    'deepseek-v4-flash')], # ⛔ flash 不走京东（§3.5）
-  'glm-5.3-flash':     [('volcengine-coding', 'glm-5.3-flash'),      # ⚠️ 按同一钱包规则推得
-                        ('codebuddy-code',    'glm-5.3-flash')],
-}
-# ⚠️ 用户已显式指定的那一半⛔不许被覆盖
-if args.provider is None:
+# ═══ 5. 选 provider ═══ ⚠️ 显式 provider 存在时⛔不许被换掉
+if upstream is None:
     upstream, model = first_available(WALLET_PREF.get(model, [('codebuddy-code', model)]))
-validate(upstream, model)          # 🔴 自动选出来的组合同样要过 P0，⛔ 别只在 P1 校验
+    # ⚠️ 这里 model 可能被换成【该 provider 上的真实 id】（如京东是大写 DeepSeek-V4-pro）——
+    #    ⛔ 那不是换模型，是同一个模型在不同 provider 上的 id 写法
+elif explicit_model is None:
+    model = model_id_on(upstream, model)   # 用户只给了 provider ⇒ 在该 provider 内取该模型的 id
 
-CHANNEL:
-# 🔴 channel 在这里定，⛔ 它不是凭空存在的变量：判据是「要不要看得见」（§3 通道判据总表）
-channel = 'paseo' if (task_type != 'review' and is_dev_task(task_type)) or is_large_review(scope) \
-          else 'cli'
-provider = normalize_provider(upstream, channel)   # 🔴 P1 与自动分支共用，⛔ 别写两份
-# ⚠️ 火山 id 多为别名：glm-5.2/glm-latest → glm-5.3；deepseek-v4-flash → -ga-260731
-#    ⛔ GET /models 只返回 ARK 全量原始 id，别名不在里面，判断可用性只能直接发请求（routing §7）
-# ⚠️ deepseek/* 官方 API 仍在 opencode 的 disabled_providers 里 ⇒ 真要兜底得先解除禁用
+# ═══ 6. 统一收尾 ═══ 🔴 所有路径都走到这里，⛔ 上面任何分支都不许自己返回结果
+validate(upstream, model)                  # 🔴 自动选出的组合同样要过 P0
+channel = 'paseo' if is_dev_task(task_type) or is_large_review(scope) else 'cli'
+#   🔴 判据是「要不要看得见」（§3 通道判据总表）：开发实施类 + 大审查 → paseo；其余 → cli
+if not provider_available(upstream):
+    upstream, model = downgrade(upstream, model)     # routing §8
+    validate(upstream, model)
+provider = normalize_provider(upstream, channel)
+thinking = clamp_to_supported(model, thinking or default_thinking(model))  # §3.2e，⛔ 只降不升
+execute(channel, provider, model, thinking)          # §3
+print_summary()                                      # §7
+save_memory(agent_id, provider, model, task_type, cwd)   # §8
+# ⚠️ 只有 Paseo 派发才有 agent_id；`pi -p` 是一次性进程，没有
 
 # ⛔ 没有时段分支。credits 制通道已无任何时段性折扣，⛔ 不要再写 is_night()——
 #    它曾把按类型选出的高档模型无条件冲掉（2026-08-12 异构审）。
 #    仍然成立：任何「换更便宜 provider」只作用于当前落点，⛔ 不下调已升上去的档位。
-
-# ── P6 Provider 降级（routing §8）─────────────────────────────────
-if not provider_available(provider): model, provider = downgrade(model)
-
-# ── P7 折算 thinking 实际档位（§3.2e 能力表）────────────────────────
-# Paseo/Hub 通道用 thinkingOptionId，档位由 provider 侧解释，直接传；
-# opencode 通道用 --variant，档位是 per-model 的，必须先折算。
-thinking = clamp_to_supported(model, thinking)   # ⛔ 只降不升，降了必须回显
-
-# ── EXECUTE 执行适配器（§通道判据总表 + §3）───────────────────────
-# 🔴 先定「要不要看得见」，再定跑在哪
-...
-
-# ── 输出 + 记录 ───────────────────────────────────────────────────
-print_summary()                                  # §5
-save_memory(agent_id, model, task_type, cwd)     # §6
-# ⚠️ 只有 Paseo/Hub 派发才有 agent_id；CLI（pi -p）是一次性进程，没有 agent_id
 ```
 
 ---
@@ -653,8 +588,8 @@ ssh hub "paseo run --detach \
 
 子会话完成后，按 `agent-review-protocol` 做交叉审查：
 
-- 代码变更 → `pi -p --provider github-copilot --model gpt-5.5`（§3.2c）
-- 文档变更 → 同样换族审查
+- 代码 / 文档变更 → 模型固定 `github-copilot/gpt-5.5`（⛔ 换族，见 routing §5），
+  **通道**按规模分流：**大审查** → Paseo `pi/github-copilot/gpt-5.5`；**短审查** → `pi -p --provider github-copilot --model gpt-5.5`（§3 通道判据总表）
 - 审查发现按 ❌/⚠️/💡 分级，❌ 必须修复
 
 ⛔ 真正的约束是 **评审族 ≠ 实施族**（routing §5）。实施是 DeepSeek 时评审才排除 DeepSeek 族；

@@ -1,5 +1,5 @@
 {
-  "version": "5.11.0",
+  "version": "6.0.0",
   "lastUpdated": "2026-09-08",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。",
@@ -1488,7 +1488,7 @@
   "oneshotChannels": {
     "_note": "🔴 pi 有两种启动方式，⚠️ 不是「Paseo 还是 pi」的二选一——两种跑的都是 pi（同样读 AGENTS.md、同样 22 skill、同样 read/bash/edit/write），区别只在能不能看见它。开发实施类要可观测 ⇒ 用 Paseo MCP 派 pi（provider: 'pi/…'），可观测性与 pi 能力两样都要，本来就不冲突。pi -p CLI 只用于短任务/短审查；⚠️ 大审查走 Paseo",
     "priority": [
-      "① 开发实施类 → Paseo create_agent，provider 可用 pi/volcengine-coding/deepseek-v4-flash（Paseo 的 pi provider 暴露 27 个模型：火山 19 + Copilot 8，带完整 thinking 档位），或原有 codebuddy-code/* · qoderclicn/* · claude/* · codex/*",
+      "① 开发实施类 → Paseo create_agent，provider 可用 pi/volcengine-coding/deepseek-v4-flash（Paseo 的 pi provider 暴露 ~/.pi/agent/models.json 里的全部模型，带完整 thinking 档位；⚠️ 具体数量以 `pi --list-models` 为准，⛔ 别在文档里写死），或原有 codebuddy-code/* · qoderclicn/* · claude/* · codex/*",
       "② 短任务/短审查 → pi -p CLI（省机器、不堆 serve）；⚠️ 大审查走 Paseo",
       "③ 审查专用 → pi + Copilot（⛔ 仅审查，不做开发）",
       "④ opencode → 🔻 兜底，排最后"
@@ -1501,7 +1501,7 @@
         "volcengine-agent-plan": "…/api/plan/v3 · 12 模型"
       },
       "verifiedOn": "2026-08-20",
-      "verification": "19 个模型逐个 pi -p 实跑通过；能力测试由主会话独立核验（不采信自述）：读文件→改代码→写测试→bash 跑测试→git commit 全部落地，中文 commit message 合规",
+      "verification": "火山两个套餐的模型逐个 pi -p 实跑通过（⚠️ 数量以 `pi --list-models` 为准）；能力测试由主会话独立核验（不采信自述）：读文件→改代码→写测试→bash 跑测试→git commit 全部落地，中文 commit message 合规",
       "rulesSupport": {
         "global": "✅ ~/.pi/agent/AGENTS.md —— ~/.claude/CLAUDE.md 的整份复制（pi 不支持 @import，与 ~/.codex/AGENTS.md 同样处理）",
         "project": "✅ 自 cwd 向上找 AGENTS.md / CLAUDE.md；AGENTS.override.md 可覆盖该目录",
@@ -1534,15 +1534,16 @@
     },
     "whyNotPiCliForDev": "🔴 不是 pi 不行，是 pi -p 这条 CLI 路径你看不见：one-shot 进程不进 Paseo agent 列表 ⇒ Paseo Desktop 看不到进度、无法中途干预、拿不到 get_agent_status，只有日志文件。用户明确要求过『派发子任务走 paseo mcp，为的是能看进度、能干预』，memory 亦有『派发任务必须拆细+可见，不用黑盒』。✅ 正解 = Paseo MCP 派 pi，而不是在 Paseo 与 pi 之间二选一。",
     "paseoPiProvider": {
-      "exposes": "Paseo 的 pi provider 暴露火山 19 个模型 + Copilot 全量。⚠️ 旧记录写「27 个 = 火山 19 + Copilot 8」，Copilot 侧现为 33 个，该数字已过期",
+      "exposes": "Paseo 的 pi provider 暴露 ~/.pi/agent/models.json 里的全部模型。⚠️ ⛔ 别在文档里写死数量——它随 Copilot 目录刷新和火山补配而变，以 `pi --list-models` 为准",
       "thinking": "off/minimal/low/medium/high/xhigh/max，默认 medium",
       "caveat": "⚠️ pi/volcengine-*/kimi-k2.7-code 的 thinkingOptions 为 null（官方注明不支持 reasoning summaries），派它时不要传 thinkingOptionId"
     },
     "matrix": {
-      "开发实施类": "Paseo MCP 派 pi —— create_agent, provider: 'pi/volcengine-coding/deepseek-v4-flash'（或 codebuddy-code/* 等原有通道）。⭐ 可见/可干预",
-      "只读 / 短 / 分析类": "pi -p --provider volcengine-coding --model deepseek-v4-flash",
-      "审查类": "pi -p --provider github-copilot --model gpt-5.5 ⛔ Copilot 仅审查不做开发 ⛔ prompt ≤200 字符（800 字会挂 22 分钟）",
-      "兜底": "opencode —— 🔻 无常规用途，仅在上面三条都不可用时"
+      "_note": "🔴 通道按【规模】分，⛔ 不按任务类型。判据是「要不要看得见」",
+      "开发实施类 + 大审查": "Paseo create_agent —— 可见/可干预。开发用 pi/volcengine-coding/*，大审查用 pi/github-copilot/gpt-5.5",
+      "短任务 / 短审查 / 只读分析": "pi -p —— 跑完即退不堆 serve。只读用 --provider volcengine-coding；短审查用 --provider github-copilot --model gpt-5.5，⛔ prompt ≤200 字符（800 字会挂 22 分钟）",
+      "兜底": "opencode —— 🔻 无常规用途",
+      "审查的模型侧": "固定 github-copilot/gpt-5.5，⛔ Copilot 仅审查不做开发；约束是评审族 ≠ 实施族"
     }
   },
   "hy4Eval_20260821": {
