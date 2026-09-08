@@ -22,6 +22,28 @@ WHITELIST = {
 qwen3-vl-235 / JoyAI-LLM-Flash 共 8 个，**已在 `~/.pi/agent/models.json` 配好且逐个实跑通过**，
 标记为 ⛔ 不派发 —— 留着是为保住实测结论，不是为了用。
 
+### ⛔ 从 pi 的 Copilot 通道移除 Claude 全族
+
+用户要求。理由清楚：**主会话就是 Claude，把 Claude 留在审查通道里，等于给自审留了个口子**——
+异构不变量（§5）本来就禁止它，删掉比靠纪律拦更可靠。
+
+🔴 **实现方式不是改 `models-store.json`。** 那个 store 带 `etag`/`checkedAt`，
+会**按 etag 自动刷新**（本轮读到的清单已经和几天前不同：多了 `gpt-6-astra`/`grok-4.6`，
+少了 `gemini-3.1-pro-preview`）⇒ 手改必被冲掉。
+正确做法是**在用户自己的 `~/.pi/agent/models.json` 里显式定义 `github-copilot` provider** 去覆盖它。
+
+⚠️ **代价要说清**：这样一来 Copilot 将来新增的模型**不会自动出现**，需要手工补进 models.json。
+这是「可控但要维护」换「自动但不可控」。
+
+✅ 三项验证：`pi --list-models` 零 claude · 点名 `claude-opus-5` 返回 `model_not_supported`
+· 审查通道 `gpt-5.5` 仍正常返回。
+
+⚠️ 顺带查明：store 目录里的 `gpt-5.4-nano` / `kimi-k3` / `kimi-k2.7-code` **本订阅实际不支持**
+（API 返回 `model_not_supported`）⇒ 可用的是 **17 个**，⛔ 别按目录数以为有 20 个。
+
+⚠️ 教训（与本轮 glm-5.3-flash 漏配同源）：**目录里有 ≠ 能用，目录里没有 ≠ 不能用。**
+前者是这三个模型，后者是 glm-5.3-flash（别名不进 `/models`）。⇒ 判断可用性只能直接发请求。
+
 ### ⭐ 补配 `glm-5.3-flash`：火山一直就有，是我漏了
 
 用户问「火山应该支持了 glm-5.3-flash，怎么没见到」。查实：**火山两个套餐都支持**，

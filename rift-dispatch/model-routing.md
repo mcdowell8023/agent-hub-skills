@@ -380,10 +380,12 @@ pi -p --provider github-copilot --model gpt-5.5 "<≤200 字符的 prompt>"
 | ⛔ **Copilot 仅审查，不做开发** | 用户 2026-08-20 明确。开发走 §7 火山通道 |
 | ⛔ 不用 `codex/gpt-5.6-sol` | 实测该 workspace `out of credits` |
 
-Copilot 侧可用的异族评审（以 `~/.pi/agent/models-store.json` 为准）：
-`gpt-5.5`(⭐默认) · `gpt-5.6-sol` · `gpt-5.6-luna` · `gpt-5.6-terra` · `gpt-5.4` · `gpt-5.3-codex`
-· `gpt-5.4-mini` · `gpt-5-mini` · `gemini-3.1-pro-preview` · `gemini-3.5-flash` · `gemini-3.6-flash`
-⚠️ 同一 store 里还有 `claude-*` 全系——**属 Claude 族，审主会话产出时不可用**。
+Copilot 侧可用的异族评审（2026-09-08 实测 **17 个**，以 `~/.pi/agent/models.json` 为准）：
+`gpt-5.5`(⭐审查默认) · `gpt-5.6-sol` · `gpt-5.6-luna` · `gpt-5.6-terra` · `gpt-6-astra` · `gpt-5.4` · `gpt-5.4-mini` · `gpt-5.3-codex` · `gpt-5-mini` · `gemini-3.5-flash` · `gemini-3.6-flash` · `gemini-3.7-flash` · `gemini-3.8-flash` · `grok-4.5` · `grok-4.6` · `mai-code-1-flash-picker` · `mai-code-1.1-flash`
+
+🔴 **Claude 全族已于 2026-09-08 从 pi 的 Copilot 通道移除**（用户要求）——主会话就是 Claude，留着容易误用成自审。⚠️ 实现方式是在 `~/.pi/agent/models.json` 里显式定义 `github-copilot` provider 覆盖 `models-store.json`，⛔ 因为那个 store 会按 etag **自动刷新**，手改它会被冲掉。⚠️ 代价：Copilot 将来新增的模型**不会自动出现**，要手工补进 models.json。
+⚠️ store 目录里另有 `gpt-5.4-nano` / `kimi-k3` / `kimi-k2.7-code`，但**本订阅实际不支持**
+（API 返回 `model_not_supported`），⛔ 别按目录以为能用。
 
 ### 为什么审查不跟着「DeepSeek 优先」走
 

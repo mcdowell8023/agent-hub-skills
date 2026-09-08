@@ -331,11 +331,12 @@ pi -p --provider github-copilot --model gpt-5.5 "{≤200 字符的 review_prompt
 | 🔴 **prompt ≤200 字符** | 背景让它自己读文件。实测 800 字让 GPT-5.5 挂 22 分钟，短 prompt 秒回 |
 | ⛔ **撞超时不要收窄 prompt 重试** | 极小 prompt 也超时属另一种根因，换通道 |
 | ⛔ **仅审查不做开发** | 用户 2026-08-20 明确。开发走 §3.2a 火山通道 |
-| 🔴 **`claude-*` 属 Claude 族** | 主会话就是 Claude ⇒ 审我写的东西⛔不能用它 |
+| ✅ **`claude-*` 已整族移除** | 2026-09-08 从 pi 的 Copilot 通道删掉——主会话就是 Claude，留着容易误用成自审 |
 
-可用异族评审（以 `~/.pi/agent/models-store.json` 为准）：
-`gpt-5.5`(⭐默认) · `gpt-5.6-sol` · `gpt-5.6-luna` · `gpt-5.6-terra` · `gpt-5.4` · `gpt-5.3-codex`
-· `gpt-5.4-mini` · `gpt-5-mini` · `gemini-3.1-pro-preview` · `gemini-3.5-flash` · `gemini-3.6-flash`
+可用异族评审（2026-09-08 实测 **17 个**，以 `~/.pi/agent/models.json` 为准）：
+`gpt-5.5`(⭐审查默认) · `gpt-5.6-sol` · `gpt-5.6-luna` · `gpt-5.6-terra` · `gpt-6-astra` · `gpt-5.4` · `gpt-5.4-mini` · `gpt-5.3-codex` · `gpt-5-mini` · `gemini-3.5-flash` · `gemini-3.6-flash` · `gemini-3.7-flash` · `gemini-3.8-flash` · `grok-4.5` · `grok-4.6` · `mai-code-1-flash-picker` · `mai-code-1.1-flash`
+
+🔴 **Claude 全族已于 2026-09-08 从 pi 的 Copilot 通道移除**（用户要求）——主会话就是 Claude，留着容易误用成自审。⚠️ 实现方式是在 `~/.pi/agent/models.json` 里显式定义 `github-copilot` provider 覆盖 `models-store.json`，⛔ 因为那个 store 会按 etag **自动刷新**，手改它会被冲掉。⚠️ 代价：Copilot 将来新增的模型**不会自动出现**，要手工补进 models.json。
 ⛔ 不用 `codex/gpt-5.6-sol`——实测该 workspace `out of credits`。
 
 ✅ **端到端计时**（2026-08-20 实测，含 bug 的 JS 文件 + 要求 `VERDICT:` 行）：
@@ -364,12 +365,13 @@ pi -p --provider github-copilot --model gpt-5.5 "{≤200 字符的 review_prompt
 |---|---|
 | `gpt-5.5` · `gpt-5.4` · `gpt-5.4-mini` | `none` `low` `medium` `high` `xhigh` |
 | `gpt-5.3-codex` | `low` `medium` `high` `xhigh` |
-| `claude-sonnet-4.6` 等 claude 系 | `low` `medium` `high` `max` |
+| ~~claude 系~~ | ⛔ 已从 pi 的 Copilot 通道移除（§3.2c）；Paseo 派 `claude/*` 时仍适用 `low`/`medium`/`high`/`max` |
 | `gemini-3.5-flash` | `minimal` `low` `medium` `high` |
-| `gemini-3.1-pro-preview` · `gpt-5-mini` | `low` `medium` `high` |
+| `gpt-5-mini` | `low` `medium` `high` |
+| ⚠️ `gpt-6-astra` · `grok-4.5/4.6` · `gemini-3.7/3.8-flash` · `mai-code-*` | **未实测** —— 2026-09-08 才出现在 Copilot 目录里 |
 | `pi/volcengine-*/kimi-k2.7-code` | ⚠️ `thinkingOptions` 为 `null`，⛔ 不要传 |
 
-**折算规则：只降不升。** `xhigh` → claude 系落 `max`、gemini 系落 `high`。
+**折算规则：只降不升。** `xhigh` → gemini 系落 `high`；Paseo 派 `claude/*` 时落 `max`。
 ⛔ **禁止静默升档**（会造成超预期 token 消耗）；降档必须在 §7 输出里回显，
 memory 记 `effectiveThinking` 字段留痕。
 

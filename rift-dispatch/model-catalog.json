@@ -1,5 +1,5 @@
 {
-  "version": "5.7.0",
+  "version": "5.8.0",
   "lastUpdated": "2026-09-08",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。",
@@ -1498,15 +1498,17 @@
       "auth": "~/.pi/agent/auth.json 已含 github-copilot",
       "models": [
         "⭐ gpt-5.5 —— 审查默认",
-        "备选（同为 GPT 族）：gpt-5.6-sol · gpt-5.6-luna · gpt-5.6-terra · gpt-5.4 · gpt-5.3-codex · gpt-5.4-mini · gpt-5.4-nano · gpt-5-mini · gpt-5.2 · gpt-5.2-codex · gpt-4.1",
-        "Gemini 族（另一个异构选择）：gemini-3.1-pro-preview · gemini-3.5-flash · gemini-3.6-flash · gemini-3.7-flash",
-        "🔴 claude-* 全系也在同一 store —— 属 Claude 族，⛔ 审主会话产出时不可用"
+        "GPT 族备选：gpt-5.6-sol · gpt-5.6-luna · gpt-5.6-terra · gpt-6-astra · gpt-5.4 · gpt-5.4-mini · gpt-5.3-codex · gpt-5-mini",
+        "Gemini 族：gemini-3.5-flash · gemini-3.6-flash · gemini-3.7-flash · gemini-3.8-flash",
+        "其他异族：grok-4.5 · grok-4.6 · mai-code-1-flash-picker · mai-code-1.1-flash",
+        "✅ claude-* 全族已移除（2026-09-08 用户要求）"
       ],
       "restriction": "⛔ 仅用于审查，不做开发（用户 2026-08-20 明确）。开发一律走 volcengine-coding。Copilot 额度只留给审查。",
       "claudeFamilyWarning": "🔴 github-copilot/claude-sonnet-4.6 属 Claude 族。主会话本身就是 Claude ⇒ 主会话自己写的代码/文档/配置⛔不得用它审（自审）。审主会话产物请用 gpt-5.4 / gpt-5.5 / gemini-*。",
       "verified": "✅ 2026-08-20 端到端实测：pi -p --provider github-copilot --model gpt-5.5 做真实审查任务，两轮分别 33s / 29s，正常返回分级结论。⇒ 此前『可能上百秒』的担心不成立——那是火山模型自身的延迟，不是 pi 的。",
-      "modelsSourceOfTruth": "~/.pi/agent/models-store.json（2026-08-28 实测 33 个模型，非 Claude 族 22 个）。⛔ 本字段与 whitelist.exempt / routing §5 / SKILL §3.2c 必须一致，改一处要同步四处。",
-      "_fixedNote": "⚠️ 2026-08-28 修：本字段此前有两行重复的 gpt-5.5（gpt-5.4→gpt-5.5 全文替换的残留），v11.1 只修了 md 侧、漏了这份"
+      "modelsSourceOfTruth": "~/.pi/agent/models.json 的 github-copilot provider（2026-09-08 实测 17 个可用）。🔴 该 provider 是**显式定义用来覆盖 models-store.json** 的——store 会按 etag 自动刷新，手改会被冲掉。⚠️ 代价：Copilot 新增模型不会自动出现，要手工补。⚠️ store 里的 gpt-5.4-nano / kimi-k3 / kimi-k2.7-code 本订阅实际不支持（model_not_supported）",
+      "_fixedNote": "⚠️ 2026-08-28 修：本字段此前有两行重复的 gpt-5.5（gpt-5.4→gpt-5.5 全文替换的残留），v11.1 只修了 md 侧、漏了这份",
+      "claudeRemoved": "🔴 2026-09-08 用户要求移除 Copilot 的 Claude 系列（8 个）。理由：主会话就是 Claude，留在审查通道里容易误用成自审。✅ 已验证：pi --list-models 零 claude；点名 claude-opus-5 返回 model_not_supported；gpt-5.5 仍正常"
     },
     "whyNotPiCliForDev": "🔴 不是 pi 不行，是 pi -p 这条 CLI 路径你看不见：one-shot 进程不进 Paseo agent 列表 ⇒ Paseo Desktop 看不到进度、无法中途干预、拿不到 get_agent_status，只有日志文件。用户明确要求过『派发子任务走 paseo mcp，为的是能看进度、能干预』，memory 亦有『派发任务必须拆细+可见，不用黑盒』。✅ 正解 = Paseo MCP 派 pi，而不是在 Paseo 与 pi 之间二选一。",
     "paseoPiProvider": {
