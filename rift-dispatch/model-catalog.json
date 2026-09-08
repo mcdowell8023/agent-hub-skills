@@ -1,6 +1,6 @@
 {
-  "version": "5.3.0",
-  "lastUpdated": "2026-08-28",
+  "version": "5.7.0",
+  "lastUpdated": "2026-09-08",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。",
     "codebuddy-code": [
@@ -66,6 +66,16 @@
         "gm51model",
         "kmodel",
         "mmodel"
+      ],
+      "jdcloud-joyagent": [
+        "GLM-5.2",
+        "GLM-5.1",
+        "Kimi-K2.6",
+        "MiniMax-M2.7",
+        "qwen3.6-27b",
+        "qwen3.6-35b-a3b",
+        "qwen3-vl-235",
+        "JoyAI-LLM-Flash"
       ]
     },
     "consequences": [
@@ -74,7 +84,12 @@
       "✅ K3 于 2026-08-16 恢复启用，但用户明确要求『很贵很贵，不要随意使用』——见 models.kimi-k3-1.costWarning",
       "✅ deepseek-v4-pro 正式版重测后不再是『无推荐场景』，但角色是**升档档位**（flash 做砸才用），⛔ 不是任何类型的默认落点——2026-08-20 撤销了 v10.1 的 algorithm 直派"
     ],
-    "_pendingDecision": "⚠️ 待用户裁定（暂列 closed）：hy4-preview-x(0.29x 同名收费版) · hy3-x(0.05x)。⛔ 这两个的 label 与免费版完全相同，开启前必须确认派发侧按 id 匹配。✅ glm-5.3-flash 已于 2026-08-28 开启，见 models['glm-5.3-flash']"
+    "_pendingDecision": "⚠️ 待用户裁定（暂列 closed）：hy4-preview-x(0.29x 同名收费版) · hy3-x(0.05x)。⛔ 这两个的 label 与免费版完全相同，开启前必须确认派发侧按 id 匹配。✅ glm-5.3-flash 已于 2026-08-28 开启，见 models['glm-5.3-flash']",
+    "jdcloud-joyagent": [
+      "DeepSeek-V4-pro",
+      "DeepSeek-V4-Flash"
+    ],
+    "_jdcloudNote": "🔴 用户 2026-09-08 明确：「JD 云仍然只使用 DeepSeek」。上面 closed 的 8 个**已在 ~/.pi/agent/models.json 配好且逐个实跑通过**——留着是为了保住实测结论，⛔ 不是为了派发。⚠️ jdcloud-joyagent 因此**不在 whitelist.exempt 里**：它虽是独立钱包（积分制），但同样受白名单约束。"
   },
   "providerRateSnapshot": {
     "_note": "paseo list_models 实测，用于对照 models.*.providers.*.credit 是否过期",
@@ -976,6 +991,57 @@
         "thinkingOptionId": "high",
         "verifyAfterCreate": "⛔ 创建后核 runtimeInfo.model，list_models 里有 id 不代表派它会生效"
       }
+    },
+    "jd-DeepSeek-V4-pro": {
+      "label": "DeepSeek-V4-pro",
+      "providers": {
+        "jdcloud-joyagent": {
+          "modelId": "DeepSeek-V4-pro",
+          "basePricePointsPerMillion": {
+            "input": 12000,
+            "output": 24000,
+            "cachedInput": 1000
+          },
+          "discountQuota": 0.7,
+          "effectivePointsPerMillion": {
+            "input": 8400,
+            "output": 16800,
+            "cachedInput": 700
+          },
+          "contextWindow": 1000000,
+          "maxTokensCeiling": 393216,
+          "priceNote": "⭐ **7 折**：原价 12,000/24,000/1,000 → 实付 8,400/16,800/700 积分每百万，控制台明确标 `30% off`。⚠️ offlineTime=null，未标注截止日期，金额敏感时先复核控制台。⚠️ 即使 7 折后仍是 V4-Flash 的 6 倍（8,400 vs 1,400）⇒ 升档纪律不变"
+        }
+      },
+      "preferredProvider": "jdcloud-joyagent",
+      "wallet": "积分制 —— ⛔ 与 cb/qcn credits、火山套餐、Copilot 都是不同钱包",
+      "family": "DeepSeek —— 🔴 用它实施时，异构评审⛔不得用 DeepSeek 全族",
+      "dispatchRank": 91
+    },
+    "jd-DeepSeek-V4-Flash": {
+      "label": "DeepSeek-V4-Flash",
+      "providers": {
+        "jdcloud-joyagent": {
+          "modelId": "DeepSeek-V4-Flash",
+          "basePricePointsPerMillion": {
+            "input": 1400,
+            "output": 2800,
+            "cachedInput": 280
+          },
+          "effectivePointsPerMillion": {
+            "input": 1400,
+            "output": 2800,
+            "cachedInput": 280
+          },
+          "contextWindow": 1000000,
+          "maxTokensCeiling": 393216,
+          "priceNote": "⛔ **无折扣**：1,400/2,800/280 积分每百万就是挂牌价（控制台无划线价、无折扣徽标）"
+        }
+      },
+      "preferredProvider": "jdcloud-joyagent",
+      "wallet": "积分制 —— ⛔ 与 cb/qcn credits、火山套餐、Copilot 都是不同钱包",
+      "family": "DeepSeek —— 🔴 用它实施时，异构评审⛔不得用 DeepSeek 全族",
+      "dispatchRank": 90
     }
   },
   "claudeModels": {
@@ -1546,5 +1612,161 @@
     "verdict": "同口径两题 66 vs 67 基本打平，而 glm-5.3-flash 便宜 2.8 倍 ⇒ 作为 T1 付费起点成立。分项反向分化：算法/并发 v4-flash 强，架构 glm-5.3-flash 强 5 分",
     "_note": "二臂头对头：glm-5.3-flash vs deepseek-v4-flash。题库与 hy4Eval_20260821 逐字同题，thinking=high，创建后核 runtimeInfo 无静默降级，匿名 A/B 且位置逐题轮换，评委 github-copilot/gpt-5.5，prompt ≤200 字符，三题在同一次评分中完成",
     "report": "~/AgentWorkspace/tmp/hy4-benchmark-20260821/"
+  },
+  "jdVsVolcEval_20260908": {
+    "_note": "回答『京东那份 DeepSeek-V4-pro 是不是 preview 老版本』。⛔ 问的是版本代次，不是排名",
+    "date": "2026-09-08",
+    "verdict": "✅ 不是 preview，与 volcengine-coding/deepseek-v4-pro 同代",
+    "evidence": [
+      "✅ **承重的只有这一条**：同轮盲评 JD 108 vs 火山 104，且 JD 架构题 37，而 06-28 那个疑似 preview 的旧版架构题只有 24",
+      "🔻 弱：max_tokens 上限 393216 两侧一致 —— 官方页写明输出上限 384K，V4 全代通用",
+      "🔻 弱：tokenizer 一致（prompt_tokens 51729）—— 同族本就同分词",
+      "🔻 弱：60k 长上下文两侧 3/3 —— 官方页写明上下文 1M，全代通用"
+    ],
+    "scores": {
+      "jd": {
+        "lru": 36,
+        "concurrency": 35,
+        "kafka": 37,
+        "total": 108
+      },
+      "volc": {
+        "lru": 31,
+        "concurrency": 38,
+        "kafka": 35,
+        "total": 104
+      }
+    },
+    "caveats": [
+      "⛔ 4 分/120 在噪声内 —— 这一格只用来证【同级】，⛔ 不用来排名",
+      "⛔ 证明不了字节级同一份权重；用户问的是版本代次",
+      "⚠️ 本轮 thinking=medium，历史 86/96 是 high 档且不同 prompt 批次 ⇒ 绝对分不可与历史横比",
+      "⚠️ 思考量不是判据：三题方向不一致（LRU 1.65× / 并发 0.58× / Kafka 2.42×）"
+    ],
+    "ruledOut": [
+      "temp=0 权重指纹（两臂自一致性都不够，臂间相似度甚至高于臂内）",
+      "自述版本号（n=5/臂，两侧自己都不稳）"
+    ],
+    "cheapProbesForNextTime": "⭐ 判断两 endpoint 是否同代，先用这两个近乎零成本的探针：① 发 max_tokens:500000 的极短请求，网关在计费前拒绝并返回真实上限；② 同一段输入比 prompt_tokens。⛔ 盲评贵且有噪声，它答的是『谁更强』不是『是不是同一代』",
+    "report": "~/AgentWorkspace/tmp/dsv4-jd-vs-volc/",
+    "selfCorrection": "🔴 2026-09-08 修正：最初把这四条并列成「四条独立证据」，读了官方定价页才发现后三条是 **V4 全代通用规格**，任何快照都一样，⛔ 不构成区分度。结论（同代、非 preview）仍成立，但支撑面比原先声称的窄。⚠️ 官方当前版本号 DeepSeek-V4-Pro-0813，与 catalog 时间线（06-28 测 86 → 08-16 重测 96）吻合。"
+  },
+  "jdcloudPoints_20260908": {
+    "conversion": "**1,000 积分 = ¥1**",
+    "expiry": "⚠️ 积分有效期一年，⛔ 不是永久额度"
+  },
+  "walletPriority": {
+    "_note": "🔴 用户 2026-09-08 决定。⛔ 与档位阶梯正交：档位决定【用哪个模型】，本表决定【从哪个 provider 拿】",
+    "order": [
+      {
+        "rank": 1,
+        "wallets": [
+          "volcengine-coding",
+          "volcengine-agent-plan",
+          "volcengine-chat",
+          "codebuddy-code"
+        ],
+        "nature": "已付费套餐",
+        "marginalCost": "≈0"
+      },
+      {
+        "rank": 2,
+        "wallets": [
+          "jdcloud-joyagent"
+        ],
+        "nature": "积分（流量包购买有优惠，优于其他平台）",
+        "marginalCost": "已买入的积分，⚠️ 有效期一年"
+      },
+      {
+        "rank": 3,
+        "wallets": [
+          "deepseek"
+        ],
+        "nature": "🔴 官方 API，现金，走个人账户",
+        "marginalCost": "真金白银 ⛔ 永远只做兜底",
+        "blocked": "⚠️ 目前仍在 opencode 的 disabled_providers 里（2026-08-20 加）⇒ 真要用得先解除禁用"
+      }
+    ],
+    "modelProviderPreference": {
+      "deepseek-v4-pro": {
+        "first": "jdcloud-joyagent",
+        "then": [
+          "codebuddy-code",
+          "volcengine-coding"
+        ],
+        "fallback": "deepseek（官方 API，现金）",
+        "why": "🥇 京东 pro 有 7 折特价；且 cb 的 0.51x 烧 credits 太快，把 pro 挪走能护住 cb 额度"
+      },
+      "deepseek-v4-flash": {
+        "first": "volcengine-coding",
+        "then": [
+          "codebuddy-code"
+        ],
+        "fallback": "jdcloud-joyagent → deepseek（官方 API）",
+        "why": "两者都是已付费套餐，边际成本≈0；⛔ flash 不走京东，把积分省给 pro"
+      },
+      "glm-5.3-flash": {
+        "first": "volcengine-coding",
+        "then": [
+          "codebuddy-code"
+        ],
+        "why": "⚠️ 按同一钱包规则**推得**（用户未单独指定）：两者同属已付费套餐，火山在前。⭐ 2026-09-08 才发现火山也有 glm-5.3-flash，此前只配了 cb"
+      }
+    },
+    "othersUnchanged": "⚠️ 其余模型按原顺序（escalation + 降级链），本表只改 DeepSeek 两个型号的 provider 落点"
+  },
+  "deepseekOfficialPricing_20260908": {
+    "_note": "官方定价页实读，用于判断京东/火山/cb 相对官方现金价的位置",
+    "source": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing",
+    "modelVersion": {
+      "deepseek-v4-pro": "DeepSeek-V4-Pro-0813",
+      "deepseek-v4-flash": "DeepSeek-V4-Flash-0731"
+    },
+    "cnyPerMillionTokens": {
+      "deepseek-v4-pro": {
+        "inputCacheHit": {
+          "offPeak": 0.15,
+          "peak": 0.3
+        },
+        "inputCacheMiss": {
+          "offPeak": 4.5,
+          "peak": 9.0
+        },
+        "output": {
+          "offPeak": 13.5,
+          "peak": 27.0
+        }
+      },
+      "deepseek-v4-flash": {
+        "inputCacheHit": {
+          "offPeak": 0.05,
+          "peak": 0.1
+        },
+        "inputCacheMiss": {
+          "offPeak": 1.5,
+          "peak": 3.0
+        },
+        "output": {
+          "offPeak": 4.5,
+          "peak": 9.0
+        }
+      }
+    },
+    "peakWindow": "北京时间周一至周五 9:00-12:00、14:00-18:00；其余为空闲。空闲价 = 高峰价的一半",
+    "vsJdcloud": "⛔ 京东 pro 7 折后 ¥8.4 输入，落在官方空闲(¥4.5)与高峰(¥9.0)之间——比空闲贵 1.87 倍。🔴 缓存命中差最大：京东 ¥0.7 vs 官方空闲 ¥0.15，贵 4.7 倍。⇒ 选京东**不是因为单价最低**，是因为钱包优先级（官方花现金）",
+    "specNote": "⚠️ 官方页写明上下文 1M、输出上限 384K —— 这是 V4 全代通用规格，⛔ 不能用它来区分某个 gateway 服务的是哪个快照"
+  },
+  "volcengineAliases_20260908": {
+    "_note": "🔴 火山 model id 大量是别名，⛔ 不能按字面理解。以下为实测 model 回显",
+    "aliases": {
+      "glm-5.2": "glm-5.3",
+      "glm-latest": "glm-5.3",
+      "deepseek-v4-flash": "deepseek-v4-flash-ga-260731",
+      "deepseek-v4-flash-260425": "deepseek-v4-flash-ga-260731"
+    },
+    "previewRetired": "⭐ 0425 preview 快照已被别名到 GA —— 点名要 `deepseek-v4-flash-260425` 拿到的也是 ga-260731",
+    "proOpaque": "⚠️ deepseek-v4-pro 的三个 id 都只回显 `deepseek-v4-pro`，⛔ 不暴露快照",
+    "jdcloudCantUse": "⚠️ 京东侧⛔不认 ARK 快照 id（返回『模型不存在』），也只回显请求名",
+    "modelsEndpoint": "⭐ GET <baseUrl>/models 在 Coding Plan 可用（130 个 ARK 原始 id），Agent Plan 返回 404。⚠️ 那 130 个是 ARK 全量目录，**别名不在里面** ⇒ ⛔ 不能拿它判断某 id 可不可用，只能直接发请求试"
   }
 }

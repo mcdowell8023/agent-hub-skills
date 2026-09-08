@@ -29,6 +29,12 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 
 ⚠️ **免费档时间线**：`08-31 hy3 止` → `09-12 hy4 止` → 免费档清零，默认落点变成 `glm-5.3-flash`。
 
+🔴 **钱包优先级**（routing §3.5，与档位阶梯**正交**）：
+① 火山 / codebuddy **已付费套餐**（边际成本≈0）→ ② 京东云**积分**（流量包有优惠）→ ③ ⛔ DeepSeek 官方 API（**现金**，永远兜底）。
+⇒ **`deepseek-v4-pro` 首选京东**（7 折特价）· **`deepseek-v4-flash` 首选火山、次选 codebuddy**（⛔ flash 不走京东）。其余按原顺序。
+
+🔴 **京东云通道 ⛔ 只用 DeepSeek**（`DeepSeek-V4-pro` / `DeepSeek-V4-Flash`），它是**积分制第三个钱包**，不动 cb credits 也不动火山套餐。⚠️ `DeepSeek-V4-pro` 当前 **7 折**，见 routing §3.4。
+
 ## Prerequisites
 
 1. Read **model-routing.md**（模型选择 + provider 路由 + 降级链 + 门禁依据）。
@@ -67,9 +73,11 @@ parse_args(user_input)
 
 # ── P0 白名单：一切选择先过这一关（routing §1）────────────────────────
 WHITELIST = {
-  'codebuddy-code': ['hy4-preview', 'hy3', 'glm-5.3-flash',
-                     'deepseek-v4-flash', 'deepseek-v4-pro', 'kimi-k3-2'],
-  'qoderclicn':     ['qmodel_38max'],
+  'codebuddy-code':   ['hy4-preview', 'hy3', 'glm-5.3-flash',
+                       'deepseek-v4-flash', 'deepseek-v4-pro', 'kimi-k3-2'],
+  'qoderclicn':       ['qmodel_38max'],
+  # 🔴 京东云是【积分制第三个钱包】，但同样受白名单约束：⛔ 只准 DeepSeek
+  'jdcloud-joyagent': ['DeepSeek-V4-pro', 'DeepSeek-V4-Flash'],
 }
 # ⚠️ 只约束【消耗 cb/qcn 额度】的两个 provider。以下走别的钱包，⛔ 不进白名单校验：
 #     pi/volcengine-*/*  · pi -p --provider github-copilot  · claude/*  · codex/*
@@ -80,6 +88,9 @@ EXEMPT_PROVIDERS   = [                   # 走别的钱包，不校验模型（�
   'github-copilot',                                             # 审查通道
   'volcengine-coding', 'volcengine-agent-plan', 'volcengine-chat',   # 火山三套餐
 ]
+# ⚠️ jdcloud-joyagent ⛔ 不在豁免集里 —— 它有自己的白名单（只准 DeepSeek 两个），见上。
+#    2026-09-08 用户明确：「JD 云仍然只使用 DeepSeek」。平台上另有 GLM/Kimi/MiniMax/Qwen 共 8 个
+#    已在 ~/.pi/agent/models.json 配好且实跑通过，⛔ 但不派发。
 
 # ── P1 用户显式指定 ────────────────────────────────────────────────
 if args.model:
@@ -154,8 +165,25 @@ if i > 3:
 if i == 3:
     assert failed(LADDER[2][0])          # 兜底断言：能到 T4，v4-pro 必已砸过（routing §3.3）
     warn('🔴 K3 1.62x，派完必须核 git log 是否真有 commit（0723 空转前科）')
-model, provider, thinking = LADDER[i][0], 'codebuddy-code', 'xhigh'
+model, thinking = LADDER[i][0], 'xhigh'
 # ⛔ 这里没有 `or args.model == 'k3'` 分支 —— 用户显式指定在 P1 就 goto EXECUTE 了，走不到这。
+
+# ── P5b 选 provider：钱包优先级（routing §3.5，与档位正交）────────────
+# 🔴 档位决定【用哪个模型】，钱包决定【从哪个 provider 拿】。⛔ 别混成一件事。
+#    钱包顺序：① 火山/cb 已付费套餐（边际成本≈0） → ② 京东积分 → ③ 官方 API（现金，⛔ 永远兜底）
+WALLET_PREF = {
+  'deepseek-v4-pro':   ['jdcloud-joyagent',      # 🥇 7 折特价，且把 pro 挪走能护住 cb credits
+                        'codebuddy-code', 'volcengine-coding'],
+  'deepseek-v4-flash': ['volcengine-coding',     # 🥇 已付费套餐
+                        'codebuddy-code'],       # ⛔ flash 不走京东，积分省给 pro
+  'glm-5.3-flash':     ['volcengine-coding',     # ⚠️ 按同一钱包规则推得，用户未单独指定
+                        'codebuddy-code'],       # ⭐ 09-08 才发现火山也有它
+}
+# ⚠️ 火山 id 多为别名：glm-5.2/glm-latest → glm-5.3；deepseek-v4-flash → -ga-260731
+#    ⛔ GET /models 只返回 ARK 全量原始 id，别名不在里面，判断可用性只能直接发请求（routing §7）
+provider = first_available(WALLET_PREF.get(model, ['codebuddy-code']))
+# ⚠️ 京东侧 model id 大小写不同：DeepSeek-V4-pro / DeepSeek-V4-Flash（⛔ 不是 cb 的全小写）
+# ⚠️ deepseek/* 官方 API 仍在 opencode 的 disabled_providers 里 ⇒ 真要兜底得先解除禁用
 
 # ⛔ 没有时段分支。credits 制通道已无任何时段性折扣，⛔ 不要再写 is_night()——
 #    它曾把按类型选出的高档模型无条件冲掉（2026-08-12 异构审）。
