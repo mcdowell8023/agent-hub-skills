@@ -46,8 +46,14 @@ chk('jdcloud' not in re.search(r"'deepseek-v4-flash':.*?\],", S, re.S).group(0),
 for fn in ('split_provider','normalize_provider','build_settings'):
     chk(f'def {fn}' in S, f"缺 {fn}()")
 chk('build_settings(provider, model, thinking)' in S, "模板调用签名与定义不符")
-chk('args.model or args.provider' in S, "P1 条件必须覆盖只给 provider 的情况")
+# ⚠️ 断言查【性质】，⛔ 别查具体实现字符串（改写法就假失败，本轮踩过）
+chk('def validate(' in S, "缺统一的 validate()")
 chk('upstream in WHITELIST' in S, "校验必须对 upstream 做")
+chk(re.search(r'if args\.provider', S) is not None, "P1 必须单独处理只给 provider 的情况")
+chk(S.count('validate(upstream, model)') >= 2, "validate 必须在 P1 与自动分支两处都调用")
+chk(re.search(r'^channel = ', S, re.M) is not None, "channel 必须有赋值点（⛔ 不能是悬空变量）")
+for dangling in ('pick_provider_for','default_model_for'):
+    chk(dangling not in S, f"⛔ {dangling} 是悬空引用，无定义")
 
 # 5. 审查按规模分流，无「审查整类 → pi -p」残留
 chk('is_large_review' in S, "P4 未按规模分流")

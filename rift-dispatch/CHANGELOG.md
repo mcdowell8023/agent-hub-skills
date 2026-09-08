@@ -2,6 +2,27 @@
 
 ## v11.2 (2026-09-08)
 
+### 🔴 自查：第二轮修复自己带了两个悬空引用
+
+派第三轮复审的同时自己先查，结果两条都实锤——**都是第二轮修复引入的**：
+
+| 位置 | 问题 |
+|---|---|
+| `SKILL.md` 两处调用 | **`channel` 变量从未被赋值**，却在 `normalize_provider(upstream, channel)` 里用 |
+| `SKILL.md` 两处调用 | **`pick_provider_for()` / `default_model_for()` 无定义**，纯悬空 |
+
+根因：为了修「显式路径没做前缀规范化」，我临时造了两个函数名就用上了，没定义。
+
+⇒ 重构掉，⛔ 不再靠新造函数：抽一个 `validate(upstream, model)`（model 允许为 None，
+此时只校验 provider），P1 里 provider 与 model **各自独立判断**，只给其一时⛔不在 P1 补另一半，
+而是继续走正常流程、在 P5b 末尾再 `validate()` 一次。`channel` 在新的 `CHANNEL:` 段按
+「要不要看得见」显式赋值。
+
+**⚠️ 校验脚本也暴露了一个设计问题**：它断言 `'args.model or args.provider' in S` ——
+查的是**实现字符串**而不是**不变量**。我一重构写法，它就假失败。
+⇒ 断言改成查性质：`validate()` 有定义、`if args.provider` 分支存在、
+`validate(upstream, model)` 至少被调两次、`channel` 有赋值点、两个悬空函数名不得出现。
+
 ### 🔴 第二轮复审又 FAIL —— 8 个 ❌，一半是我上轮「只修了被点名那一处」
 
 复审分类很说明问题：

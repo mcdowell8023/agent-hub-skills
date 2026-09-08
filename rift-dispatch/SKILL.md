@@ -99,37 +99,38 @@ def split_provider(s):
 #    2026-09-08 用户明确：「JD 云仍然只使用 DeepSeek」。平台上另有 GLM/Kimi/MiniMax/Qwen 共 8 个
 #    已在 ~/.pi/agent/models.json 配好且实跑通过，⛔ 但不派发。
 
-# 🔴 Paseo 通道下这些上游必须带 `pi/` 前缀；CLI 通道⛔不带。抽出来供 P1 与 P5b 共用，
-#    ⛔ 别只在自动分支里做规范化——显式指定那条路同样要走（否则拼出 codebuddy 形态的串）
+# 🔴 Paseo 通道下这些上游必须带 `pi/` 前缀；CLI 通道⛔不带
 PI_HOSTED = ('jdcloud-joyagent', 'volcengine-coding', 'volcengine-agent-plan',
              'volcengine-chat', 'github-copilot')
 def normalize_provider(upstream, channel):
     return f'pi/{upstream}' if (channel == 'paseo' and upstream in PI_HOSTED) else upstream
 
-# ── P1 用户显式指定 ────────────────────────────────────────────────
-# 🔴 只要 model 或 provider 任一被显式给出就要进来 —— ⛔ 不能只判 args.model：
-#    只给 --provider 不给 --model 时，那个 provider 就完全没过 P0 校验
-if args.model or args.provider:
-    raw_provider = args.provider                     # ⚠️ 可能为 None
-    model = resolve_short_name(args.model) if args.model else None
-    if raw_provider is None:
-        # 只给了 model：先按钱包规则定 provider（P5b 同一套），再回来校验
-        raw_provider, model = pick_provider_for(model)
-    host, upstream = split_provider(raw_provider)     # 🔴 一律先拆，⛔ 别拿整串去比
-    # 🔴 三层依次判，⛔ 不能只写「provider 在白名单里才校验」——
-    #    那样传一个不在 WHITELIST 键里的 provider（如 deepseek）会让整个校验静默跳过
+def validate(upstream, model):
+    """🔴 P0 校验。⛔ 三层依次判 —— 不能只写「provider 在白名单里才校验」，
+       那样传一个不在 WHITELIST 键里的 provider（如 deepseek）会让整个校验静默跳过。
+       ⚠️ model 允许为 None（此时只校验 provider 本身）。"""
     if upstream in DISABLED_PROVIDERS:
-        report_disabled_and_stop()          # ⛔ 已停用，不给降级建议之外的出路
+        report_disabled_and_stop()          # ⛔ 已停用
     elif upstream in WHITELIST:
-        if model not in WHITELIST[upstream]:
-            report_conflict_and_stop()      # ⛔ 不擅自替换成相近模型
-                                            #    ⇒ pi/jdcloud-joyagent/GLM-5.2 在这里被拦
+        if model is not None and model not in WHITELIST[upstream]:
+            report_conflict_and_stop()      # ⇒ pi/jdcloud-joyagent/GLM-5.2 在这里被拦
     elif upstream not in EXEMPT_PROVIDERS:
-        report_unknown_provider_and_stop()  # ⛔ 未知 provider 一律停，不放行
-    if model is None:                       # 只给了 provider：按该 provider 的默认档位补 model
-        model = default_model_for(upstream)
-    provider = normalize_provider(upstream, channel)   # 🔴 显式路径同样要规范化前缀
-    use(model); goto EXECUTE
+        report_unknown_provider_and_stop()  # ⛔ 未知 provider 一律停
+
+# ── P1 用户显式指定 ────────────────────────────────────────────────
+# 🔴 provider 与 model 各自独立地可能被指定，⛔ 不能只判 args.model：
+#    只给 --provider 时，那个 provider 同样必须过 P0。
+upstream = model = None
+if args.provider:
+    _, upstream = split_provider(args.provider)      # 🔴 一律先拆，⛔ 别拿整串去比
+if args.model:
+    model = resolve_short_name(args.model)
+if upstream is not None:
+    validate(upstream, model)                        # model 可为 None，只校验 provider
+if upstream is not None and model is not None:
+    goto CHANNEL                                     # 两个都给了 ⇒ 直接进通道选择
+# 只给其一时⛔不在这里补另一半 —— 让它继续走 P3~P5b 的正常流程，
+# 选完之后在 P5b 末尾再 validate 一次（见下）。
 
 # ── P2 --free → 交给 rift-free skill ───────────────────────────────
 if args.free: delegate('rift-free'); return
@@ -214,8 +215,16 @@ WALLET_PREF = {
   'glm-5.3-flash':     [('volcengine-coding', 'glm-5.3-flash'),      # ⚠️ 按同一钱包规则推得
                         ('codebuddy-code',    'glm-5.3-flash')],
 }
-upstream, model = first_available(WALLET_PREF.get(model, [('codebuddy-code', model)]))
-provider = normalize_provider(upstream, channel)   # 🔴 与 P1 共用同一个函数，⛔ 别写两份
+# ⚠️ 用户已显式指定的那一半⛔不许被覆盖
+if args.provider is None:
+    upstream, model = first_available(WALLET_PREF.get(model, [('codebuddy-code', model)]))
+validate(upstream, model)          # 🔴 自动选出来的组合同样要过 P0，⛔ 别只在 P1 校验
+
+CHANNEL:
+# 🔴 channel 在这里定，⛔ 它不是凭空存在的变量：判据是「要不要看得见」（§3 通道判据总表）
+channel = 'paseo' if (task_type != 'review' and is_dev_task(task_type)) or is_large_review(scope) \
+          else 'cli'
+provider = normalize_provider(upstream, channel)   # 🔴 P1 与自动分支共用，⛔ 别写两份
 # ⚠️ 火山 id 多为别名：glm-5.2/glm-latest → glm-5.3；deepseek-v4-flash → -ga-260731
 #    ⛔ GET /models 只返回 ARK 全量原始 id，别名不在里面，判断可用性只能直接发请求（routing §7）
 # ⚠️ deepseek/* 官方 API 仍在 opencode 的 disabled_providers 里 ⇒ 真要兜底得先解除禁用
