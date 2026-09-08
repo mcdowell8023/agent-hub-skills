@@ -1,5 +1,5 @@
 {
-  "version": "5.8.0",
+  "version": "5.9.0",
   "lastUpdated": "2026-09-08",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。",
@@ -30,7 +30,7 @@
       "volcengine-chat": [
         "🔸 仅当需消耗 Agent Plan 额度且要控思考强度时：deepseek-v4-flash / deepseek-v4-pro / ark-code-latest（Chat API，--variant 有效）"
       ],
-      "github-copilot": "⭐ 审查通道，⛔ 仅审查不做开发。可用模型以 ~/.pi/agent/models-store.json 为准：gpt-5.5 · gpt-5.6-sol · gpt-5.6-luna · gpt-5.6-terra · gpt-5.4 · gpt-5.3-codex · gpt-5.4-mini · gpt-5.4-nano · gpt-5-mini · gpt-5.2 · gpt-5.2-codex · gpt-4.1 · gemini-3.1-pro-preview · gemini-3.5-flash · gemini-3.6-flash · gemini-3.7-flash；🔴 claude-* 属 Claude 族不可审主会话产出",
+      "github-copilot": "⭐ 审查通道，⛔ 仅审查不做开发。🔴 真源是 `~/.pi/agent/models.json` 的 github-copilot provider（⛔ 不是 models-store.json，那个会自动刷新）。2026-09-08 实测可用 **17 个**：gpt-5.5(⭐审查默认) · gpt-5.6-sol · gpt-5.6-luna · gpt-5.6-terra · gpt-6-astra · gpt-5.4 · gpt-5.4-mini · gpt-5.3-codex · gpt-5-mini · gemini-3.5-flash · gemini-3.6-flash · gemini-3.7-flash · gemini-3.8-flash · grok-4.5 · grok-4.6 · mai-code-1-flash-picker · mai-code-1.1-flash。✅ claude-* 全族已移除。⚠️ store 里的 gpt-5.4-nano / kimi-k3 / kimi-k2.7-code 本订阅实际不支持",
       "claude": [
         "⚠️ 可派不推荐，消耗 Claude 订阅额度，建议留主会话"
       ],
@@ -153,12 +153,13 @@
       "stillValid": "opencode 官方 DeepSeek 的峰谷定价（高峰 09-12/14-18 ×2）是 DeepSeek 自己的 API 计价规则，与本条无关，仍然有效"
     },
     "escalation": {
-      "rule": "T0 cb/hy4-preview (0.00x，至 09-12) → cb/hy3 (0.00x，至 08-31) → T1 cb/glm-5.3-flash (0.06x) → T2 cb/deepseek-v4-flash (0.17x) → T3 cb/deepseek-v4-pro (0.51x) → T4 cb/kimi-k3-2 (1.62x)",
+      "rule": "T0 hy4-preview (0.00x，至 09-12) → hy3 (0.00x，至 08-31) → T1 glm-5.3-flash → T2 deepseek-v4-flash → T3 deepseek-v4-pro → T4 kimi-k3-2",
       "toK3Condition": "⛔ 要 v4-pro 也做砸才升 K3。⛔ 不做预防性升档（2026-08-02 n=1 + 2026-08-06 n=12 两次实测支撑）。K3 是 v4-flash 的 9.5 倍、glm-5.3-flash 的 27 倍。",
       "k3Status": "✅ 2026-08-16 用户恢复启用，作为极致档 / 唯一升档目标。原 P5.4『0723 实测不可靠、定弃用、改派 M3』的结论失效（M3 也已关闭）。⚠️ 0723 观察到的现象保留为已知风险：反复空转、报进度就 idle、git 无产出 —— 派完必须核 git 是否真有 commit",
       "noFallbackForK3": "🔴 K3 撞限额时无替代（白名单内唯一 S 级），只能报告用户 —— 这是 M3 关闭后新出现的单点",
       "toV4ProCondition": "⛔ 唯一入口：上一档已在【本任务】做砸过一轮。它 0.51x、贵 deepseek-v4-flash(0.17x) **3.0 倍**、贵 glm-5.3-flash(0.06x) 8.5 倍；而 K3 贵 v4-flash **9.5 倍**。⇒ 升档时升 v4-pro、⛔ 不要跳 K3。⛔ 仍不做预防性升档。",
-      "entryTierSourceOfTruth": "dispatchDefaults.entryTier（⛔ 唯一真源，⛔ 不要在别处再写一份）"
+      "entryTierSourceOfTruth": "dispatchDefaults.entryTier（⛔ 唯一真源，⛔ 不要在别处再写一份）",
+      "ruleNote": "🔴 本字段只列【模型档位】，⛔ 不再写 provider —— provider 由 walletPriority.modelProviderPreference 决定（两者正交）"
     },
     "supersedes": "白名单（约束 6）吸收了 07-28『qcn 只准派 Qwen3.8-Max』与 08-02『GLM-5.2 全面禁用』；08-02『夜间默认 qcn』已作废（前提消失）",
     "modelFamilyPreference": {
@@ -607,7 +608,6 @@
           "creditNote": "2026-08-21 list_models 实测。⚠️ 与已关闭的 glm-5.3(0.79x) 是两个 id，别混"
         }
       },
-      "preferredProvider": "codebuddy-code",
       "selectableByDefault": true,
       "dispatchRank": 3,
       "dispatchNote": "⭐ T1 付费起点（2026-08-28 用户开启）。免费档被排除或到期后的默认落点，⭐ architecture 类也从这里起步（h2hEval_20260828 Kafka 36 > v4-flash 31）。⛔ algorithm / perf / concurrency-实现 三类跳过它，直接从 T2 起步。做砸一轮才升 T2。thinking 用 xhigh。",
@@ -621,7 +621,9 @@
         "total": 98,
         "vsDeepseekV4Flash": "同口径两题（并发+Kafka）67 vs 66 打平；⚠️ LRU 一格不同口径不可用作证据"
       },
-      "paseo": {
+      "providerSelectionSource": "🔴 walletPriority.modelProviderPreference —— ⛔ 唯一真源。本条目的 preferredProvider / paseo 字段是【历史遗留】，⛔ 不得用于选 provider",
+      "preferredProvider_deprecated": "codebuddy-code",
+      "paseo_deprecated": {
         "provider": "codebuddy-code/glm-5.3-flash",
         "modeId": "bypassPermissions",
         "thinkingOptionId": "xhigh",
@@ -673,7 +675,6 @@
           "note": "⭐ Coding Plan（独立额度，opencode 默认落点）；Chat API，--variant off/on 有效；context 1,024,000"
         }
       },
-      "preferredProvider": "codebuddy-code",
       "bestFor": [
         "core",
         "test",
@@ -692,12 +693,6 @@
       "dispatchRank": 4,
       "dispatchNote": "⭐ T2 主力档 + DeepSeek 族首选。T1 做砸一轮后接手；⛔ algorithm / perf / concurrency-实现 三类直接从这里起步（h2hEval_20260828 这三类它领先）。⚠️ architecture 类 2026-08-28 改由 T1 的 glm-5.3-flash 起步（本轮 Kafka 31 < glm 36）。thinking 用 xhigh。",
       "note": "三题均 32 分，是全部已测模型中最均衡的（无短板）。并发题正确识别'JS 单线程无需加锁'（Hy3 在 max 下此处翻车），且提出 Postgres READ COMMITTED 的 EvalPlanQual 机制论证条件 UPDATE 防超卖——评委确认该技术断言正确。⚠️ 原写『以 96 分 / 0.06x 全面取代 V4-Pro（86 分 / 0.13x）』——**该结论已于 2026-08-16 被 v4-pro 正式版重测推翻**（同轮 v4-pro 96 > flash 89），见 sameRoundEval_20260816 与 deepseek-v4-pro.statusNote。🔴 2026-08-21 涨价后它也不再是最省的落点，T2 定位靠的是 algorithm/并发两类的同口径领先，⛔ 不是性价比。",
-      "paseo": {
-        "provider": "codebuddy-code",
-        "model": "deepseek-v4-flash",
-        "mode": "bypassPermissions",
-        "thinking": "xhigh"
-      },
       "cli": "opencode run --pure -m volcengine-coding/deepseek-v4-flash   # ⭐ 2026-08-20 起默认走 Coding Plan",
       "blindEvalAtThinking": {
         "max": {
@@ -722,7 +717,15 @@
         "total": 102,
         "note": "⚠️ LRU 一格不同口径——本臂在 agent 上下文里按 TDD 真建了工程并跑了 30/30 测试、还派了一轮交叉审，另一臂是聊天内作答。该格对本臂有利，⛔ 不能当同口径证据"
       },
-      "behaviorNote": "🔴 2026-08-28 观察：在有 CLAUDE.md/AGENTS.md 的 agent 上下文里，它会**真的按 TDD 建工程**（建目录、装依赖、写测试、跑测试、自己派交叉审），而不是在回复里给代码。⇒ 派它做实现类任务是优点；⛔ 但做 chat 式盲评时会导致产物形态与其它臂不可比。"
+      "behaviorNote": "🔴 2026-08-28 观察：在有 CLAUDE.md/AGENTS.md 的 agent 上下文里，它会**真的按 TDD 建工程**（建目录、装依赖、写测试、跑测试、自己派交叉审），而不是在回复里给代码。⇒ 派它做实现类任务是优点；⛔ 但做 chat 式盲评时会导致产物形态与其它臂不可比。",
+      "providerSelectionSource": "🔴 walletPriority.modelProviderPreference —— ⛔ 唯一真源。本条目的 preferredProvider / paseo 字段是【历史遗留】，⛔ 不得用于选 provider",
+      "preferredProvider_deprecated": "codebuddy-code",
+      "paseo_deprecated": {
+        "provider": "codebuddy-code",
+        "model": "deepseek-v4-flash",
+        "mode": "bypassPermissions",
+        "thinking": "xhigh"
+      }
     },
     "deepseek-v4-pro": {
       "label": "DeepSeek-V4-Pro",
@@ -772,7 +775,6 @@
           "note": "⭐ Coding Plan（独立额度，opencode 默认落点）；Chat API，--variant off/on 有效；context 1,024,000"
         }
       },
-      "preferredProvider": "codebuddy-code",
       "bestFor": [],
       "strengths": [
         "test-coverage",
@@ -782,12 +784,6 @@
       "avoidFor": [
         "architecture — 同轮盲评 Kafka 题 31 < flash 34"
       ],
-      "paseo": {
-        "provider": "codebuddy-code",
-        "model": "deepseek-v4-pro",
-        "mode": "bypassPermissions",
-        "thinking": "xhigh"
-      },
       "whitelisted": true,
       "dispatchRank": 8,
       "dispatchNote": "**升档档位，不是任何任务类型的默认落点**（2026-08-20 用户决策）。⛔ 只在 flash 已于本任务做砸过一轮时进入。⭐ 但升档时应升它、不要直接跳 K3：08-16 同轮重测 96 > flash 89、LRU 33 vs 25，贵 deepseek-v4-flash 3.0 倍（K3 贵 9.5 倍）。⚠️ 架构类升档收益有限——重测 Kafka 31 < flash 34。",
@@ -796,7 +792,15 @@
       "requiresPrecondition": "⛔ 唯一入口：deepseek-v4-flash 已在【本任务】做砸过一轮。派发理由里必须写明：哪一轮、砸在哪、为什么升档能解决。⛔ 写不出来就不许升。",
       "costMultiplier": "3.0x vs deepseek-v4-flash（0.51x vs 0.17x）",
       "costEffectiveness": "96/0.51 = 188；flash 是 89/0.17 = 524 ⇒ flash 性价比高 2.8 倍",
-      "whyAgentsWronglyPickIt": "🔴 已知失效模式（用户 2026-08-21 反馈『很多 agent 还是喜欢用 v4-pro，消耗太快』）：agent 扫 catalog 时抓 sameRoundEval 的『v4-pro 96 > flash 89』当理由，忽略散文规则。⇒ 看到那组分数时必须同时读 costMultiplier 与本字段：那组数据说明的是【升档时该升谁】，⛔ 不是【该跳过 flash】。大部分场景 flash 够用。"
+      "whyAgentsWronglyPickIt": "🔴 已知失效模式（用户 2026-08-21 反馈『很多 agent 还是喜欢用 v4-pro，消耗太快』）：agent 扫 catalog 时抓 sameRoundEval 的『v4-pro 96 > flash 89』当理由，忽略散文规则。⇒ 看到那组分数时必须同时读 costMultiplier 与本字段：那组数据说明的是【升档时该升谁】，⛔ 不是【该跳过 flash】。大部分场景 flash 够用。",
+      "providerSelectionSource": "🔴 walletPriority.modelProviderPreference —— ⛔ 唯一真源。本条目的 preferredProvider / paseo 字段是【历史遗留】，⛔ 不得用于选 provider",
+      "preferredProvider_deprecated": "codebuddy-code",
+      "paseo_deprecated": {
+        "provider": "codebuddy-code",
+        "model": "deepseek-v4-pro",
+        "mode": "bypassPermissions",
+        "thinking": "xhigh"
+      }
     },
     "kimi-k2.6": {
       "label": "Kimi-K2.6",
@@ -1268,7 +1272,7 @@
     "reviewChannelException": {
       "model": "github-copilot/gpt-5.5",
       "rule": "⛔ 硬约束是【评审模型族 ≠ 实施模型族】（全局红线 #8），⛔ 不是「禁用 DeepSeek 审查」",
-      "why": "当前 cb 默认落点是 deepseek-v4-flash，所以【那一路】的评审要排除 DeepSeek 族——这是推论，不是规则本身。github-copilot/gpt-5.5 目前同时满足三条：族异于所有 cb 白名单模型 · 有额度 · 有历史盲评口径可对照。2026-08-12 与 08-16 两轮异构审共抓到 13 处问题，全部来自『换一个模型族去看』。",
+      "why": "⛔ 无论实施侧默认落点是谁，审查一律按【本次实施用的模型族】排除同族（routing §5）。⚠️ 原文写「当前 cb 默认落点是 deepseek-v4-flash」——那是把一个会变的默认值写进了不变量，已改",
       "invariant": "评审族 ≠ 实施族。🔴 含主会话——主会话本身就是 Claude，凡是主会话自己写的代码/文档/配置，⛔ 不得派 claude/* 子会话去审（自审）。同理：实施 hy3 → 可用 Claude/DeepSeek/GLM/Kimi/GPT；实施 deepseek-* → 排除 DeepSeek 全族；实施 kimi-k3 → 排除 Kimi 全族；实施 claude/* → 排除 Claude 全族。与具体模型无关。",
       "correction": "⚠️ 2026-08-20 用户纠正：此前写成『评审不得用 DeepSeek』属于把不变量误写成针对某模型的禁令，已改为族级约束。",
       "families": [
@@ -1428,10 +1432,11 @@
       "baseURLWarning": "🔴 官方明确：⛔ 不要用 https://ark.cn-beijing.volces.com/api/v3 —— 会产生额外费用。Anthropic 协议工具用 …/api/coding",
       "npm": "@ai-sdk/openai-compatible（Chat API）",
       "verifiedOn": "2026-08-20",
-      "verification": "7 个模型逐个 curl 实测全部 HTTP 200；thinking.type disabled→reasoning_tokens=0 / enabled→22（真生效）；OpenAI 的 reasoning.effort 传 bogus 仍 200 ⇒ 被静默忽略，与 v10.3 结论一致；opencode 端到端 --variant off/on 均 8s 正常返回",
+      "verification": "8 个模型逐个 curl 实测全部 HTTP 200；thinking.type disabled→reasoning_tokens=0 / enabled→22（真生效）；OpenAI 的 reasoning.effort 传 bogus 仍 200 ⇒ 被静默忽略，与 v10.3 结论一致；opencode 端到端 --variant off/on 均 8s 正常返回",
       "models": [
         "deepseek-v4-flash",
         "deepseek-v4-pro",
+        "glm-5.3-flash",
         "glm-5.3",
         "minimax-m3",
         "kimi-k2.7-code",
@@ -1449,7 +1454,8 @@
       "variant": "off / on（未配 auto）",
       "preferred": [
         "deepseek-v4-flash"
-      ]
+      ],
+      "_updated": "⭐ 2026-09-08 补入 glm-5.3-flash（此前漏配，误以为火山没有）"
     },
     "globalDefaultModel": {
       "value": "volcengine-coding/deepseek-v4-flash",
@@ -1504,7 +1510,7 @@
         "✅ claude-* 全族已移除（2026-09-08 用户要求）"
       ],
       "restriction": "⛔ 仅用于审查，不做开发（用户 2026-08-20 明确）。开发一律走 volcengine-coding。Copilot 额度只留给审查。",
-      "claudeFamilyWarning": "🔴 github-copilot/claude-sonnet-4.6 属 Claude 族。主会话本身就是 Claude ⇒ 主会话自己写的代码/文档/配置⛔不得用它审（自审）。审主会话产物请用 gpt-5.4 / gpt-5.5 / gemini-*。",
+      "claudeFamilyWarning": "🔴 历史上 Copilot 通道曾含 claude-* 全族，2026-09-08 已整族移除。异构不变量本身不变：⛔ 主会话是 Claude，任何 Claude 族模型都不得审主会话产出（含 Paseo 派的 claude/*）",
       "verified": "✅ 2026-08-20 端到端实测：pi -p --provider github-copilot --model gpt-5.5 做真实审查任务，两轮分别 33s / 29s，正常返回分级结论。⇒ 此前『可能上百秒』的担心不成立——那是火山模型自身的延迟，不是 pi 的。",
       "modelsSourceOfTruth": "~/.pi/agent/models.json 的 github-copilot provider（2026-09-08 实测 17 个可用）。🔴 该 provider 是**显式定义用来覆盖 models-store.json** 的——store 会按 etag 自动刷新，手改会被冲掉。⚠️ 代价：Copilot 新增模型不会自动出现，要手工补。⚠️ store 里的 gpt-5.4-nano / kimi-k3 / kimi-k2.7-code 本订阅实际不支持（model_not_supported）",
       "_fixedNote": "⚠️ 2026-08-28 修：本字段此前有两行重复的 gpt-5.5（gpt-5.4→gpt-5.5 全文替换的残留），v11.1 只修了 md 侧、漏了这份",

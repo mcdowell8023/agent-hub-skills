@@ -2,6 +2,41 @@
 
 ## v11.2 (2026-09-08)
 
+### 🔴 异构审查（`pi/github-copilot/gpt-5.5`）抓出 9 个 ❌，其中 3 个会让派发直接失败
+
+**❌1 白名单可被 `pi/` 前缀绕过。** `pi` 整体在 `EXEMPT_PROVIDERS` 里，但京东的 Paseo 串是
+`pi/jdcloud-joyagent/<model>` —— 按顶层 `pi` 解析就豁免了，`pi/jdcloud-joyagent/GLM-5.2` 会绕过 JD 白名单。
+⇒ 加 `split_provider()` 先拆 host/upstream，校验一律对 **upstream** 做；`pi` ⛔ 移出豁免集
+（它是**宿主**不是钱包）。⚠️ 这是「白名单缺口」的第四种形状，前三种见 v11.1。
+
+**❌2 自动升档会拼出不存在的 model id。** 阶梯里是小写 `deepseek-v4-pro`，而京东的 id 是
+**`DeepSeek-V4-pro`**（大小写不同，实测点名小写返回「模型不存在」）。原 `WALLET_PREF` 只映射
+provider 名，升到 T3 必然拼错。⇒ 改成 `(upstream, 该 provider 上的真实 modelId)` 二元组，
+并按 provider 决定要不要加 `pi/` 前缀。
+
+**❌3 `create_agent` 模板无条件传 `modeId`。** 而 pi provider 的 `availableModes` 为空 ——
+**我自己派京东那个 bench agent 时就撞过这个错**（`Invalid mode 'bypassPermissions' for provider 'pi'`），
+改了文档却没改模板。默认开发通道正是 Paseo 派 pi ⇒ 火山/京东落点会全部失败。
+⇒ 加 `build_settings(provider)`：`pi/` 开头只传 `thinkingOptionId`。
+
+**❌4~❌9（一致性）**：审查通道刚改成「大审查走 Paseo」但伪代码 P4 仍钉死 `pi -p`；
+`deepseek-v4-flash` 的兜底链一边写「京东 → 官方」一边写「flash 不走京东」（已统一为**硬规则不走京东**，
+兜底直接跳官方 API）；catalog 多处 `preferredProvider`/`paseo` 仍焊死 `codebuddy-code`，与新的
+`walletPriority` 打架（已 deprecate 并加 `providerSelectionSource` 指向唯一真源）；
+catalog 的火山清单缺 `glm-5.3-flash`；`whitelist.exempt.github-copilot` 仍以已废弃的 store 为真源；
+以及本条目自己「四条证据其实是一条」和后文「四条独立证据」并存（已消除）。
+
+**⚠️ 我在修 ⚠️1 时又错了一次**：`thinkingLevelMap` 的 **value 为 `null` 表示不支持该档**，
+我第一版按 key 全列，把 `grok-4.5` 写成支持 `xhigh`（实际 `xhigh: null`）。审查者的原始判断是对的。
+⇒ 表已按 value 非空重建，并加了「配置支持 ≠ 实测过」两列区分。
+
+**新增派发路径用例表**（SKILL.md §3）——11 条可照着自查的输入→期望落点，
+包括 `pi/jdcloud-joyagent/GLM-5.2` 必拦、T3 必须落大写 `DeepSeek-V4-pro`、大审查必走 Paseo。
+
+**教训**：这轮 3 个功能性 bug 有个共同形状 —— **我改了文档，没改与之配套的可执行部分**
+（模板、伪代码、字段）。⇒ 改路由规则时，要把「散文 / 伪代码 / 模板 / catalog 字段」四处一起过。
+
+
 新增**京东云 JoyAgent 通道**（积分制第三个钱包），并限定只用 DeepSeek。
 
 ### ⛔ JD 云只使用 DeepSeek 系列
@@ -116,7 +151,8 @@ DeepSeek 两个型号的落点因此分开：
 
 ### 🔴 自我修正：之前那「四条证据」其实是一条
 
-上一节声称有四条独立证据支持「京东那份不是 preview」。读官方定价页后发现**后三条站不住**：
+本条目最初声称有四条独立证据支持「京东那份不是 preview」（下方「已验证：与火山同代」一节）。
+读官方定价页后发现**后三条站不住**：
 
 | 原列证据 | 实际 |
 |---|---|
@@ -146,17 +182,16 @@ DeepSeek 两个型号的落点因此分开：
 ### ✅ 已验证：与火山那份 `deepseek-v4-pro` 同代，不是 preview
 
 用户从 publishDate（2026-04-28，早于我测到 86 分的那版）怀疑京东在服务 preview。方向合理，
-但**上架日期 ≠ 权重版本**。四条独立证据：
+但**上架日期 ≠ 权重版本**。
 
-| 证据 | 结果 |
-|---|---|
-| `max_tokens` 声明上限 | 两侧都是 **393,216**（=384×1024），同一个特殊值 |
-| tokenizer | 同一段 89,990 字符输入，两侧 `prompt_tokens` 都是 **51,729** |
-| 长上下文 | 60k token 三针大海捞针，两侧 **3/3**，各 4 秒 |
-| 同轮盲评 | JD 108 vs 火山 104 |
+**⚠️ 结论是「一条承重证据 + 三条弱证据」，⛔ 不是四条独立证据**（见下方「自我修正」一节）：
 
-🔴 最锋利的是**架构题**：06-28 那个疑似 preview 的旧版架构题只有 **24**（是它最突出的短板），
-京东这份同类题拿了 **37**。就算给跨轮噪声留足余量，24→37 也不是同一个构建。
+| 观测 | 结果 | 证据强度 |
+|---|---|---|
+| **同轮盲评 + 架构题** | JD 108 vs 火山 104；🔴 JD 架构题 **37**，而 06-28 那个疑似 preview 的旧版只有 **24** | ✅ **承重的只有这条** |
+| `max_tokens` 上限 393,216 | 两侧一致 | 🔻 弱：官方页写明输出上限 384K，**V4 全代通用** |
+| tokenizer（`prompt_tokens` 51,729） | 两侧一字不差 | 🔻 弱：**同族本就同分词** |
+| 60k 长上下文 3/3 | 两侧全中 | 🔻 弱：官方页写明上下文 1M，**全代通用** |
 
 ⛔ 4 分/120 在噪声内，这一格只用来证【同级】，⛔ 不用来排名。
 ⛔ 也证明不了字节级同一份权重 —— 但问的是版本代次。
@@ -186,7 +221,7 @@ DeepSeek 两个型号的落点因此分开：
 - **pi 的会话 transcript 是嵌套结构** —— `r['message']['role']` / `['content']`，
   content 块有 `text` / `thinking` 两种。照 codebuddy 格式写的提取器会采出 0 字符
 
-catalog 升 **5.5.0**。
+catalog 升至 **5.9.0**（本轮多次迭代，中间版本见提交历史）。
 
 
 ## v11.1 (2026-08-28)

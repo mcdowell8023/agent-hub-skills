@@ -84,10 +84,17 @@ WHITELIST = {
 # ⛔ 认 id 不认 label：hy4-preview(0.00x) 与 hy4-preview-x(0.29x) 的 label 一模一样
 DISABLED_PROVIDERS = ['deepseek']        # 🔴 官方 API，2026-08-20 用户已 disable
 EXEMPT_PROVIDERS   = [                   # 走别的钱包，不校验模型（清单必须与 routing §8 provider 表一致）
-  'pi', 'claude', 'codex', 'opencode',                          # Paseo/CLI 宿主
+  'claude', 'codex', 'opencode',                                # 宿主，本身不带上游 provider
   'github-copilot',                                             # 审查通道
   'volcengine-coding', 'volcengine-agent-plan', 'volcengine-chat',   # 火山三套餐
 ]
+# 🔴 `pi` ⛔ 不在豁免集里 —— 它是【宿主】不是钱包。Paseo 串形如 pi/<upstream>/<model>，
+#    若按顶层 `pi` 豁免，`pi/jdcloud-joyagent/GLM-5.2` 就会绕过 JD 白名单。
+def split_provider(s):
+    """pi/jdcloud-joyagent/DeepSeek-V4-pro → host='pi', upstream='jdcloud-joyagent'
+       codebuddy-code                       → host=None, upstream='codebuddy-code'"""
+    parts = s.split('/')
+    return ('pi', parts[1]) if parts[0] == 'pi' and len(parts) >= 2 else (None, parts[0])
 # ⚠️ jdcloud-joyagent ⛔ 不在豁免集里 —— 它有自己的白名单（只准 DeepSeek 两个），见上。
 #    2026-09-08 用户明确：「JD 云仍然只使用 DeepSeek」。平台上另有 GLM/Kimi/MiniMax/Qwen 共 8 个
 #    已在 ~/.pi/agent/models.json 配好且实跑通过，⛔ 但不派发。
@@ -95,14 +102,16 @@ EXEMPT_PROVIDERS   = [                   # 走别的钱包，不校验模型（�
 # ── P1 用户显式指定 ────────────────────────────────────────────────
 if args.model:
     model = resolve_short_name(args.model)
+    host, upstream = split_provider(provider)   # 🔴 一律先拆，⛔ 别拿整串去比
     # 🔴 三层依次判，⛔ 不能只写「provider 在白名单里才校验」——
     #    那样传一个不在 WHITELIST 键里的 provider（如 deepseek）会让整个校验静默跳过
-    if provider in DISABLED_PROVIDERS:
+    if upstream in DISABLED_PROVIDERS:
         report_disabled_and_stop()          # ⛔ 已停用，不给降级建议之外的出路
-    elif provider in WHITELIST:
-        if model not in WHITELIST[provider]:
+    elif upstream in WHITELIST:
+        if model not in WHITELIST[upstream]:
             report_conflict_and_stop()      # ⛔ 不擅自替换成相近模型
-    elif provider not in EXEMPT_PROVIDERS:
+                                            #    ⇒ pi/jdcloud-joyagent/GLM-5.2 在这里被拦
+    elif upstream not in EXEMPT_PROVIDERS:
         report_unknown_provider_and_stop()  # ⛔ 未知 provider 一律停，不放行
     use(model); goto EXECUTE
 
@@ -115,9 +124,16 @@ task_type = classify(user_input)
 
 # ── P4 硬例外（不进常规阶梯）───────────────────────────────────────
 if task_type == 'review':
-    # ⛔ 唯一约束是「评审族 ≠ 实施族」，不是钦定某模型（routing §5）
-    #    主会话自己写的 ⇒ ⛔ 不得用 claude/* 或 github-copilot/claude-*
-    channel = 'pi -p --provider github-copilot --model gpt-5.5'   # ⛔ prompt ≤200 字符
+    # 🔴 通道与模型正交：通道按【规模】定，模型按【异构族】定（routing §5 / §7）
+    #    ⛔ 别把「审查 → pi -p + gpt-5.5」写成一个原子
+    model_choice = 'github-copilot/gpt-5.5'    # 异构侧：⛔ 不得与实施同族
+                                               #   主会话自己写的 ⇒ ⛔ 不用 claude/*
+    if is_large_review(scope):                 # 多文件 / 读大量源 / 预计 20+ 工具调用
+        create_agent(provider=f'pi/{model_choice}',
+                     settings=build_settings(f'pi/{model_choice}', 'xhigh'))
+        # 🔴 大审查必须走 Paseo —— 实测 pi -p 跑满 35 分钟零输出、全程不可见只能盲杀
+    else:
+        run(f'pi -p --provider github-copilot --model gpt-5.5')   # ⛔ prompt ≤200 字符
     goto EXECUTE
 # ⚠️ claude/* 可派发但不推荐——消耗 Claude 订阅额度，建议留给主会话
 
@@ -171,18 +187,24 @@ model, thinking = LADDER[i][0], 'xhigh'
 # ── P5b 选 provider：钱包优先级（routing §3.5，与档位正交）────────────
 # 🔴 档位决定【用哪个模型】，钱包决定【从哪个 provider 拿】。⛔ 别混成一件事。
 #    钱包顺序：① 火山/cb 已付费套餐（边际成本≈0） → ② 京东积分 → ③ 官方 API（现金，⛔ 永远兜底）
+# 🔴 每一项是 (upstream, 该 provider 上的真实 modelId) —— ⛔ 不能只列 provider 名：
+#    京东的 id 是 **DeepSeek-V4-pro**（大小写不同），拿阶梯里的小写去拼会得到「模型不存在」
 WALLET_PREF = {
-  'deepseek-v4-pro':   ['jdcloud-joyagent',      # 🥇 7 折特价，且把 pro 挪走能护住 cb credits
-                        'codebuddy-code', 'volcengine-coding'],
-  'deepseek-v4-flash': ['volcengine-coding',     # 🥇 已付费套餐
-                        'codebuddy-code'],       # ⛔ flash 不走京东，积分省给 pro
-  'glm-5.3-flash':     ['volcengine-coding',     # ⚠️ 按同一钱包规则推得，用户未单独指定
-                        'codebuddy-code'],       # ⭐ 09-08 才发现火山也有它
+  'deepseek-v4-pro':   [('jdcloud-joyagent',  'DeepSeek-V4-pro'),    # 🥇 7 折，且挪走能护住 cb credits
+                        ('codebuddy-code',    'deepseek-v4-pro'),
+                        ('volcengine-coding', 'deepseek-v4-pro')],
+  'deepseek-v4-flash': [('volcengine-coding', 'deepseek-v4-flash'),  # 🥇 已付费套餐
+                        ('codebuddy-code',    'deepseek-v4-flash')], # ⛔ flash 不走京东（§3.5）
+  'glm-5.3-flash':     [('volcengine-coding', 'glm-5.3-flash'),      # ⚠️ 按同一钱包规则推得
+                        ('codebuddy-code',    'glm-5.3-flash')],
 }
+upstream, model = first_available(WALLET_PREF.get(model, [('codebuddy-code', model)]))
+# 🔴 Paseo 派发时，火山/京东都要带 `pi/` 前缀；cb/qcn/claude/codex ⛔ 不带
+provider = f'pi/{upstream}' if upstream in ('jdcloud-joyagent','volcengine-coding',
+                                            'volcengine-agent-plan','volcengine-chat',
+                                            'github-copilot') else upstream
 # ⚠️ 火山 id 多为别名：glm-5.2/glm-latest → glm-5.3；deepseek-v4-flash → -ga-260731
 #    ⛔ GET /models 只返回 ARK 全量原始 id，别名不在里面，判断可用性只能直接发请求（routing §7）
-provider = first_available(WALLET_PREF.get(model, ['codebuddy-code']))
-# ⚠️ 京东侧 model id 大小写不同：DeepSeek-V4-pro / DeepSeek-V4-Flash（⛔ 不是 cb 的全小写）
 # ⚠️ deepseek/* 官方 API 仍在 opencode 的 disabled_providers 里 ⇒ 真要兜底得先解除禁用
 
 # ⛔ 没有时段分支。credits 制通道已无任何时段性折扣，⛔ 不要再写 is_night()——
@@ -213,12 +235,38 @@ save_memory(agent_id, model, task_type, cwd)     # §6
 
 ### 📌 通道判据总表（唯一真源，三文件以此为准）
 
-| 任务类型 | 走哪条 |
+🔴 **「走哪条通道」和「用哪个模型」是两件正交的事，⛔ 别写成一个原子。**
+通道由**要不要看得见**决定；模型由**异构族约束**（§9 / routing §5）决定。
+
+| 任务规模 | 走哪条通道 | 判据 |
+|---|---|---|
+| **开发实施类**（改代码/跑测试/提交） | ⭐ **Paseo `create_agent`** | 要看进度、要能中途叫停 |
+| **大审查**（多文件 / 读大量源 / 预计 20+ 工具调用） | ⭐ **Paseo `create_agent`** | 🔴 同上——它是长活，⛔ 不是 one-shot |
+| **短任务**（单文件、明确问题、只读分析、短审查） | `pi -p` CLI | 跑完看结论就行，省机器不堆 serve |
+| **兜底** | `opencode` 🔻 | 无常规用途，仅前面都不可用时 |
+
+⚠️ **本表 2026-09-08 修正**：原先把「审查类」整类钉给 `pi -p`，理由写的是「审查不需要盯」。
+本轮实测推翻该前提——`pi -p` + gpt-5.5 跑满 **35 分钟零输出**，全程不可见、只能盲杀；
+而同期 Paseo 派的两个审查 agent 都能看到它们各自在第 13 / 22 步撞 429。
+⇒ **判据回归硬默认 #2 的「要不要看得见」，⛔ 不按任务类型一刀切。**
+
+模型侧不变：审查⛔用同族；⭐ 默认 `github-copilot/gpt-5.5`（Paseo 串为 `pi/github-copilot/gpt-5.5`）。
+
+### 📌 派发路径用例（照着自查，⛔ 出现偏差就是有 bug）
+
+| 输入 | 期望结果 |
 |---|---|
-| **开发实施类**（改代码/跑测试/提交） | ⭐ **Paseo `create_agent`** — `provider: "pi/volcengine-coding/deepseek-v4-flash"` 或 `codebuddy-code/*`。可见 / 可干预 |
-| **只读 / 短 / 分析类** | `pi -p --provider volcengine-coding --model deepseek-v4-flash` |
-| **审查类** | `pi -p --provider github-copilot --model gpt-5.5` ⛔ Copilot 仅审查不做开发 |
-| **兜底** | `opencode` 🔻 **无常规用途**，仅在上面三条都不可用时 |
+| `--provider jdcloud-joyagent --model GLM-5.2` | ⛔ **拦住**（JD 白名单只有两个 DeepSeek） |
+| `--provider pi/jdcloud-joyagent --model GLM-5.2` | ⛔ **同样拦住** —— 先 `split_provider` 取 upstream 再校验 |
+| `--provider pi/jdcloud-joyagent --model DeepSeek-V4-pro` | ✅ 放行，且 `settings` ⛔ **不含 modeId** |
+| `--provider volcengine-coding --model deepseek-v4-flash` | ✅ 放行（豁免集） |
+| `--provider github-copilot --model gpt-5.5` | ✅ 放行（豁免集） |
+| `--provider deepseek --model deepseek-v4-pro` | ⛔ **拦住**（DISABLED_PROVIDERS） |
+| 默认任务，0 次做砸 | → `pi/volcengine-coding` + `glm-5.3-flash`（T1，钱包①） |
+| 默认任务，2 次做砸 | → `pi/jdcloud-joyagent` + **`DeepSeek-V4-pro`**（T3，⚠️ 大小写） |
+| `algorithm` 类，0 次做砸 | → `pi/volcengine-coding` + `deepseek-v4-flash`（跳 T0，T2 起步） |
+| 大审查（多文件 / 20+ 工具调用） | → Paseo `pi/github-copilot/gpt-5.5`，⛔ 不走 `pi -p` |
+| 短审查（单文件） | → `pi -p --provider github-copilot --model gpt-5.5`，prompt ≤200 字符 |
 
 ### 3.1 Paseo 创建
 
@@ -230,13 +278,30 @@ create_agent({
   workspace: { kind: "current" },
   initialPrompt: "{dispatch_prompt}",
   notifyOnFinish: true,
-  settings: {
-    modeId: "{permission_mode}",         // routing §8
-    thinkingOptionId: "{thinking}"
-  },
+  settings: build_settings(provider),   // 🔴 见下，⛔ 不要无条件传 modeId
+  
   labels: { "rift-dispatch": "true" }
 })
 ```
+
+#### 🔴 `settings` 必须按 provider 生成，⛔ 不能无条件传 `modeId`
+
+```python
+def build_settings(provider, thinking):
+    s = {'thinkingOptionId': thinking}
+    if provider.startswith('pi/'):
+        return s                              # 🔴 pi provider 的 availableModes 为空，
+                                              #    传 modeId 直接报 Invalid mode
+    if provider.split('/')[0] in ('codebuddy-code', 'qoderclicn'):
+        s['modeId'] = 'bypassPermissions'
+    elif provider.split('/')[0] in ('claude', 'codex'):
+        s['modeId'] = 'auto'
+    return s
+```
+
+⚠️ 这条踩过：派 `pi/jdcloud-joyagent/DeepSeek-V4-pro` 时带 `modeId: bypassPermissions`
+直接被拒 —— `Invalid mode 'bypassPermissions' for provider 'pi'. Available modes: (none)`。
+**默认开发通道正是 Paseo 派 pi**，⛔ 无条件传 modeId 会让火山/京东落点全部失败。
 
 #### ⛔ 创建后必须核实实际生效的模型
 
@@ -361,17 +426,38 @@ pi -p --provider github-copilot --model gpt-5.5 "{≤200 字符的 review_prompt
 
 伪代码 P7 折算的依据。**本 skill 的默认档 `xhigh` 只在 gpt 系成立**，其余族压根没这一档。
 
-| 模型 | 支持档位 |
-|---|---|
-| `gpt-5.5` · `gpt-5.4` · `gpt-5.4-mini` | `none` `low` `medium` `high` `xhigh` |
-| `gpt-5.3-codex` | `low` `medium` `high` `xhigh` |
-| ~~claude 系~~ | ⛔ 已从 pi 的 Copilot 通道移除（§3.2c）；Paseo 派 `claude/*` 时仍适用 `low`/`medium`/`high`/`max` |
-| `gemini-3.5-flash` | `minimal` `low` `medium` `high` |
-| `gpt-5-mini` | `low` `medium` `high` |
-| ⚠️ `gpt-6-astra` · `grok-4.5/4.6` · `gemini-3.7/3.8-flash` · `mai-code-*` | **未实测** —— 2026-09-08 才出现在 Copilot 目录里 |
-| `pi/volcengine-*/kimi-k2.7-code` | ⚠️ `thinkingOptions` 为 `null`，⛔ 不要传 |
+| 模型 | **支持的档位**（读自 `~/.pi/agent/models.json` 的 `thinkingLevelMap`） | 实测过？ |
+|---|---|---|
+| `gemini-3.5-flash` | ⚠️ 无映射表（pi 按默认处理，⛔ 未验证） | ✅ |
+| `gemini-3.6-flash` | ⚠️ 无映射表（pi 按默认处理，⛔ 未验证） | ⚠️ 未实测 |
+| `gemini-3.7-flash` | ⚠️ 无映射表（pi 按默认处理，⛔ 未验证） | ⚠️ 未实测 |
+| `gemini-3.8-flash` | ⚠️ 无映射表（pi 按默认处理，⛔ 未验证） | ⚠️ 未实测 |
+| `gpt-5-mini` | `minimal` `low` `medium` `high`　⛔无 off xhigh max | ✅ |
+| `gpt-5.3-codex` | `minimal` `low` `medium` `high` `xhigh`　⛔无 off max | ✅ |
+| `gpt-5.4` | `minimal` `low` `medium` `high` `xhigh`　⛔无 off max | ✅ |
+| `gpt-5.4-mini` | `minimal` `low` `medium` `high` `xhigh`　⛔无 off max | ⚠️ 未实测 |
+| `gpt-5.4-nano` | `minimal` `xhigh`　⛔无 off | ⚠️ 未实测 |
+| `gpt-5.5` | `minimal` `low` `medium` `high` `xhigh`　⛔无 off max | ✅ |
+| `gpt-5.6-luna` | `minimal` `low` `medium` `high` `xhigh` `max`　⛔无 off | ⚠️ 未实测 |
+| `gpt-5.6-sol` | `minimal` `low` `medium` `high` `xhigh` `max`　⛔无 off | ⚠️ 未实测 |
+| `gpt-5.6-terra` | `minimal` `low` `medium` `high` `xhigh` `max`　⛔无 off | ⚠️ 未实测 |
+| `gpt-6-astra` | `low` `medium` `high` `xhigh` `max`　⛔无 off minimal | ⚠️ 未实测 |
+| `grok-4.5` | `low` `medium` `high`　⛔无 off minimal xhigh max | ⚠️ 未实测 |
+| `grok-4.6` | `low` `medium` `high` `xhigh`　⛔无 off minimal max | ⚠️ 未实测 |
+| `kimi-k2.7-code` | ⚠️ 无映射表（pi 按默认处理，⛔ 未验证） | ⚠️ 未实测 |
+| `kimi-k3` | ⚠️ 无映射表（pi 按默认处理，⛔ 未验证） | ⚠️ 未实测 |
+| `mai-code-1-flash-picker` | `low` `medium` `high`　⛔无 off minimal xhigh max | ⚠️ 未实测 |
+| `mai-code-1.1-flash` | `low` `medium` `high`　⛔无 off minimal xhigh max | ⚠️ 未实测 |
+| `pi/volcengine-*/kimi-k2.7-code` | ⚠️ `thinkingOptions` 为 `null` | ⛔ 不要传 |
+| ~~claude 系~~ | ⛔ 已从 pi 的 Copilot 通道移除（§3.2c）；Paseo 派 `claude/*` 时是 `low`/`medium`/`high`/`max` | — |
 
-**折算规则：只降不升。** `xhigh` → gemini 系落 `high`；Paseo 派 `claude/*` 时落 `max`。
+🔴 **读法**：`thinkingLevelMap` 里 **value 为 `null` 就是不支持该档**，⛔ 不要只看 key。
+   （我第一版按 key 列，结果把 `grok-4.5` 写成支持 `xhigh`——实际它 `xhigh: null`。）
+🔴 **「配置支持」≠「实测过」**：右列标 ⚠️ 的只是没端到端跑过，⛔ 不是档位未知。
+
+**折算规则：只降不升。** `xhigh` → 查上表：该模型 `thinkingLevelMap['xhigh']` 为 `null` 就往下降到最近的非 null 档
+（例：`grok-4.5` 无 `xhigh` ⇒ 落 `high`；`gpt-5-mini` 同理）。Paseo 派 `claude/*` 时落 `max`。
+⚠️ `thinkingLevelMap` 为 `null` 的（gemini 全系、kimi 两个）⛔ 无依据可查，别猜，先实测。
 ⛔ **禁止静默升档**（会造成超预期 token 消耗）；降档必须在 §7 输出里回显，
 memory 记 `effectiveThinking` 字段留痕。
 

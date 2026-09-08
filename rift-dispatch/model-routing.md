@@ -298,7 +298,7 @@ cb/kimi-k3-2 = 1.62x  ← 白名单内唯一 1.0x 以上
 | 模型 | ⭐ 首选 | 次选 | 兜底 | 理由 |
 |---|---|---|---|---|
 | **`deepseek-v4-pro`** | 🥇 **京东** `jdcloud-joyagent/DeepSeek-V4-pro` | cb `deepseek-v4-pro`(0.51x) · 火山 | 官方 API | **京东 pro 有 7 折特价**；且 cb 的 0.51x 烧 credits 太快，把 pro 挪走能护住 cb 额度 |
-| **`deepseek-v4-flash`** | 🥇 **火山** `volcengine-coding/deepseek-v4-flash` | **codebuddy** `deepseek-v4-flash`(0.17x) | 京东 → 官方 API | 两者都是**已付费套餐**，边际成本≈0；⛔ flash 不走京东，把积分省给 pro |
+| **`deepseek-v4-flash`** | 🥇 **火山** `volcengine-coding/deepseek-v4-flash` | **codebuddy** `deepseek-v4-flash`(0.17x) | 🔴 **直接跳到官方 API**，⛔ 中间不经京东 | 前两者都是已付费套餐；⛔ **「flash 不走京东」是硬规则**（积分省给 pro），⇒ 它的兜底链⛔没有京东这一环 |
 | **`glm-5.3-flash`**（T1） | 🥇 **火山** `volcengine-coding/glm-5.3-flash` | **codebuddy** `glm-5.3-flash`(0.06x) | — | ⚠️ 按同一钱包规则**推得**（用户未单独指定）：两者同属已付费套餐，火山在前 |
 
 ⚠️ **其余模型按原顺序**（§0 阶梯 + §8 降级链），本节只改 DeepSeek 两个型号的 provider 落点。
@@ -450,12 +450,19 @@ Copilot 侧可用的异族评审（2026-09-08 实测 **17 个**，以 `~/.pi/age
 
 **命令与参数见 `SKILL.md` §3（唯一真源）。** 本节只给选择判据。
 
-| 任务性质 | 走哪条 | 为什么 |
+| 任务规模 | 走哪条 | 为什么 |
 |---|---|---|
-| **开发实施类**（改代码/跑测试/提交） | ⭐ **Paseo `create_agent`** | 你要能看进度、能中途干预、能拿结构化状态 |
-| **只读 / 短 / 分析类** | `pi -p` CLI + 火山 provider | 跑完即退，不堆 serve |
-| **审查类** | `pi -p` + `github-copilot/gpt-5.5` | §5 异构 + 有额度 |
+| **开发实施类**（改代码/跑测试/提交） | ⭐ **Paseo `create_agent`** | 要看进度、能中途干预、有结构化状态 |
+| **大审查**（多文件 / 20+ 工具调用） | ⭐ **Paseo `create_agent`** | 🔴 它是长活，⛔ 不是 one-shot（见下方修正） |
+| **短任务**（单文件 / 只读分析 / 短审查） | `pi -p` CLI | 跑完即退，不堆 serve |
 | **兜底** | `opencode` 🔻 | 无常规用途 |
+
+🔴 **通道与模型正交**：通道由**要不要看得见**定，模型由 §5 **异构族约束**定。
+⛔ 别把「审查类 → pi -p + gpt-5.5」写成一个原子——那会让「大审查」被迫走不可见通道。
+
+⚠️ **2026-09-08 修正**：原表把「审查类」整类钉给 `pi -p`，理由是「审查不需要盯」。
+实测推翻：`pi -p` + gpt-5.5 跑满 **35 分钟零输出**、全程不可见只能盲杀；
+同期 Paseo 派的两个审查 agent 都能看到各自在第 13 / 22 步撞 429。
 
 🔴 **分通道的维度是「要不要看得见」，不是「用哪个工具」。**
 pi 有两种启动方式（Paseo 派 pi / `pi -p` 直跑），**跑的是同一个 pi、同一套能力**，
@@ -534,10 +541,11 @@ codebuddy 限额
   │    ⚠️ 触发条件不止「限额」：额度耗尽 / 探活未秒回（排队）/ 命中 §2 清单，都走这条
   ├─ glm-5.3-flash → deepseek-v4-flash
   │  ⚠️ provider 首选见 §3.5 钱包优先级：flash 首选火山、pro 首选京东
-  ├─ deepseek-v4-flash → ① qcn/qmodel_38max（0.50x，仍走订阅额度）
+  ├─ deepseek-v4-flash → ⛔ 本链【不含京东】——「flash 不走京东」是硬规则（§3.5）
+  │                      ① qcn/qmodel_38max（0.50x，仍走订阅额度）
   │                      ② pi/volcengine-coding/deepseek-v4-flash（火山套餐，不动 cb credits）
   │                      ③ cb/deepseek-v4-pro（仅当是 flash 单模型异常而非 cb 整体限额）
-  │                      ④ jdcloud-joyagent/DeepSeek-V4-Flash（积分制第三钱包，1,400 积分/百万）
+  │                      ④ 🔴 deepseek/* 官方 API（现金）—— ⛔ 跳过京东，直接到兜底层
   ├─ deepseek-v4-pro → pi/volcengine-coding/deepseek-v4-pro
   │                    或 jdcloud-joyagent/DeepSeek-V4-pro（7 折 8,400 积分/百万）
   └─ kimi-k3-2 → 🔴 无替代（M3 已关闭），报告用户
@@ -550,8 +558,8 @@ qoderclicn 限额 / refresh timeout
 
 cb + qcn 都限额
   └─ pi/volcengine-coding/deepseek-v4-flash
-     → 火山套餐也见底 → jdcloud-joyagent/DeepSeek-V4-Flash（第三钱包）
-     → 京东积分也见底 → 🔴 deepseek/* 官方 API（**现金**，⛔ 永远最后一档；
+     → pro 类可再退 jdcloud-joyagent；flash 类⛔跳过京东
+     → 🔴 deepseek/* 官方 API（**现金**，⛔ 永远最后一档；
         ⚠️ 它仍在 opencode 的 disabled_providers 里，要用得先解除禁用）
      → 仍不行才报告用户
 ```
