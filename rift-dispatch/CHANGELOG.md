@@ -2,6 +2,41 @@
 
 ## v11.2 (2026-09-08)
 
+### 🔴 第二轮复审又 FAIL —— 8 个 ❌，一半是我上轮「只修了被点名那一处」
+
+复审分类很说明问题：
+
+| 类别 | 条数 | 说明 |
+|---|---|---|
+| **上轮修了一半** | 4 | 改了 `SKILL.md`，⛔ **没改 catalog 的机器字段** |
+| **修复自己引入的新 bug** | 4 | 新伪代码有问题 |
+
+第一类正是我上一轮**刚写进 CHANGELOG 的那条教训**——写完转头又犯。
+上轮审查者原话就写了「同步更新 routing 附录和 catalog」，我只改了被点名的行。
+
+**新引入的四个**：P1 只判 `args.model`（只给 `--provider` 时该 provider 完全没过 P0 校验，
+且 `provider` 可能未初始化）；显式指定路径没复用自动分支的 `pi/` 前缀规范化；
+`build_settings` 定义签名与模板调用不一致、未知 provider 静默放行、
+`kimi-k2.7-code`（`thinkingOptions: null`）例外没覆盖；用例表漏了「免费档前提」。
+
+⇒ 抽出 `normalize_provider(upstream, channel)` 给 P1 与 P5b **共用**；
+`build_settings(full_provider, model, thinking)` 三参对齐、未知 root 直接停。
+
+**⚠️ 我还把审查者的一条建议用过头了**：它说 catalog exempt 应「只列 `pi/volcengine-*` 这类可豁免上游」，
+我就给所有键加了 `pi/` 前缀——但 `split_provider()` 拆出的 `upstream` 是**不带前缀**的，
+校验写作 `upstream in EXEMPT`，加前缀反而全对不上。真正该做的只是**移除顶层 `pi`**。
+顺带查出 catalog exempt 里还混着 `deepseek`（它在 DISABLED，⛔ 两者互斥）、且漏了 `codex`。
+
+### ⭐ 新增 `scripts/consistency-check.py`
+
+这轮反复栽在「同一条规则散落四处、只改一处」上，⇒ 把它变成可复跑的机械校验，8 组断言：
+豁免集三处一致且 `pi`/`jdcloud`/`deepseek` 都不在里面 · 白名单三处一致 ·
+钱包首选三处一致且 JD 必须用大写 modelId · 伪代码三个关键函数齐全且调用签名对得上 ·
+审查按规模分流无残留 · `providers` map 已补首选 · pi 侧配置（无 claude、unsupported 标记、glm-5.3-flash）· JSON 可解析。
+
+⚠️ 脚本第一次跑报了 3 条，**全是它自己正则写窄了**（`qmodel_38max` 的下划线没进字符类）——
+已在脚本 docstring 里写明「报错先判是内容错还是正则太窄」。
+
 ### 🔴 异构审查（`pi/github-copilot/gpt-5.5`）抓出 9 个 ❌，其中 3 个会让派发直接失败
 
 **❌1 白名单可被 `pi/` 前缀绕过。** `pi` 整体在 `EXEMPT_PROVIDERS` 里，但京东的 Paseo 串是

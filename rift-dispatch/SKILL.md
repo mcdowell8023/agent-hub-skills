@@ -22,8 +22,8 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 | # | 规则 | 落点 |
 |---|---|---|
 | 1 | **便宜优先，逐级升档** | 免费档（`hy4-preview` → `hy3`，0.00x）先试 → 付费从 **`glm-5.3-flash`（0.06x）** 起步 → `deepseek-v4-flash`（0.17x）→ `deepseek-v4-pro`（0.51x）→ `kimi-k3-2`（1.62x）。⛔ **每一级向上的唯一入口是「上一档已在本任务做砸过一轮」**，理由里要写明哪一轮、砸在哪。写不出来不许升。⚠️ 例外：`algorithm`/`perf`/并发实现 直接从 `deepseek-v4-flash` 起步（routing §6） |
-| 2 | 🔴 **按「要不要看得见」分通道，不是按工具分** | **开发实施类 → Paseo `create_agent`**——能看进度、中途干预、拿结构化状态。**只读/短/审查类 → `pi -p` CLI**——跑完即退不堆 serve。⛔ **开发任务不要走 `pi -p`**：它不进 Paseo agent 列表，你看不见也打不断 |
-| 3 | 🔴 **审查的硬约束是「异构」** | ⛔ **评审模型族 ≠ 实施模型族**（全局红线 #8），是**不变量**，不是针对某个模型的禁令。🔴 **含主会话：主会话就是 Claude，我自己写的东西不得派 `claude/*` 去审**。族对照表见 routing §5。⭐ 通道：**`pi -p --provider github-copilot --model gpt-5.5`**，⛔ **prompt ≤200 字符** |
+| 2 | 🔴 **按「要不要看得见」分通道，不是按工具分** | 🔴 **开发实施类 + 大审查 → Paseo；短任务 / 短审查 → `pi -p`**。判据是**规模**不是任务类型——Paseo 能看进度、中途干预、拿结构化状态；`pi -p` 跑完即退不堆 serve。⛔ **开发任务和大审查都不要走 `pi -p`**：它不进 Paseo agent 列表，你看不见也打不断（实测大审查走 `pi -p` 跑满 35 分钟零输出） |
+| 3 | 🔴 **审查的硬约束是「异构」** | ⛔ **评审模型族 ≠ 实施模型族**（全局红线 #8），是**不变量**，不是针对某个模型的禁令。🔴 **含主会话：主会话就是 Claude，我自己写的东西不得派 `claude/*` 去审**。族对照表见 routing §5。⭐ 模型固定 **`github-copilot/gpt-5.5`**；⚠️ **通道另按规模定**：大审查走 Paseo `pi/github-copilot/gpt-5.5`，短审查走 `pi -p`（⛔ prompt ≤200 字符） |
 
 ⚠️ **派发认 model id，⛔ 不认 label**：`hy4-preview`(0.00x) 与 `hy4-preview-x`(**0.29x**) 的 label 完全相同。
 
@@ -99,10 +99,23 @@ def split_provider(s):
 #    2026-09-08 用户明确：「JD 云仍然只使用 DeepSeek」。平台上另有 GLM/Kimi/MiniMax/Qwen 共 8 个
 #    已在 ~/.pi/agent/models.json 配好且实跑通过，⛔ 但不派发。
 
+# 🔴 Paseo 通道下这些上游必须带 `pi/` 前缀；CLI 通道⛔不带。抽出来供 P1 与 P5b 共用，
+#    ⛔ 别只在自动分支里做规范化——显式指定那条路同样要走（否则拼出 codebuddy 形态的串）
+PI_HOSTED = ('jdcloud-joyagent', 'volcengine-coding', 'volcengine-agent-plan',
+             'volcengine-chat', 'github-copilot')
+def normalize_provider(upstream, channel):
+    return f'pi/{upstream}' if (channel == 'paseo' and upstream in PI_HOSTED) else upstream
+
 # ── P1 用户显式指定 ────────────────────────────────────────────────
-if args.model:
-    model = resolve_short_name(args.model)
-    host, upstream = split_provider(provider)   # 🔴 一律先拆，⛔ 别拿整串去比
+# 🔴 只要 model 或 provider 任一被显式给出就要进来 —— ⛔ 不能只判 args.model：
+#    只给 --provider 不给 --model 时，那个 provider 就完全没过 P0 校验
+if args.model or args.provider:
+    raw_provider = args.provider                     # ⚠️ 可能为 None
+    model = resolve_short_name(args.model) if args.model else None
+    if raw_provider is None:
+        # 只给了 model：先按钱包规则定 provider（P5b 同一套），再回来校验
+        raw_provider, model = pick_provider_for(model)
+    host, upstream = split_provider(raw_provider)     # 🔴 一律先拆，⛔ 别拿整串去比
     # 🔴 三层依次判，⛔ 不能只写「provider 在白名单里才校验」——
     #    那样传一个不在 WHITELIST 键里的 provider（如 deepseek）会让整个校验静默跳过
     if upstream in DISABLED_PROVIDERS:
@@ -113,6 +126,9 @@ if args.model:
                                             #    ⇒ pi/jdcloud-joyagent/GLM-5.2 在这里被拦
     elif upstream not in EXEMPT_PROVIDERS:
         report_unknown_provider_and_stop()  # ⛔ 未知 provider 一律停，不放行
+    if model is None:                       # 只给了 provider：按该 provider 的默认档位补 model
+        model = default_model_for(upstream)
+    provider = normalize_provider(upstream, channel)   # 🔴 显式路径同样要规范化前缀
     use(model); goto EXECUTE
 
 # ── P2 --free → 交给 rift-free skill ───────────────────────────────
@@ -130,7 +146,7 @@ if task_type == 'review':
                                                #   主会话自己写的 ⇒ ⛔ 不用 claude/*
     if is_large_review(scope):                 # 多文件 / 读大量源 / 预计 20+ 工具调用
         create_agent(provider=f'pi/{model_choice}',
-                     settings=build_settings(f'pi/{model_choice}', 'xhigh'))
+                     settings=build_settings(f'pi/{model_choice}', 'gpt-5.5', 'xhigh'))
         # 🔴 大审查必须走 Paseo —— 实测 pi -p 跑满 35 分钟零输出、全程不可见只能盲杀
     else:
         run(f'pi -p --provider github-copilot --model gpt-5.5')   # ⛔ prompt ≤200 字符
@@ -199,10 +215,7 @@ WALLET_PREF = {
                         ('codebuddy-code',    'glm-5.3-flash')],
 }
 upstream, model = first_available(WALLET_PREF.get(model, [('codebuddy-code', model)]))
-# 🔴 Paseo 派发时，火山/京东都要带 `pi/` 前缀；cb/qcn/claude/codex ⛔ 不带
-provider = f'pi/{upstream}' if upstream in ('jdcloud-joyagent','volcengine-coding',
-                                            'volcengine-agent-plan','volcengine-chat',
-                                            'github-copilot') else upstream
+provider = normalize_provider(upstream, channel)   # 🔴 与 P1 共用同一个函数，⛔ 别写两份
 # ⚠️ 火山 id 多为别名：glm-5.2/glm-latest → glm-5.3；deepseek-v4-flash → -ga-260731
 #    ⛔ GET /models 只返回 ARK 全量原始 id，别名不在里面，判断可用性只能直接发请求（routing §7）
 # ⚠️ deepseek/* 官方 API 仍在 opencode 的 disabled_providers 里 ⇒ 真要兜底得先解除禁用
@@ -262,9 +275,12 @@ save_memory(agent_id, model, task_type, cwd)     # §6
 | `--provider volcengine-coding --model deepseek-v4-flash` | ✅ 放行（豁免集） |
 | `--provider github-copilot --model gpt-5.5` | ✅ 放行（豁免集） |
 | `--provider deepseek --model deepseek-v4-pro` | ⛔ **拦住**（DISABLED_PROVIDERS） |
-| 默认任务，0 次做砸 | → `pi/volcengine-coding` + `glm-5.3-flash`（T1，钱包①） |
-| 默认任务，2 次做砸 | → `pi/jdcloud-joyagent` + **`DeepSeek-V4-pro`**（T3，⚠️ 大小写） |
-| `algorithm` 类，0 次做砸 | → `pi/volcengine-coding` + `deepseek-v4-flash`（跳 T0，T2 起步） |
+| 默认任务，**免费档可用** | → `codebuddy-code` + `hy4-preview`（T0，⛔ 还没进付费阶梯） |
+| 默认任务，免费档被排除/探活失败，0 次付费档做砸 | → `pi/volcengine-coding` + `glm-5.3-flash`（T1，钱包①） |
+| 默认任务，免费档已跳过，**2 次付费档**做砸（T1、T2 均失败） | → `pi/jdcloud-joyagent` + **`DeepSeek-V4-pro`**（T3，⚠️ 大小写） |
+| `algorithm` 类，0 次付费档做砸 | → `pi/volcengine-coding` + `deepseek-v4-flash`（跳 T0，T2 起步） |
+| 只给 `--provider volcengine-coding` 不给 model | ✅ P1 仍校验该 provider，再按默认档位补 model |
+| 只给 `--model v4-pro` 不给 provider | ✅ 先按 WALLET_PREF 定 provider，再回 P0 校验 |
 | 大审查（多文件 / 20+ 工具调用） | → Paseo `pi/github-copilot/gpt-5.5`，⛔ 不走 `pi -p` |
 | 短审查（单文件） | → `pi -p --provider github-copilot --model gpt-5.5`，prompt ≤200 字符 |
 
@@ -278,7 +294,7 @@ create_agent({
   workspace: { kind: "current" },
   initialPrompt: "{dispatch_prompt}",
   notifyOnFinish: true,
-  settings: build_settings(provider),   // 🔴 见下，⛔ 不要无条件传 modeId
+  settings: build_settings(provider, model, thinking),   // 🔴 见下，⛔ 不要无条件传 modeId
   
   labels: { "rift-dispatch": "true" }
 })
@@ -287,15 +303,25 @@ create_agent({
 #### 🔴 `settings` 必须按 provider 生成，⛔ 不能无条件传 `modeId`
 
 ```python
-def build_settings(provider, thinking):
+def build_settings(full_provider, model, thinking):
+    # full_provider 形如 'pi/volcengine-coding' / 'codebuddy-code'；model 是该 provider 上的真实 id
+    root = full_provider.split('/')[0]
+    _, upstream = split_provider(full_provider)
+
+    # 🔴 该模型的 thinkingOptions 为 null ⇒ ⛔ 一个档位字段都不能传
+    if upstream.startswith('volcengine') and model == 'kimi-k2.7-code':
+        return {}
+
     s = {'thinkingOptionId': thinking}
-    if provider.startswith('pi/'):
+    if root == 'pi':
         return s                              # 🔴 pi provider 的 availableModes 为空，
                                               #    传 modeId 直接报 Invalid mode
-    if provider.split('/')[0] in ('codebuddy-code', 'qoderclicn'):
+    if root in ('codebuddy-code', 'qoderclicn'):
         s['modeId'] = 'bypassPermissions'
-    elif provider.split('/')[0] in ('claude', 'codex'):
+    elif root in ('claude', 'codex'):
         s['modeId'] = 'auto'
+    else:
+        report_unknown_provider_and_stop()    # ⛔ 未知 root ⇒ 停，别静默返回只带 thinking 的 settings
     return s
 ```
 
@@ -347,14 +373,15 @@ lastStatus == running           ⛔ 此时取到的是【中间态】，不是�
 | 能看见 / 能干预 | ✅ Paseo Desktop 可见、可中止 | ❌ one-shot，不进 agent 列表 |
 | 结构化状态 | ✅ `get_agent_status` | ❌ 只有日志文件 |
 | 开销 | 每 agent 一个 serve | 无，跑完即退 |
-| **用在哪** | ⭐ **开发实施类** | **只读 / 短 / 审查类** |
+| **用在哪** | ⭐ **开发实施类 + 大审查** | **短任务 / 短审查 / 只读分析** |
 
 ⛔ **别把开发任务丢给 `pi -p`** —— 不是 pi 不行，是 CLI 这条路**你看不见**。
 ✅ 正确做法是 **Paseo 派 pi**：可观测性和 pi 的能力两样都要，本来就不冲突。
 
 #### 3.2a 开发实施类 → Paseo 派 pi
 
-⭐ Paseo 的 `pi` provider 已把 **27 个模型**全暴露（火山 19 + Copilot 8），带完整 thinking 档位：
+⭐ Paseo 的 `pi` provider 把 `~/.pi/agent/models.json` 里的模型全暴露，带完整 thinking 档位。
+⚠️ **具体数量以 `pi --list-models` 为准，⛔ 不要在文档里写死**（会过期）：
 
 ```
 create_agent({ provider: "pi/volcengine-coding/deepseek-v4-flash",
@@ -436,7 +463,7 @@ pi -p --provider github-copilot --model gpt-5.5 "{≤200 字符的 review_prompt
 | `gpt-5.3-codex` | `minimal` `low` `medium` `high` `xhigh`　⛔无 off max | ✅ |
 | `gpt-5.4` | `minimal` `low` `medium` `high` `xhigh`　⛔无 off max | ✅ |
 | `gpt-5.4-mini` | `minimal` `low` `medium` `high` `xhigh`　⛔无 off max | ⚠️ 未实测 |
-| `gpt-5.4-nano` | `minimal` `xhigh`　⛔无 off | ⚠️ 未实测 |
+| ⛔ `gpt-5.4-nano` | `minimal` `xhigh`　⛔无 off | ⛔ **unsupported**，⛔ 不作为可用审查模型 |
 | `gpt-5.5` | `minimal` `low` `medium` `high` `xhigh`　⛔无 off max | ✅ |
 | `gpt-5.6-luna` | `minimal` `low` `medium` `high` `xhigh` `max`　⛔无 off | ⚠️ 未实测 |
 | `gpt-5.6-sol` | `minimal` `low` `medium` `high` `xhigh` `max`　⛔无 off | ⚠️ 未实测 |

@@ -513,7 +513,7 @@ Agent Plan 额度不够，2026-08-20 另购 Coding Plan（Pro 套餐，包月至
 
 用户 2026-08-20 定位卡死根因：**每次 `opencode run --pure` 拉起一个 serve，反复调用则 serve 堆叠吃穿内存**。
 ⇒ 单次偶发调用本身安全；⛔ **循环里反复 `opencode run` 是危险动作**，改用 `pi -p`。
-review 已迁到 `pi -p` + Copilot，opencode 现在没有任何常规用途。
+review 已迁到 Copilot：开发实施类 + 大审查 → Paseo；短任务 / 短审查 → `pi -p`。opencode 现在没有任何常规用途。
 
 ---
 
@@ -671,7 +671,8 @@ M3 114 · Sonnet5 112 · K3 110.5 · Qwen3.8-Max 101.5 · Opus4.6 97 · Sonnet4.
 ```
 P0  ⛔ Provider 白名单（§1）        不在白名单的 model id 一律不派，先过这一关
 P1  用户显式 --model / --provider    直接用（仍受 P0 约束）
-P2  审查硬例外（§5）                 review → pi -p + github-copilot/gpt-5.5，不受 P0 约束
+P2  审查硬例外（§5）                 模型固定 github-copilot/gpt-5.5，不受 P0 约束
+     ⚠️ 通道按【规模】分：大审查 → Paseo pi/github-copilot/gpt-5.5；短审查 → pi -p
 P3  ⚠️ Claude 模型可派不推荐         消耗订阅额度，建议留给主会话
 P4  运行环境约束                     --hub 时确认 provider 在 Hub 可用
 P5  免费档（§0 T0 + §2 排除清单）    hy4-preview → hy3
