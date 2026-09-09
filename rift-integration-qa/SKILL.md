@@ -1,6 +1,7 @@
 ---
 name: rift-integration-qa
-description: Unified QA routing hub — detects testing scenario and dispatches to the right skill/workflow. Covers TDD, contract verification, fake-green detection, multi-layer consistency, real-device regression, deploy verification, and code review.
+description: "Rift Integration QA: unified QA routing hub — TDD, contract verification, fake-green detection, multi-layer consistency (DB↔API↔FE), real-device regression, deploy verification, code review. Triggers: 'rift-integration-qa', 'rift qa', 'qa', '测试', '验证', '集成验证', '三层验证', '契约验证', '假绿', '真机回归', 'deploy check', 'code review', '质量检查'."
+user-invocable: true
 argument-hint: "[tdd|verify|contract|regression|deploy-check|fake-green|review|auto] [--scope <area>]"
 level: 3
 ---
@@ -10,6 +11,9 @@ level: 3
 > 🔗 **rift 家族**：`/rift-dispatch`（派发）· `/rift-reap`（回收）· **`/rift-integration-qa`（测试验收）**
 
 > 触发词：`qa`、`测试`、`验证`、`集成验证`、`三层验证`、`契约验证`、`假绿`、`真机回归`、`deploy check`、`code review`、`质量检查`
+>
+> ⚠️ **这份清单在 frontmatter `description` 里有一份副本**（0909 同步）。
+> 只有 description 会进系统提示的 skill 列表 ⇒ 模型选 skill 时看的是那份。**改要改两处。**
 >
 > 这是所有 QA 活动的**统一入口**。根据场景自动路由到对应的 skill 或内置流程。
 
