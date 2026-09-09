@@ -7,7 +7,7 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 
 # Rift Dispatch — 智能任务派发
 
-> 🔗 **rift 家族**：**`/rift-dispatch`（派发）** · `/rift-free`（免费通道）· `/rift-integration-qa`（测试验收）
+> 🔗 **rift 家族**：**`/rift-dispatch`（派发）** · `/rift-reap`（回收）· `/rift-free`（免费通道）· `/rift-integration-qa`（测试验收）
 
 分析任务 → 选模型 → 选 provider → 创建子会话（Paseo）或执行 `pi -p`。
 
