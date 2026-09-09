@@ -7,7 +7,7 @@ level: 3
 
 # rift-integration-qa — QA Hub · 统一质量保障路由
 
-> 🔗 **rift 家族**：`/rift-dispatch`（派发）· `/rift-reap`（回收）· `/rift-free`（免费通道）· **`/rift-integration-qa`（测试验收）**
+> 🔗 **rift 家族**：`/rift-dispatch`（派发）· `/rift-reap`（回收）· **`/rift-integration-qa`（测试验收）**
 
 > 触发词：`qa`、`测试`、`验证`、`集成验证`、`三层验证`、`契约验证`、`假绿`、`真机回归`、`deploy check`、`code review`、`质量检查`
 >

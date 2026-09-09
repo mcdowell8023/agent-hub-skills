@@ -7,7 +7,7 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 
 # Rift Dispatch — 智能任务派发
 
-> 🔗 **rift 家族**：**`/rift-dispatch`（派发）** · `/rift-reap`（回收）· `/rift-free`（免费通道）· `/rift-integration-qa`（测试验收）
+> 🔗 **rift 家族**：**`/rift-dispatch`（派发）** · `/rift-reap`（回收）· `/rift-integration-qa`（测试验收）
 
 分析任务 → 选模型 → 选 provider → 创建子会话（Paseo）或执行 `pi -p`。
 
@@ -53,7 +53,7 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 | `--hub` | 标记 | 否（本地） |
 | `--worktree <path>` | 路径 | 当前目录 |
 | `--provider <name>` | 强制指定 provider | 按 model 自动选 |
-| `--free` | 强制走免费通道（rift-free） | 否 |
+| `--free` | 强制优先 T0 免费档，并放宽**能力类**排除（routing §2 的 `algorithm`/`perf`/`architecture`）<br>⛔ 不放宽**物理不可用**类（多模态会正常计费 · 额度耗尽 · 探活排队 · 本任务已做砸）<br>🔴 T0 拿不到时**停止并报告**，⛔ 不静默转付费 | 否 |
 | 其余文本 | 任务描述 | (必填) |
 
 参数缺失处理：
@@ -62,15 +62,18 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 - `--thinking` 非法值 → 回退到该模型默认档（`hy4-preview`/`hy3`→`high`，其余→`xhigh`）
 - `--thinking` 合法但**目标模型没有该档** → 按 §3.2e 能力表**降到最近可用档**，⛔ 不得静默升档，且必须在输出里回显实际生效档位
 - `--provider` 与 `--model` 不匹配 → 报告冲突，让用户选
+- `--free` 与 `task_type == review` 同时成立 → **报告冲突，让用户选**（review 硬例外固定 `gpt-5.5` 是付费档；⛔ 不擅自替用户决定牺牲哪一边）
 - `--worktree` 路径不存在 → 报错
 
 ---
 
 ## 2. 决策流程（伪代码）
 
-> 🔴 **这是一条单一线性管线**：⛔ 无 `goto`、⛔ 无「某分支自己算出落点就返回」。
-> ⚠️ **唯一的提前退出是 `--free`** —— 它是把**整个任务**委派给 `rift-free` skill，
-> 由那个 skill 自己负责校验、输出和 memory。⛔ 除此之外任何分支都不许提前 return。
+> 🔴 **这是一条单一线性管线**：⛔ 无 `goto`、⛔ 无「某分支自己算出落点就返回」、
+> ⛔ **无任何顶层提前 return**。
+> ⚠️ 2026-09-09 起连 `--free` 也不再是例外 —— 原先它 `delegate('rift-free'); return`，
+> 是这条管线上仅存的破例；`rift-free` 删除后 `--free` 改为在第 4 段内**只影响选档**，
+> 于是「无提前 return」从「有一个例外的规则」变成了真正的不变量。
 > 变量在第 0 段**全部初始化**，⛔ 后面不许凭空冒出新变量；
 > 用户显式给的值存进 `explicit_*`，**后续阶段只读不写**；
 > 所有路径最后汇到同一个收尾（第 6 段）。
@@ -97,6 +100,11 @@ PI_HOSTED = ('jdcloud-joyagent', 'volcengine-coding', 'volcengine-agent-plan',
 LADDER = [('glm-5.3-flash', 0.06), ('deepseek-v4-flash', 0.17),
           ('deepseek-v4-pro', 0.51), ('kimi-k3-2', 1.62)]      # T1..T4
 ENTRY  = {'algorithm': 1, 'perf': 1, 'concurrency_impl': 1, 'concurrency_diag': 1}
+# routing §2 免费档排除清单分两类。free_blockers(task_type,args) ⇒ 命中项的 set()，
+# 空集 = 不排除。⚠️ 只有【能力类】能被 --free 放宽：
+CAPABILITY_BLOCKERS = {'algorithm', 'perf', 'architecture'}      # 能力短板，有实测依据
+# ⛔ 物理不可用类（⛔ --free 也不放宽）：'multimodal'（会正常计费，免费不成立）
+#    'quota_exhausted' · 'probe_queued'（探活未秒回）· 'failed_this_task'（绕过会死循环）
 WALLET_PREF = {                                 # (upstream, 该 provider 上的真实 modelId)
   'deepseek-v4-pro':   [('jdcloud-joyagent',  'DeepSeek-V4-pro'),   # 🥇 7 折，护 cb credits
                         ('codebuddy-code',    'deepseek-v4-pro'),
@@ -142,9 +150,8 @@ upstream, model, thinking = explicit_upstream, explicit_model, explicit_thinking
 if explicit_upstream is not None:
     validate(explicit_upstream, explicit_model)
 
-# ═══ 2. --free ═══
-if args.free and explicit_model is None:
-    delegate('rift-free'); return          # ⚠️ 唯一的提前退出：整个任务交给别的 skill
+# ═══ 2. --free 只置标志，⛔ 不提前退出（落点在第 4 段）═══
+want_free = args.free and explicit_model is None
 
 # ═══ 3. review 硬例外 ═══ 只定【模型】，⛔ 不在这里定通道（通道统一在第 5 段定）
 if task_type == 'review' and explicit_model is None:
@@ -156,11 +163,18 @@ if task_type == 'review' and explicit_model is None:
 
 # ═══ 4. 选模型：T0 免费档 → T1..T4 阶梯 ═══ ⛔ 只赋值，不 return
 elif model is None:
-    if explicit_upstream is None and not excluded_from_free(task_type, args):
+    # --free 只放宽【能力类】排除（algorithm/perf/architecture）——用户显式接受能力风险；
+    # ⛔ 不放宽【物理不可用】类（多模态计费/额度耗尽/探活排队/本任务已做砸）——
+    #    那几条绕过去也拿不到免费，只会静默变成付费或死循环。判定见 routing §2。
+    blockers = free_blockers(task_type, args)        # ⇒ set()，空集表示不排除
+    if explicit_upstream is None and (not blockers or
+                                      (want_free and blockers <= CAPABILITY_BLOCKERS)):
         for m in ('hy4-preview', 'hy3'):            # T0，顺位固定
             if promo_active(m) and probe_ok(m):     # ⚠️ 长任务必须探活，怕撞排队
                 upstream, model, thinking = 'codebuddy-code', m, thinking or 'high'
                 break
+    if model is None and want_free:
+        report_free_unavailable_and_stop(blockers)   # 🔴 显式要免费却拿不到 ⇒ 停
     if model is None:                                # T1..T4
         i = ENTRY.get(task_type, 0) + failed_paid_tiers_in_this_task
         # ⛔ failed_paid_tiers 只数【付费阶梯内】做砸的档数：T0 不计、同档重试不计

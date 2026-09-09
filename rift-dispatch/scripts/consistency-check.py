@@ -78,7 +78,8 @@ body = re.search(r"## 2\. 决策流程.*?```python\n(.*?)\n```", S, re.S).group(
 for fn in ('split_provider', 'normalize_provider', 'validate', ):
     chk(f'def {fn}' in body, f"缺 {fn}()")
 chk('goto' not in body, "⛔ 伪代码里不许有 goto（会跳过初始化）")
-# 提前 return 只允许 helper 函数内 + 一处有标注的 --free 出口
+# 提前 return 只允许 helper 函数内。2026-09-09 起顶层【零例外】——
+# 原先 --free 的 delegate 出口随 rift-free 一起删除了。
 def strip_comment(l):            # ⚠️ 必须剥注释：注释里写「⛔ 不 return」会被误判
     return l.split('#', 1)[0]
 code = [strip_comment(l) for l in body.split('\n')]
@@ -87,13 +88,14 @@ for l in code:
     if re.match(r'^def ', l): in_fn = True; continue
     if l.strip() and not l.startswith((' ', '\t')): in_fn = False
     if in_fn: continue                                   # 函数体内的 return 合法
-    if re.search(r'\breturn\b', l) and 'rift-free' not in l:
+    if re.search(r'\breturn\b', l):
         top_returns.append(l.strip())
 chk(not top_returns, f"⛔ 顶层提前 return（会绕过统一收尾）: {top_returns[:2]}")
 
 # 🔴 「变量用了但没赋值点」—— 第三轮栽在 scope / channel 上
 USED = set(re.findall(r"\b([a-z_][a-z0-9_]*)\b(?=\s*[),])", body))
-for var in ('scope', 'channel', 'thinking', 'task_type', 'upstream', 'model'):
+for var in ('scope', 'channel', 'thinking', 'task_type', 'upstream', 'model',
+            'want_free', 'CAPABILITY_BLOCKERS'):   # 0909: --free 改造引入，别再漏检
     chk(re.search(rf"^\s*{var}\s*=|,\s*{var}\s*=|{var},.*=", body, re.M) is not None,
         f"⛔ 变量 `{var}` 被使用但找不到赋值点")
 for dangling in ('pick_provider_for', 'default_model_for'):

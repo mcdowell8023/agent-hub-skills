@@ -7,7 +7,7 @@ argument-hint: "[--yes] [--include-idle] [--include-error] [--dry-run]"
 
 # Rift Reap — 归档自己派出去的子会话
 
-> 🔗 **rift 家族**：`/rift-dispatch`（派发）· **`/rift-reap`（回收）** · `/rift-free`（免费通道）· `/rift-integration-qa`（测试验收）
+> 🔗 **rift 家族**：`/rift-dispatch`（派发）· **`/rift-reap`（回收）** · `/rift-integration-qa`（测试验收）
 
 `rift-dispatch` 把任务派出去，`rift-reap` 把跑完的收回来。
 
