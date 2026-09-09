@@ -1,5 +1,85 @@
 # Rift Dispatch — 变更记录
 
+## v11.3 (2026-09-09)
+
+**京东云停用 → 阿里云百炼接入**，钱包①层从「固定顺序」改为「三池轮换」。
+
+### ⛔ 京东云停用（归档，不删）
+
+用户：**额度用尽，消耗太快不划算**。⚠️ 但「不排除以后还会用」⇒ 整块 provider 配置归档到
+`~/.pi/agent/providers-disabled/jdcloud-joyagent.json`（600 权限），里面带 `_howToRestore`：
+怎么塞回 `models.json`，以及**恢复后必须同步改哪些字段**的清单。
+
+⚠️ 连带处理：`deepseek-v4-pro` 的首选是京东，拿掉就**悬空**了。
+先改回火山（把 pro 挪出 cb 的原始动机是「0.51x 烧 credits 太快」，火山按月套餐同样满足），
+随后被本轮的三池轮换取代。
+
+⚠️ 顺带修了两个校验脚本对 `jdcloud-joyagent` 的**硬编码**——provider 会停用，
+硬编码会让脚本自己 `KeyError` 崩掉。改成遍历 catalog 里实际存在的键，并新增
+「已停用 provider ⛔ 不得残留在 WHITELIST / WALLET_PREF」断言。
+
+### ⭐ 阿里云百炼 Token Plan 接入
+
+| 项 | 值 |
+|---|---|
+| endpoint | `https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1` |
+| pi provider | `bailian-token-plan` |
+| CLI | `bl 1.22.0` + 9 个 `bailian-*` skill |
+
+🔴 **endpoint ⛔ 不是通用的 `dashscope.aliyuncs.com`** —— Token Plan 有独立域名，
+由 `bl auth status --output json` 的 `base_url` 得到。照通用文档配会连不上。
+
+**只用 4 个文本模型**（用户指定）：`deepseek-v4-pro-0813` · `deepseek-v4-flash-0731`
+· `qwen3.8-max` · `qwen3.8-flash`。图像三个（`qwen-image-3.0-pro` · `wan2.7-image-pro`
+· `wan2.7-image`）⛔ 不进 pi，走 `bl image`。
+
+⚠️ **`deepseek-v4-pro-0813` 不在 `/models` 目录里但可用** —— 又一次印证
+「目录里没有 ≠ 不能用」（上一次是火山的 `glm-5.3-flash`）。⇒ 判断可用性只能直接发请求。
+
+🔴 `compat.supportsDeveloperRole: false` 是**实测得出**（传 `role=developer` 报
+`not one of ['system','assistant','user','tool','function']`），⛔ 不是照抄火山猜的。
+
+### 🔴 钱包①层：固定顺序 → 三池轮换
+
+用户明确：**火山 / 百炼 / codebuddy 一样，就是轮换关系**；加百炼正是因为**火山与 cb 这个月量不够**。
+⇒ catalog 的 `modelProviderPreference` 从 `{first, then}` 改为 `rotation` 列表，
+文档不再把先后钉死，改成「用哪个由**哪个还有量**决定，撞限额换下一个」。
+
+### ⭐⚠️ 夜间 5 折 —— 时段策略回来了，但形态不同
+
+百炼限时：**每晚 22:00 – 次日 08:00**，`deepseek-v4-pro-0813` / `deepseek-v4-flash-0731`
+/ `qwen3.8-max` credits 减半（⛔ `qwen3.8-flash` 不在内）。
+
+🔴🔴 **这直接撞上 2026-08-16 废止的时段策略，必须说清区别。**
+旧策略有害的原因是 `is_night()` 会**把按任务类型选出的高档模型无条件冲掉**。
+本条⛔**不碰模型选择**——档位由阶梯定完之后，才用它在【同一模型的多个池】之间挑一个：
+
+```python
+# ═══ 5. 选 provider ═══
+if is_night_window() and model in NIGHT_DISCOUNTED:
+    pool = sorted(pool, key=lambda x: x[0] != 'bailian-token-plan')
+#   🔴 这里是【选池】不是【选模型】—— model 上一段已定死，本段⛔不许碰
+```
+
+⇒ 加了两道守卫：`consistency-check.py` 断言**夜间判断⛔不得出现在「选模型」段落**；
+`pipeline-test.py` 加 5 条夜间用例，含一条**关键反例**「夜间 T1 档位不被冲掉」。
+
+✅ **验证了守卫测得出坏**：构造 3 个违规（夜间判断混进选模型段 / `NIGHT_DISCOUNTED`
+与 catalog 不符 / 百炼 id 丢快照后缀），**3/3 全部抓住**。
+
+### 🔧 node 版本管理器被 PATH 屏蔽（本机修复，非 skill 改动）
+
+`which node` 落到 homebrew 的 26.7.0 而非 volta。根因：`.zshenv` 已把 volta 放最前，
+但 `.zprofile` / `.zshrc` 里的 `brew shellenv` 在其**之后**再次前置 homebrew，把 volta 挤到第 23 位。
+
+⇒ ① 先 `volta install node@26.7.0` 让 volta 持有**同一版本**（⛔ 避免降到 volta 原 default 的 20.10.0）；
+② 在两个文件末尾（`brew shellenv` 之后）加带标记的 `VOLTA_PATH_PRIORITY` 块重新前置；
+③ `bl` 改由 volta 管（pin `node@26.7.0`），卸掉 homebrew 那份重复安装。
+⚠️ homebrew 的 node 未卸（`brew uses --installed node` 为空，无依赖，但卸载属清理类操作需先 dry-run）。
+
+catalog 6.1.0 → **6.2.0**。
+
+
 ## v11.2 (2026-09-08)
 
 ### ✅ 第四轮：重写生效，但校验脚本被证明是假绿 ⇒ 改成可执行测试

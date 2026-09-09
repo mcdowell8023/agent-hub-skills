@@ -1,6 +1,6 @@
 {
-  "version": "6.0.0",
-  "lastUpdated": "2026-09-08",
+  "version": "6.2.0",
+  "lastUpdated": "2026-09-09",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。",
     "codebuddy-code": [
@@ -35,7 +35,8 @@
       "github-copilot": "⭐ 审查通道，⛔ 仅审查不做开发。🔴 真源是 `~/.pi/agent/models.json` 的 github-copilot provider（⛔ 不是 models-store.json，那个会自动刷新）。2026-09-08 实测可用 **17 个**：gpt-5.5(⭐审查默认) · gpt-5.6-sol · gpt-5.6-luna · gpt-5.6-terra · gpt-6-astra · gpt-5.4 · gpt-5.4-mini · gpt-5.3-codex · gpt-5-mini · gemini-3.5-flash · gemini-3.6-flash · gemini-3.7-flash · gemini-3.8-flash · grok-4.5 · grok-4.6 · mai-code-1-flash-picker · mai-code-1.1-flash。✅ claude-* 全族已移除。⚠️ store 里的 gpt-5.4-nano / kimi-k3 / kimi-k2.7-code 本订阅实际不支持",
       "codex": [
         "Paseo 派发 provider，定位不变"
-      ]
+      ],
+      "bailian-token-plan": "阿里云百炼 Token Plan（2026-09-09 接入）—— **已付费套餐**，与火山/cb/Copilot 不同钱包。🔴 用户指定只用 4 个文本模型：deepseek-v4-pro-0813 · deepseek-v4-flash-0731 · qwen3.8-max · qwen3.8-flash。⚠️ deepseek-v4-pro-0813 **不在 /models 目录里但可用**——⛔ 别拿目录判断可用性"
     },
     "closed": {
       "codebuddy-code": [
@@ -62,16 +63,6 @@
         "gm51model",
         "kmodel",
         "mmodel"
-      ],
-      "jdcloud-joyagent": [
-        "GLM-5.2",
-        "GLM-5.1",
-        "Kimi-K2.6",
-        "MiniMax-M2.7",
-        "qwen3.6-27b",
-        "qwen3.6-35b-a3b",
-        "qwen3-vl-235",
-        "JoyAI-LLM-Flash"
       ]
     },
     "consequences": [
@@ -81,11 +72,7 @@
       "✅ deepseek-v4-pro 正式版重测后不再是『无推荐场景』，但角色是**升档档位**（flash 做砸才用），⛔ 不是任何类型的默认落点——2026-08-20 撤销了 v10.1 的 algorithm 直派"
     ],
     "_pendingDecision": "⚠️ 待用户裁定（暂列 closed）：hy4-preview-x(0.29x 同名收费版) · hy3-x(0.05x)。⛔ 这两个的 label 与免费版完全相同，开启前必须确认派发侧按 id 匹配。✅ glm-5.3-flash 已于 2026-08-28 开启，见 models['glm-5.3-flash']",
-    "jdcloud-joyagent": [
-      "DeepSeek-V4-pro",
-      "DeepSeek-V4-Flash"
-    ],
-    "_jdcloudNote": "🔴 用户 2026-09-08 明确：「JD 云仍然只使用 DeepSeek」。上面 closed 的 8 个**已在 ~/.pi/agent/models.json 配好且逐个实跑通过**——留着是为了保住实测结论，⛔ 不是为了派发。⚠️ jdcloud-joyagent 因此**不在 whitelist.exempt 里**：它虽是独立钱包（积分制），但同样受白名单约束。",
+    "_jdcloudNote": "🔴 2026-09-09 用户停用：额度用尽、消耗太快不划算 ⇒ 已从 ~/.pi/agent/models.json 移除。⚠️ 不排除以后再用 ⇒ provider 配置完整归档在 ~/.pi/agent/providers-disabled/jdcloud-joyagent.json（含恢复步骤与「恢复后要同步改哪些字段」的清单）。停用前的白名单是 ['DeepSeek-V4-pro', 'DeepSeek-V4-Flash']。⚠️ 长期不用建议去控制台吊销那把 key。",
     "disabled": {
       "deepseek": "🔴 官方 API，2026-08-20 用户加入 opencode 的 disabled_providers。⛔ 与 exempt 互斥——它是【被禁用】不是【被豁免】。⚠️ 钱包优先级里它是第 ③ 层兜底（现金），要真用得先解除禁用"
     }
@@ -787,7 +774,8 @@
         "jdcloud-joyagent": {
           "modelId": "DeepSeek-V4-pro",
           "wallet": "积分（7 折）",
-          "note": "⭐ T3 首选（walletPriority）。⚠️ modelId 是**大写** DeepSeek-V4-pro，⛔ 不是小写"
+          "note": "⭐ T3 首选（walletPriority）。⚠️ modelId 是**大写** DeepSeek-V4-pro，⛔ 不是小写",
+          "status": "⛔ 已停用（2026-09-09）"
         },
         "_note": "⚠️ 本 map 只说明【某 provider 上的真实 modelId】，⛔ 不用于选 provider —— 选 provider 的唯一真源是 walletPriority.modelProviderPreference"
       },
@@ -1036,7 +1024,8 @@
       "preferredProvider": "jdcloud-joyagent",
       "wallet": "积分制 —— ⛔ 与 cb/qcn credits、火山套餐、Copilot 都是不同钱包",
       "family": "DeepSeek —— 🔴 用它实施时，异构评审⛔不得用 DeepSeek 全族",
-      "dispatchRank": 91
+      "dispatchRank": 91,
+      "status": "⛔ 2026-09-09 停用 —— provider 已从 pi 移除，配置归档在 ~/.pi/agent/providers-disabled/"
     },
     "jd-DeepSeek-V4-Flash": {
       "label": "DeepSeek-V4-Flash",
@@ -1061,7 +1050,24 @@
       "preferredProvider": "jdcloud-joyagent",
       "wallet": "积分制 —— ⛔ 与 cb/qcn credits、火山套餐、Copilot 都是不同钱包",
       "family": "DeepSeek —— 🔴 用它实施时，异构评审⛔不得用 DeepSeek 全族",
-      "dispatchRank": 90
+      "dispatchRank": 90,
+      "status": "⛔ 2026-09-09 停用 —— provider 已从 pi 移除，配置归档在 ~/.pi/agent/providers-disabled/"
+    },
+    "bailian-qwen3.8-max": {
+      "label": "Qwen3.8-Max (百炼)",
+      "provider": "bailian-token-plan",
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
+      "nightDiscount": true,
+      "note": "⚠️ 不在派发阶梯里 —— 用户指定配置但未指定用途，显式 --model 才会用到"
+    },
+    "bailian-qwen3.8-flash": {
+      "label": "Qwen3.8-Flash (百炼)",
+      "provider": "bailian-token-plan",
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
+      "nightDiscount": false,
+      "note": "⛔ 无夜间折扣。⚠️ 不在派发阶梯里"
     }
   },
   "claudeModels": {
@@ -1681,7 +1687,7 @@
     "expiry": "⚠️ 积分有效期一年，⛔ 不是永久额度"
   },
   "walletPriority": {
-    "_note": "🔴 用户 2026-09-08 决定。⛔ 与档位阶梯正交：档位决定【用哪个模型】，本表决定【从哪个 provider 拿】",
+    "_note": "🔴 用户 2026-09-08 决定。⛔ 与档位阶梯正交：档位决定【用哪个模型】，本表决定【从哪个 provider 拿】 ⚠️ 2026-09-09：第 ② 层（京东积分）已停用 ⇒ 当前实际只有 ① 已付费套餐 和 ③ 官方 API 现金兜底。",
     "order": [
       {
         "rank": 1,
@@ -1689,10 +1695,12 @@
           "volcengine-coding",
           "volcengine-agent-plan",
           "volcengine-chat",
+          "bailian-token-plan",
           "codebuddy-code"
         ],
         "nature": "已付费套餐",
-        "marginalCost": "≈0"
+        "marginalCost": "≈0",
+        "rotation": "🔴 **三池轮换，⛔ 不是固定顺序**（用户 2026-09-09）：火山 / 百炼 / codebuddy 地位相同。加百炼正是因为**火山与 cb 这个月量不够了**。⇒ 用哪个由【哪个还有量】决定；撞限额就换下一个，⛔ 不要在文档里钉死先后。"
       },
       {
         "rank": 2,
@@ -1700,7 +1708,8 @@
           "jdcloud-joyagent"
         ],
         "nature": "积分（流量包购买有优惠，优于其他平台）",
-        "marginalCost": "已买入的积分，⚠️ 有效期一年"
+        "marginalCost": "已买入的积分，⚠️ 有效期一年",
+        "status": "⛔ 2026-09-09 停用（额度用尽），配置已归档，恢复见 whitelist._jdcloudNote"
       },
       {
         "rank": 3,
@@ -1714,33 +1723,52 @@
     ],
     "modelProviderPreference": {
       "deepseek-v4-pro": {
-        "first": "jdcloud-joyagent",
-        "then": [
-          "codebuddy-code",
-          "volcengine-coding"
+        "rotation": [
+          "volcengine-coding",
+          "bailian-token-plan",
+          "codebuddy-code"
         ],
-        "fallback": "deepseek（官方 API，现金）",
-        "why": "🥇 京东 pro 有 7 折特价；且 cb 的 0.51x 烧 credits 太快，把 pro 挪走能护住 cb 额度"
+        "bailianModelId": "deepseek-v4-pro-0813",
+        "nightPreferred": "bailian-token-plan",
+        "fallback": "deepseek（官方 API，现金）—— ⚠️ 当前仍在 opencode 的 disabled_providers 里",
+        "why": "🔴 三池轮换（用户 2026-09-09），⛔ 不是固定顺序。夜间 22:00–08:00 百炼 5 折 ⇒ 优先百炼。"
       },
       "deepseek-v4-flash": {
-        "first": "volcengine-coding",
-        "then": [
+        "rotation": [
+          "volcengine-coding",
+          "bailian-token-plan",
           "codebuddy-code"
         ],
-        "fallback": "deepseek（官方 API，现金）—— ⚠️ 当前仍在 opencode 的 disabled_providers 里，用前需解除禁用",
-        "why": "两者都是已付费套餐，边际成本≈0；⛔ flash 不走京东，把积分省给 pro",
+        "bailianModelId": "deepseek-v4-flash-0731",
+        "nightPreferred": "bailian-token-plan",
         "noJdcloud": true,
-        "noJdcloudWhy": "🔴 「flash 不走京东」是硬规则（用户 2026-09-08）：把积分省给 pro。⇒ 兜底链⛔跳过京东直达官方 API"
+        "fallback": "deepseek（官方 API，现金）",
+        "why": "🔴 三池轮换。夜间 5 折 ⇒ 优先百炼。⛔ 京东已停用。"
       },
       "glm-5.3-flash": {
-        "first": "volcengine-coding",
-        "then": [
+        "rotation": [
+          "volcengine-coding",
           "codebuddy-code"
         ],
-        "why": "⚠️ 按同一钱包规则**推得**（用户未单独指定）：两者同属已付费套餐，火山在前。⭐ 2026-09-08 才发现火山也有 glm-5.3-flash，此前只配了 cb"
+        "bailianModelId": null,
+        "why": "⚠️ 百炼**没有** glm-5.3-flash（它只有 glm-5.2，且用户未选用）⇒ 只在火山与 cb 之间轮换，夜间不改。"
       }
     },
-    "othersUnchanged": "⚠️ 其余模型按原顺序（escalation + 降级链），本表只改 DeepSeek 两个型号的 provider 落点"
+    "othersUnchanged": "⚠️ 其余模型按原顺序（escalation + 降级链），本表只改 DeepSeek 两个型号的 provider 落点",
+    "nightDiscount": {
+      "_note": "⭐ 百炼限时夜间优惠。🔴 **它只影响【用哪个池】，⛔ 绝不影响【用哪个模型档位】**",
+      "window": "每晚 22:00 – 次日 08:00（本地时区）",
+      "discount": "credits 5 折",
+      "appliesTo": [
+        "deepseek-v4-pro-0813",
+        "deepseek-v4-flash-0731",
+        "qwen3.8-max"
+      ],
+      "notApplies": "⛔ qwen3.8-flash 不在优惠内",
+      "rule": "夜间窗口内，若目标模型在百炼有对应享折扣的 id ⇒ 轮换时优先百炼。⇒ deepseek-v4-pro → bailian/deepseek-v4-pro-0813；deepseek-v4-flash → bailian/deepseek-v4-flash-0731。⚠️ glm-5.3-flash 在百炼**没有对应型号**，夜间不改。",
+      "🔴 与已废止时段策略的区别": "2026-08-16 废止的那条时段策略之所以有害，是因为 `is_night()` 会**把按任务类型选出的高档模型无条件冲掉**。本条⛔不碰模型选择——档位由阶梯定完之后，才用它在【同一模型的多个池】之间挑一个。⇒ ⛔ 任何把夜间判断写进【选模型】那一段的实现都是错的。",
+      "caveat": "⚠️ 未标注截止日期，金额敏感时先复核控制台"
+    }
   },
   "deepseekOfficialPricing_20260908": {
     "_note": "官方定价页实读，用于判断京东/火山/cb 相对官方现金价的位置",

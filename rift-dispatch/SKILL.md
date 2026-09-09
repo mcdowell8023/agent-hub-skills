@@ -30,10 +30,10 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 ⚠️ **免费档时间线**：`08-31 hy3 止` → `09-12 hy4 止` → 免费档清零，默认落点变成 `glm-5.3-flash`。
 
 🔴 **钱包优先级**（routing §3.5，与档位阶梯**正交**）：
-① 火山 / codebuddy **已付费套餐**（边际成本≈0）→ ② 京东云**积分**（流量包有优惠）→ ③ ⛔ DeepSeek 官方 API（**现金**，永远兜底）。
-⇒ **`deepseek-v4-pro` 首选京东**（7 折特价）· **`deepseek-v4-flash` 首选火山、次选 codebuddy**（⛔ flash 不走京东）。其余按原顺序。
+① 火山 / codebuddy **已付费套餐**（边际成本≈0）→ ~~② 京东云积分~~（⛔ 2026-09-09 停用）→ ③ ⛔ DeepSeek 官方 API（**现金**，永远兜底）。
+⇒ **`deepseek-v4-pro` / `deepseek-v4-flash` / `glm-5.3-flash` 都是首选火山、次选 codebuddy**。
 
-🔴 **京东云通道 ⛔ 只用 DeepSeek**（`DeepSeek-V4-pro` / `DeepSeek-V4-Flash`），它是**积分制第三个钱包**，不动 cb credits 也不动火山套餐。⚠️ `DeepSeek-V4-pro` 当前 **7 折**，见 routing §3.4。
+⛔ **京东云通道 2026-09-09 已停用**（额度用尽、消耗太快）。配置归档在 `~/.pi/agent/providers-disabled/jdcloud-joyagent.json`，含恢复清单。⇒ 钱包只剩 ① 已付费套餐 和 ③ 官方 API 兜底。
 
 ## Prerequisites
 
@@ -89,15 +89,18 @@ WHITELIST = {                                   # P0，routing §1
   'codebuddy-code':   ['hy4-preview', 'hy3', 'glm-5.3-flash',
                        'deepseek-v4-flash', 'deepseek-v4-pro', 'kimi-k3-2'],
   'qoderclicn':       ['qmodel_38max'],
-  'jdcloud-joyagent': ['DeepSeek-V4-pro', 'DeepSeek-V4-Flash'],   # 🔴 只准 DeepSeek
 }
+# ⛔ jdcloud-joyagent 2026-09-09 停用（额度用尽、消耗太快）——已从 ~/.pi/agent/models.json 移除。
+#    ⚠️ 配置完整归档在 ~/.pi/agent/providers-disabled/jdcloud-joyagent.json（含恢复清单）。
+#    ⇒ 现在派它会落到「未知 provider」被拦，这是预期行为。
 DISABLED_PROVIDERS = ['deepseek']               # 🔴 官方 API，现金兜底，当前被 disable
 EXEMPT_PROVIDERS   = ['claude', 'codex', 'opencode', 'github-copilot',
-                      'volcengine-coding', 'volcengine-agent-plan', 'volcengine-chat']
+                      'volcengine-coding', 'volcengine-agent-plan', 'volcengine-chat',
+                      'bailian-token-plan']            # 阿里云百炼，2026-09-09 接入
 # 🔴 `pi` ⛔ 不在豁免集 —— 它是【宿主】不是钱包。豁免顶层 pi 会让
 #    pi/jdcloud-joyagent/GLM-5.2 绕过京东白名单。⚠️ 本清单必须与 catalog whitelist.exempt 一致。
-PI_HOSTED = ('jdcloud-joyagent', 'volcengine-coding', 'volcengine-agent-plan',
-             'volcengine-chat', 'github-copilot')
+PI_HOSTED = ('volcengine-coding', 'volcengine-agent-plan', 'volcengine-chat',
+             'bailian-token-plan', 'github-copilot')   # ⛔ 京东已停用
 LADDER = [('glm-5.3-flash', 0.06), ('deepseek-v4-flash', 0.17),
           ('deepseek-v4-pro', 0.51), ('kimi-k3-2', 1.62)]      # T1..T4
 ENTRY  = {'algorithm': 1, 'perf': 1, 'concurrency_impl': 1, 'concurrency_diag': 1}
@@ -107,14 +110,21 @@ CAPABILITY_BLOCKERS = {'algorithm', 'perf', 'architecture'}      # 能力短板�
 # ⛔ 物理不可用类（⛔ --free 也不放宽）：'multimodal'（会正常计费，免费不成立）
 #    'quota_exhausted' · 'probe_queued'（探活未秒回）· 'failed_this_task'（绕过会死循环）
 WALLET_PREF = {                                 # (upstream, 该 provider 上的真实 modelId)
-  'deepseek-v4-pro':   [('jdcloud-joyagent',  'DeepSeek-V4-pro'),   # 🥇 7 折，护 cb credits
-                        ('codebuddy-code',    'deepseek-v4-pro'),
-                        ('volcengine-coding', 'deepseek-v4-pro')],
-  'deepseek-v4-flash': [('volcengine-coding', 'deepseek-v4-flash'), # 🥇 已付费套餐
-                        ('codebuddy-code',    'deepseek-v4-flash')],# ⛔ 不走京东（routing §3.5）
-  'glm-5.3-flash':     [('volcengine-coding', 'glm-5.3-flash'),
-                        ('codebuddy-code',    'glm-5.3-flash')],
+  # 🔴 三池【轮换】，⛔ 不是固定优先级（用户 2026-09-09）——火山 / 百炼 / cb 地位相同。
+  #    加百炼正是因为火山与 cb 这个月量不够 ⇒ 用哪个由「哪个还有量」决定，撞限额换下一个。
+  'deepseek-v4-pro':   [('volcengine-coding',  'deepseek-v4-pro'),
+                        ('bailian-token-plan', 'deepseek-v4-pro-0813'),    # ⚠️ id 带 -0813
+                        ('codebuddy-code',     'deepseek-v4-pro')],
+  'deepseek-v4-flash': [('volcengine-coding',  'deepseek-v4-flash'),
+                        ('bailian-token-plan', 'deepseek-v4-flash-0731'),  # ⚠️ id 带 -0731
+                        ('codebuddy-code',     'deepseek-v4-flash')],
+  'glm-5.3-flash':     [('volcengine-coding',  'glm-5.3-flash'),
+                        ('codebuddy-code',     'glm-5.3-flash')],
+                        # ⚠️ 百炼没有 glm-5.3-flash ⇒ 只在火山与 cb 之间轮换
 }
+# ⭐ 百炼限时夜间 5 折（22:00 – 次日 08:00）适用的【阶梯模型】
+#    ⛔ glm-5.3-flash 不在内（百炼无对应型号）；⛔ qwen3.8-flash 本身不享折扣
+NIGHT_DISCOUNTED = {'deepseek-v4-pro', 'deepseek-v4-flash'}
 
 def split_provider(s):
     """pi/jdcloud-joyagent/X → ('pi','jdcloud-joyagent')；codebuddy-code → (None,'codebuddy-code')"""
@@ -193,7 +203,14 @@ elif model is None:
 
 # ═══ 5. 选 provider ═══ ⚠️ 显式 provider 存在时⛔不许被换掉
 if upstream is None:
-    upstream, model = first_available(WALLET_PREF.get(model, [('codebuddy-code', model)]))
+    pool = WALLET_PREF.get(model, [('codebuddy-code', model)])
+    # ⭐ 夜间窗口（22:00–次日 08:00）百炼 5 折 ⇒ 把百炼提到轮换队首
+    # 🔴🔴 这里是【选池】不是【选模型】—— model 在上一段已经定死，本段⛔不许碰它。
+    #      2026-08-16 废止的旧时段策略之所以有害，正是因为 is_night() 会把按类型
+    #      选出的高档模型无条件冲掉。⛔ 任何把时段判断写进【选模型】那一段的实现都是错的。
+    if is_night_window() and model in NIGHT_DISCOUNTED:
+        pool = sorted(pool, key=lambda x: x[0] != 'bailian-token-plan')
+    upstream, model = first_available(pool)
     # ⚠️ 这里 model 可能被换成【该 provider 上的真实 id】（如京东是大写 DeepSeek-V4-pro）——
     #    ⛔ 那不是换模型，是同一个模型在不同 provider 上的 id 写法
 elif explicit_model is None:

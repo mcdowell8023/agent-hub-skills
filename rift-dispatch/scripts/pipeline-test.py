@@ -21,8 +21,10 @@ class ConflictFreeReview(Exception): pass   # 0909: --free 撞 review 硬例外
 class Result:
     def __init__(s): s.agent_id, s.run_id = 'ag-1', 'run-1'
 
-# 京东侧 model id 大小写不同 —— 桩要如实反映，否则测不出大小写 bug
-JD_ID = {'deepseek-v4-pro': 'DeepSeek-V4-pro', 'deepseek-v4-flash': 'DeepSeek-V4-Flash'}
+# provider 侧 modelId 可能与阶梯里的写法不同（京东曾是大写）。⚠️ 京东 2026-09-09 停用后
+# 当前无此类差异，桩保留能力以便将来恢复时仍测得出大小写 bug。
+PROVIDER_ID = {'jdcloud-joyagent': {'deepseek-v4-pro': 'DeepSeek-V4-pro',
+                                    'deepseek-v4-flash': 'DeepSeek-V4-Flash'}}
 
 def run_case(c):
     class A:
@@ -42,9 +44,10 @@ def run_case(c):
         'promo_active':      lambda m: c.get('promo_ok', True),
         'probe_ok':          lambda m: c.get('probe_ok', True),
         'first_available':   lambda lst: lst[0],
-        'model_id_on':       lambda u, m: JD_ID.get(m, m) if u == 'jdcloud-joyagent' else m,
+        'model_id_on':       lambda u, m: PROVIDER_ID.get(u, {}).get(m, m),
         'is_dev_task':       lambda tt: tt not in ('review',),
         'is_large_review':   lambda sc: sc == 'large',
+        'is_night_window':   lambda: c.get('night', False),   # ⭐ 百炼夜间 5 折窗口
         'provider_available': lambda u: True,
         'downgrade':         lambda u, m: (u, m),
         'clamp_to_supported': lambda m, t: t,
@@ -71,22 +74,24 @@ def run_case(c):
 # ── 用例表：必须与 SKILL.md §3「派发路径用例」一致 ──
 CASES = [
  # 拦截类
- dict(n='JD+GLM 必拦', provider='jdcloud-joyagent', model='GLM-5.2', task_type='core', block='conflict'),
- dict(n='pi/JD+GLM 必拦', provider='pi/jdcloud-joyagent', model='GLM-5.2', task_type='core', block='conflict'),
+ dict(n='cb 白名单外必拦', provider='codebuddy-code', model='GLM-5.2', task_type='core', block='conflict'),
  dict(n='已停用 provider 必拦', provider='deepseek', model='deepseek-v4-pro', task_type='core', block='disabled'),
  dict(n='未知 provider 必拦', provider='nosuch', model='x', task_type='core', block='unknown'),
+ # ⛔ 京东 2026-09-09 停用 —— 已移出白名单与豁免集 ⇒ 现在应落「未知 provider」被拦
+ dict(n='京东已停用必拦', provider='jdcloud-joyagent', model='DeepSeek-V4-pro',
+      task_type='core', block='unknown'),
+ dict(n='pi/京东同样必拦', provider='pi/jdcloud-joyagent', model='DeepSeek-V4-pro',
+      task_type='core', block='unknown'),
  # 放行类
- dict(n='JD+pro 放行且带 pi 前缀', provider='pi/jdcloud-joyagent', model='DeepSeek-V4-pro',
-      task_type='core', want=dict(provider='pi/jdcloud-joyagent', model='DeepSeek-V4-pro', channel='paseo')),
- dict(n='火山显式放行', provider='volcengine-coding', model='deepseek-v4-flash', task_type='core',
-      want=dict(provider='pi/volcengine-coding', model='deepseek-v4-flash', channel='paseo')),
+ dict(n='火山显式放行且带 pi 前缀', provider='volcengine-coding', model='deepseek-v4-flash',
+      task_type='core', want=dict(provider='pi/volcengine-coding', model='deepseek-v4-flash', channel='paseo')),
  # 阶梯类
  dict(n='T0 免费档', task_type='core',
       want=dict(upstream='codebuddy-code', model='hy4-preview', thinking='high')),
  dict(n='T1 起步（免费档被排除）', task_type='core', blockers={'algorithm'},
       want=dict(upstream='volcengine-coding', model='glm-5.3-flash', provider='pi/volcengine-coding')),
- dict(n='T3 落京东且大写 id', task_type='core', blockers={'algorithm'}, failed=2,
-      want=dict(upstream='jdcloud-joyagent', model='DeepSeek-V4-pro', provider='pi/jdcloud-joyagent')),
+ dict(n='T3 落火山 v4-pro', task_type='core', blockers={'algorithm'}, failed=2,
+      want=dict(upstream='volcengine-coding', model='deepseek-v4-pro', provider='pi/volcengine-coding')),
  dict(n='T4 落 K3', task_type='core', blockers={'algorithm'}, failed=3,
       want=dict(model='kimi-k3-2')),
  dict(n='超 T4 必停', task_type='core', blockers={'algorithm'}, failed=4, exhausted=True),
@@ -101,9 +106,21 @@ CASES = [
                 provider='github-copilot', channel='cli')),
  # 显式值不得被覆盖
  dict(n='只给 model 不被 T0/阶梯覆盖', model='v4-pro', task_type='core',
-      want=dict(model='DeepSeek-V4-pro', upstream='jdcloud-joyagent')),
+      want=dict(model='deepseek-v4-pro', upstream='volcengine-coding')),
  dict(n='只给 provider 不被 T0 换成 cb', provider='volcengine-coding', task_type='core',
       want=dict(upstream='volcengine-coding')),
+ # ⭐ 夜间折扣：🔴 只改【用哪个池】，⛔ 绝不改【用哪个模型档位】
+ dict(n='夜间 T2 优先百炼', task_type='core', blockers={'algorithm'}, failed=1, night=True,
+      want=dict(upstream='bailian-token-plan', model='deepseek-v4-flash-0731')),
+ dict(n='白天 T2 仍走火山', task_type='core', blockers={'algorithm'}, failed=1, night=False,
+      want=dict(upstream='volcengine-coding', model='deepseek-v4-flash')),
+ dict(n='夜间 T3 优先百炼且带 -0813', task_type='core', blockers={'algorithm'}, failed=2, night=True,
+      want=dict(upstream='bailian-token-plan', model='deepseek-v4-pro-0813')),
+ # 🔴 关键反例：夜间⛔不得把模型档位冲掉（旧时段策略就是栽在这）
+ dict(n='夜间 T1 档位不被冲掉', task_type='core', blockers={'algorithm'}, failed=0, night=True,
+      want=dict(model='glm-5.3-flash', upstream='volcengine-coding')),
+ dict(n='夜间免费档仍是 T0', task_type='core', night=True,
+      want=dict(upstream='codebuddy-code', model='hy4-preview')),
  # --free 新语义（0909：不再委派，只影响选档）
  dict(n='--free 无排除 → T0', free=True, task_type='core',
       want=dict(upstream='codebuddy-code', model='hy4-preview')),

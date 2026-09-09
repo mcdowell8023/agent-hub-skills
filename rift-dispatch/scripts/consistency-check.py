@@ -38,7 +38,13 @@ for bad in ('pi', 'jdcloud-joyagent', 'deepseek'):
     chk(bad not in cat, f"⛔ {bad} 不该在 catalog exempt")
 
 # ── 2. 白名单：SKILL 与 catalog 一致 ──
-for prov in ('codebuddy-code', 'qoderclicn', 'jdcloud-joyagent'):
+# ⚠️ 遍历 catalog 里实际存在的 provider 键，⛔ 别硬编码名字——
+#    provider 会被停用（京东 2026-09-09），硬编码会让脚本自己 KeyError 崩掉
+NON_PROVIDER = {'consequences'}          # ⚠️ whitelist 下的 list 不都是 provider
+WL_PROVIDERS = [k for k, v in d['whitelist'].items()
+                if not k.startswith('_') and isinstance(v, list) and k not in NON_PROVIDER]
+chk(WL_PROVIDERS, "catalog whitelist 里一个 provider 都没有")
+for prov in WL_PROVIDERS:
     w = set(d['whitelist'][prov])
     m = re.search(rf"'{re.escape(prov)}':\s*\[(.*?)\]", S, re.S)
     chk(m is not None, f"SKILL 缺 {prov} 白名单")
@@ -60,7 +66,8 @@ for m, v in wp.items():
         block = seg[1].split('],')[0]
         pairs = re.findall(r"\('([a-z0-9._\-]+)',\s*'([A-Za-z0-9._\-]+)'\)", block)
         got_order = [u for u, _ in pairs]
-        want_order = [v['first']] + list(v.get('then', []))
+        # ⚠️ 2026-09-09 结构改了：三池【轮换】⇒ 用 rotation 列表，⛔ 不再是 first/then
+        want_order = list(v.get('rotation') or ([v['first']] + list(v.get('then', []))))
         chk(got_order == want_order,
             f"{m} provider 顺序 SKILL={got_order} catalog={want_order}")
         for u, mid in pairs:
@@ -68,8 +75,26 @@ for m, v in wp.items():
             if isinstance(expect, dict) and expect.get('modelId'):
                 chk(mid == expect['modelId'],
                     f"{m}@{u} modelId SKILL={mid} catalog={expect['modelId']}")
-chk("('jdcloud-joyagent',  'DeepSeek-V4-pro')" in S, "⛔ JD modelId 必须是大写 DeepSeek-V4-pro")
+# ⚠️ 原有「JD modelId 必须大写」断言随京东 2026-09-09 停用一并移除。
+#    恢复京东时要连同这条断言一起加回（归档文件的恢复清单里有记）。
 chk(wp['deepseek-v4-flash'].get('noJdcloud') is True, "flash 必须标 noJdcloud")
+
+# ── 3b. 夜间折扣：catalog 与 SKILL 的 NIGHT_DISCOUNTED 必须对得上 ──
+nd = d['walletPriority'].get('nightDiscount')
+chk(nd is not None, "catalog 缺 nightDiscount")
+if nd:
+    sk_night = set(re.findall(r"'([a-z0-9._\-]+)'",
+                   re.search(r"NIGHT_DISCOUNTED = \{(.*?)\}", S, re.S).group(1)))
+    # catalog 记的是 provider 侧 id，SKILL 记的是阶梯模型名 ⇒ 用 bailianModelId 建映射再比
+    want_night = {m for m, v in wp.items()
+                  if v.get('bailianModelId') in set(nd.get('appliesTo', []))}
+    chk(sk_night == want_night,
+        f"夜间折扣集合 SKILL={sorted(sk_night)} 由 catalog 推得={sorted(want_night)}")
+    chk('is_night_window' in S, "SKILL 缺夜间窗口判断")
+    # 🔴 夜间判断⛔不得出现在【选模型】那一段（旧时段策略的病根）
+    body_sel = re.search(r"# ═══ 4\. 选模型.*?# ═══ 5\.", S, re.S)
+    chk(body_sel is None or 'is_night' not in body_sel.group(0),
+        "⛔ 夜间判断混进了【选模型】段落——旧时段策略正是这样把档位冲掉的")
 chk('jdcloud' not in re.search(r"'deepseek-v4-flash':.*?\],", S, re.S).group(0),
     "WALLET_PREF flash 不该含京东")
 
