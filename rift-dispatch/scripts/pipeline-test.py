@@ -16,6 +16,8 @@ BODY = re.search(r"## 2\. 决策流程.*?```python\n(.*?)\n```", SRC, re.S).grou
 class Blocked(Exception): pass
 class Delegated(Exception): pass
 class Exhausted(Exception): pass
+class FreeUnavailable(Exception): pass      # 0909: --free 但拿不到 T0
+class ConflictFreeReview(Exception): pass   # 0909: --free 撞 review 硬例外
 class Result:
     def __init__(s): s.agent_id, s.run_id = 'ag-1', 'run-1'
 
@@ -35,7 +37,8 @@ def run_case(c):
         'estimate_scope':    lambda *_: c.get('scope', 'small'),
         'resolve_worktree':  lambda _: '/tmp/wt',
         'count_failed_paid_tiers': lambda _: c.get('failed', 0),
-        'excluded_from_free': lambda tt, a: c.get('free_excluded', False),
+        'free_blockers':     lambda tt, a: set(c.get('blockers', ())),
+        'CAPABILITY_BLOCKERS': {'algorithm', 'perf', 'architecture'},
         'promo_active':      lambda m: c.get('promo_ok', True),
         'probe_ok':          lambda m: c.get('probe_ok', True),
         'first_available':   lambda lst: lst[0],
@@ -55,6 +58,8 @@ def run_case(c):
         'report_conflict_and_stop':         lambda: (_ for _ in ()).throw(Blocked('conflict')),
         'report_unknown_provider_and_stop': lambda: (_ for _ in ()).throw(Blocked('unknown')),
         'report_ladder_exhausted_and_stop': lambda: (_ for _ in ()).throw(Exhausted()),
+        'report_free_unavailable_and_stop': lambda b=None: (_ for _ in ()).throw(FreeUnavailable()),
+        'report_conflict_free_vs_review_and_stop': lambda: (_ for _ in ()).throw(ConflictFreeReview()),
     }
     src = ("def _decide():\n" + textwrap.indent(BODY, '    ')
            + "\n    return dict(upstream=upstream, model=model, provider=provider,"
@@ -78,14 +83,14 @@ CASES = [
  # 阶梯类
  dict(n='T0 免费档', task_type='core',
       want=dict(upstream='codebuddy-code', model='hy4-preview', thinking='high')),
- dict(n='T1 起步（免费档被排除）', task_type='core', free_excluded=True,
+ dict(n='T1 起步（免费档被排除）', task_type='core', blockers={'algorithm'},
       want=dict(upstream='volcengine-coding', model='glm-5.3-flash', provider='pi/volcengine-coding')),
- dict(n='T3 落京东且大写 id', task_type='core', free_excluded=True, failed=2,
+ dict(n='T3 落京东且大写 id', task_type='core', blockers={'algorithm'}, failed=2,
       want=dict(upstream='jdcloud-joyagent', model='DeepSeek-V4-pro', provider='pi/jdcloud-joyagent')),
- dict(n='T4 落 K3', task_type='core', free_excluded=True, failed=3,
+ dict(n='T4 落 K3', task_type='core', blockers={'algorithm'}, failed=3,
       want=dict(model='kimi-k3-2')),
- dict(n='超 T4 必停', task_type='core', free_excluded=True, failed=4, exhausted=True),
- dict(n='algorithm 跳 T0 从 T2 起', task_type='algorithm', free_excluded=True,
+ dict(n='超 T4 必停', task_type='core', blockers={'algorithm'}, failed=4, exhausted=True),
+ dict(n='algorithm 跳 T0 从 T2 起', task_type='algorithm', blockers={'algorithm'},
       want=dict(model='deepseek-v4-flash', upstream='volcengine-coding')),
  # 审查类
  dict(n='大审查走 Paseo', task_type='review', scope='large',
@@ -99,8 +104,23 @@ CASES = [
       want=dict(model='DeepSeek-V4-pro', upstream='jdcloud-joyagent')),
  dict(n='只给 provider 不被 T0 换成 cb', provider='volcengine-coding', task_type='core',
       want=dict(upstream='volcengine-coding')),
- # 委派
- dict(n='--free 委派', free=True, task_type='core', delegated=True),
+ # --free 新语义（0909：不再委派，只影响选档）
+ dict(n='--free 无排除 → T0', free=True, task_type='core',
+      want=dict(upstream='codebuddy-code', model='hy4-preview')),
+ dict(n='--free 放宽能力类排除 → 仍走 T0', free=True, task_type='core',
+      blockers={'algorithm', 'perf'},
+      want=dict(upstream='codebuddy-code', model='hy4-preview')),
+ dict(n='--free 遇物理不可用 → 停止', free=True, task_type='core',
+      blockers={'quota_exhausted'}, free_unavailable=True),
+ dict(n='--free 混合排除(含物理) → 停止', free=True, task_type='core',
+      blockers={'algorithm', 'multimodal'}, free_unavailable=True),
+ dict(n='--free + review → 冲突停止', free=True, task_type='review', conflict_free_review=True),
+ dict(n='--free --provider codebuddy-code → 不冲突走 T0', free=True,
+      provider='codebuddy-code', task_type='core',
+      want=dict(upstream='codebuddy-code', model='hy4-preview')),
+ # ⛔ 不带 --free 时能力类排除仍跳 T0（证明放宽只对 --free 生效）
+ dict(n='无 --free 时能力类排除照旧跳 T0', task_type='core', blockers={'algorithm'},
+      want=dict(model='glm-5.3-flash')),
 ]
 
 fails = []
@@ -110,6 +130,8 @@ for c in CASES:
         if c.get('block'):     fails.append(f"{c['n']}: 期望被拦({c['block']})，实际放行 {got}"); continue
         if c.get('delegated'): fails.append(f"{c['n']}: 期望委派，实际 {got}"); continue
         if c.get('exhausted'): fails.append(f"{c['n']}: 期望阶梯到顶停止，实际 {got}"); continue
+        if c.get('free_unavailable'): fails.append(f"{c['n']}: 期望 --free 不可用停止，实际 {got}"); continue
+        if c.get('conflict_free_review'): fails.append(f"{c['n']}: 期望 free×review 冲突，实际 {got}"); continue
         for k, v in c['want'].items():
             if got.get(k) != v:
                 fails.append(f"{c['n']}: {k} 期望 {v!r} 实际 {got.get(k)!r}")
@@ -119,6 +141,10 @@ for c in CASES:
         if not c.get('delegated'): fails.append(f"{c['n']}: 意外委派")
     except Exhausted:
         if not c.get('exhausted'): fails.append(f"{c['n']}: 意外报阶梯到顶")
+    except FreeUnavailable:
+        if not c.get('free_unavailable'): fails.append(f"{c['n']}: 意外报 --free 不可用")
+    except ConflictFreeReview:
+        if not c.get('conflict_free_review'): fails.append(f"{c['n']}: 意外报 free×review 冲突")
     except NameError as e:
         fails.append(f"{c['n']}: 🔴 伪代码里有未定义名 —— {e}")
     except Exception as e:

@@ -83,6 +83,7 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 ```python
 # ═══ 0. 初始化 ═══ 所有变量在这里出现
 args = parse_args(user_input)
+want_free = False          # 第 2 段按 args.free/explicit_model 定值，⛔ 不在别处冒出
 
 WHITELIST = {                                   # P0，routing §1
   'codebuddy-code':   ['hy4-preview', 'hy3', 'glm-5.3-flash',
@@ -155,6 +156,9 @@ want_free = args.free and explicit_model is None
 
 # ═══ 3. review 硬例外 ═══ 只定【模型】，⛔ 不在这里定通道（通道统一在第 5 段定）
 if task_type == 'review' and explicit_model is None:
+    # 🔴 冲突必须在这里判 —— 第 4 段是 elif，review 一旦定了 model 就永远进不去，
+    #    把判断放那边等于 want_free 静默作废、照样派付费审查（0909 审查抓到）。
+    if want_free: report_conflict_free_vs_review_and_stop()   # ⛔ 不替用户决定牺牲哪边
     upstream, model = 'github-copilot', 'gpt-5.5'
     # ⚠️ 措辞校准：是「**未显式指定时**默认固定 gpt-5.5」，⛔ 不是「不可覆盖」——
     #    P1 显式优先仍然成立（routing 附录 P1 在 P2 之前）。
@@ -167,8 +171,12 @@ elif model is None:
     # ⛔ 不放宽【物理不可用】类（多模态计费/额度耗尽/探活排队/本任务已做砸）——
     #    那几条绕过去也拿不到免费，只会静默变成付费或死循环。判定见 routing §2。
     blockers = free_blockers(task_type, args)        # ⇒ set()，空集表示不排除
-    if explicit_upstream is None and (not blockers or
-                                      (want_free and blockers <= CAPABILITY_BLOCKERS)):
+    # ⚠️ T0 只跑在 codebuddy-code 上 ⇒ 显式指定的正是它时【不算冲突】；
+    #    原先一律要求 explicit_upstream is None，会让 `--free --provider codebuddy-code`
+    #    直接掉进 report_free_unavailable_and_stop（0909 审查抓到）。
+    t0_provider_ok = explicit_upstream in (None, 'codebuddy-code')
+    if t0_provider_ok and (not blockers or
+                           (want_free and blockers <= CAPABILITY_BLOCKERS)):
         for m in ('hy4-preview', 'hy3'):            # T0，顺位固定
             if promo_active(m) and probe_ok(m):     # ⚠️ 长任务必须探活，怕撞排队
                 upstream, model, thinking = 'codebuddy-code', m, thinking or 'high'
