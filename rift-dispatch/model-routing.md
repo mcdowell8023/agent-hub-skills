@@ -19,7 +19,7 @@
 T0  免费档   cb/hy4-preview @high     0.00x   ⭐ 第一顺位（免费至 **09-10**，⚠️ 每日赠送额度）
              cb/hy3         @high     0.00x   次位（免费至 08-31）
               ↓ 命中 §2 排除清单，或免费期已过
-T1  低价档   glm-5.3-flash        @xhigh          付费档起步
+T1  低价档   deepseek-v4.1-flash  @xhigh  0.03x   付费档起步（⛔ 只在 cb；同档替代 glm-5.3-flash 三池）
              ⭐ provider 由 §3.5 的 WALLET_PREF【轮换】+ 折扣窗口决定，⛔ 不是固定首选
              ⚠️ 2026-09-08 才发现火山也有它，此前只配了 cb
               ↓ 上一档在【本任务】做砸过一轮
@@ -44,7 +44,7 @@ T4  极致档   cb/kimi-k3-2         @xhigh  1.62x   🔴 红线，见 §3.3
 
 ```
 08-31  hy3 免费止   → hy4 顶上（本就是第一顺位）
-09-10  hy4 免费止   → 免费档清零，默认落点变成 T1 的 glm-5.3-flash
+09-10  hy4 免费止   → 免费档清零，默认落点变成 T1 的 deepseek-v4.1-flash
        🔴 2026-09-09 用户更正：原记「09-12」是**错的**，实际 08-28 ~ **09-10**
 ```
 
@@ -75,7 +75,8 @@ T4  极致档   cb/kimi-k3-2         @xhigh  1.62x   🔴 红线，见 §3.3
 |---|---|---|---|
 | `codebuddy-code` | **`hy4-preview`** | **0.00x** | ⭐ T0 第一顺位（至 **09-10**） |
 | `codebuddy-code` | `hy3` | 0.00x | T0 次位（至 08-31） |
-| `codebuddy-code` | **`glm-5.3-flash`** | **0.06x** | T1 低价档（2026-08-28 开启） |
+| `codebuddy-code` | **`deepseek-v4.1-flash`** | **0.03x** | 🔴 T1 主落点（2026-09-10 起）·⛔ 只此一池·必须校验产出 |
+| `codebuddy-code` / 火山两套餐 | `glm-5.3-flash` | 0.06x | T1 **同档替代**（三池，可用性来源） |
 | `codebuddy-code` | `deepseek-v4-flash` | **0.17x** | T2 主力档，DeepSeek 族首选 |
 | `codebuddy-code` | `deepseek-v4-pro` | **0.51x** | T3 升档，⛔ 非任何类型的默认落点 |
 | `codebuddy-code` | `kimi-k3-2` | **🔴 1.62x** | T4 极致档，⛔ 见 §3.3 红线 |

@@ -1,5 +1,5 @@
 {
-  "version": "6.27.1",
+  "version": "6.29.1",
   "lastUpdated": "2026-09-09",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
@@ -695,7 +695,8 @@
           "thinking": "high",
           "note": "h2h 对 v4-flash，见 h2hEval_20260828"
         }
-      }
+      },
+      "🔴 roleChange_20260910": "🔴 2026-09-10 由 **T1 主落点** 降为 **T1 同档替代**（`tierPeers`）—— `deepseek-v4.1-flash` 同价且能力不弱。⭐ 它仍然很重要：v4.1-flash 只有 cb 一池，glm 的**三池**是 T1 可用性的实际来源。"
     },
     "deepseek-v4-flash": {
       "label": "DeepSeek-V4-Flash",
@@ -1304,10 +1305,10 @@
     "deepseek-v4.1-flash": {
       "label": "Deepseek-V4.1-Flash",
       "provider": "codebuddy-code",
-      "credit": 0.06,
+      "credit": 0.03,
       "_addedOn": "2026-09-10（cb 2.147.0 新增）",
-      "priceVerified": "✅ cb 倍率 **0.06x**（= glm-5.3-flash 同价）⇒ 比 deepseek-v4-flash(0.17x) 便宜 **2.8×**、比 deepseek-v4-pro(0.51x) 便宜 **8.5×**。",
-      "dispatchNote": "⛔ **不进阶梯** —— 2026-09-10 已完成同口径盲评（见 v41FlashEval_20260910）。拦住它的⛔**不是能力**（同价、能力不弱于 T1 的 glm-5.3-flash），是**首次产出有效率 1/3**（glm 同轮 3/3）。⇒ 留在 cb 白名单，显式 `--model deepseek-v4.1-flash` 可派；🔴 派它必须校验产出，⛔ 不能只看 exit 0。",
+      "priceVerified": "✅ cb 倍率 **0.03x**（2026-09-10 面板实测；⚠️ 当天早些时候是 0.06x，**同日改过价**）⇒ 是 `glm-5.3-flash`(0.06x) 的**一半**、比 `deepseek-v4-flash`(0.17x) 便宜 **5.7×**、比 `deepseek-v4-pro`(0.51x) 便宜 **17×**。",
+      "dispatchNote": "⭐ **T1 主落点**（用户 2026-09-10 决定）—— **0.03x，glm-5.3-flash 的一半价**，且能力不弱于它（同渠道两臂拉丁方 34.2 vs 32.3，LRU 与并发两题 4 朝向全胜）。🔴 **两个代价必须同时兜住**：① 只有 cb 一池 ⇒ tierPeers 挂 glm 三池；② 约 17% 产出是「看着像正常输出」的垃圾 ⇒ 进 `OUTPUT_VALIDATION_REQUIRED`，🔴 收割必须校验产出，⛔ 不能只看 exit 0。",
       "🔴 stabilityRisk_20260910": {
         "finding": "🔴 **在 cb 上输出不稳定** —— 同一 prompt 两次跑差 70 倍：lru 30096 vs **426** 字符；concurrency 18720 vs **768**。短的那两次正文里出现 `<｜｜DSML｜｜ calls>` / `<｜｜DSML｜｜ invoke` —— **DeepSeek 内部工具调用标记泄漏进正文**，cb 未解析、响应塌掉。",
         "notCausedByToolsFlag": "⚠️ 两次都用 `--tools \"\"` ⇒ ⛔ 不是这个参数**确定性**导致的，是**跑与跑之间不稳定**。",
@@ -1330,6 +1331,17 @@
           "mean3": 34.2
         },
         "firstAttemptValidRate": "1/3（对照：glm-5.3-flash 3/3）"
+      },
+      "🔴 validityRate_20260910": {
+        "measured": "10/12 = **83%** 首次产出即有效（3 题 × 4 轮，cb `--output-format json` + 拼接）",
+        "byTask": {
+          "concurrency": "4/4 (100%)",
+          "kafka": "3/4 (75%)",
+          "lru": "3/4 (75%)"
+        },
+        "effectiveRate": "等效倍率 ≈ 0.03 / 0.83 = **0.036x**（对照 glm-5.3-flash 0.06x 单发 · T2 0.17x）⇒ 即使按 17% 重试算，仍比 glm 单发便宜约 **40%**。",
+        "🔴 supersedes": "🔴 **作废先前记录的「首次有效率 1/3」** —— 那是 **n=3** 的坏运气（p=0.83 时 3 次里 ≤1 次有效的概率约 7.7%，不常见但会发生）。⚠️ 那个错数字曾直接支撑「⛔ 不进阶梯」的结论 ⇒ **n=3 不足以支撑排他性结论**，尤其当结论会否掉一个同价更强的候选。",
+        "🔴 failureShape": "🔴 失败**不是报错**：实测一次 3988 字、正文含 `<｜｜DSML｜｜>` 内部标记 —— 不校验的消费方会直接收下。⇒ 这是它必须进 OUTPUT_VALIDATION_REQUIRED 的原因。"
       }
     }
   },
@@ -2057,6 +2069,13 @@
           "fallback_manualOnly": "🔴 **⛔ 已不是自动兜底**（用户 2026-09-09）：`deepseek/*` 官方 API（现金）仍在 opencode 的 disabled_providers 里 ⇒ 写成自动兜底等于给了一条**假通道**（真走到会失败，⛔ 不是花钱）。⇒ 现在是**手动路径**：需用户明确接受现金开销并解除 disabled 后，才可显式 --provider deepseek。",
           "lastResort": "🔴 该模型的 WALLET_PREF 池全不可用 → 同档替代（⚠️ **仅 T3 有** TIER_PEERS）→ 可用性升档 tier+1 → 到顶(T4)仍拿不到 ⇒ claude/claude-sonnet-5@max。⚠️ ⛔ 别当通则记成「四池 + 同档替代」：T2 四池但【无】同档替代 · T1 三池 · T4 只有 cb（见 claudeModels.claude-sonnet-5.lastResort）"
         }
+      },
+      "deepseek-v4.1-flash": {
+        "rotation": [
+          "codebuddy-code"
+        ],
+        "🔴 singlePool": "🔴 **T1 只有一个池** —— 假 id 的 400 权威清单确认它不在火山/百炼。⇒ 撞 cb 额度时走 tierPeers 落 `glm-5.3-flash`（同价 0.06x、三池），⛔ 不升 T2(0.17x)。",
+        "discountNote": "⚠️ 单池 ⇒ 折扣排序是恒等变换，改不了落点；且 cb 折扣集当前为空。"
       }
     },
     "othersUnchanged": "⚠️ 本表覆盖阶梯四档（glm-5.3-flash / deepseek-v4-flash / deepseek-v4-pro / kimi-k3-2）的 provider 轮换；其它模型按 availabilityEscalation 与 models.*.providers。",
@@ -2087,7 +2106,26 @@
     "tierPeers": {
       "_note": "⭐ 【档内换落点】，🔴 ⛔ 不是升降档。只在本档模型的所有池都拿不到时才用；主落点可用时⛔不许插队。",
       "_invariant": "🔴 进本表的唯一依据是【换位盲评实测同档】（差值 < 同轮实测的位置偏好幅度）。⛔ 不许凭 Arena 名次或体感加。",
-      "🔴 emptied_20260910": "🔴 **本表已空** —— 原本 `deepseek-v4-pro` → `qwen3.8-max`；用户 2026-09-10 禁用前者后，qwen3.8-max **升为 T3 主落点** ⇒ 本档不再有同档替代。⇒ T3 唯一池拿不到时走【可用性升档】到 T4。⛔ 不要为了让表非空而填未测模型 —— 进本表的唯一依据仍是换位盲评实测同档。"
+      "🔴 emptied_20260910": "🔴 **本表已空** —— 原本 `deepseek-v4-pro` → `qwen3.8-max`；用户 2026-09-10 禁用前者后，qwen3.8-max **升为 T3 主落点** ⇒ 本档不再有同档替代。⇒ T3 唯一池拿不到时走【可用性升档】到 T4。⛔ 不要为了让表非空而填未测模型 —— 进本表的唯一依据仍是换位盲评实测同档。",
+      "deepseek-v4.1-flash": {
+        "peers": [
+          {
+            "upstream": "volcengine-coding",
+            "modelId": "glm-5.3-flash"
+          },
+          {
+            "upstream": "volcengine-agent-plan",
+            "modelId": "glm-5.3-flash"
+          },
+          {
+            "upstream": "codebuddy-code",
+            "modelId": "glm-5.3-flash"
+          }
+        ],
+        "evidence": "2026-09-10 同渠道（均在 cb，⛔ 无 harness 混淆）两臂 A/B 对调完整拉丁方，判 gpt-5.5·medium，题目逐字相同：三题均分 v4.1-flash **34.2** vs glm-5.3-flash **32.3**。逐题 LRU 33.5/29.0 · 并发 35.0/32.5（这两题 4 个朝向全胜）· Kafka 34.0/**35.5**（反向且翻转⇒该题不可分）。6 个配对差 5 正 1 负。⇒ **不弱于**即满足同档要求。⚠️ 同批量到 A 位偏好 +2.5（与 09-08 独立测值一致）；⛔ 总平均那 1.9 分单独不足以定强弱，立得住的是逐题方向一致性。",
+        "⭐ whyPeerNotMain": "⭐ glm 是**同档替代**而非主落点：v4.1-flash 能力不弱且同价，但**只有 cb 一池**；glm 有三池 ⇒ 正好把可用性补回来。主落点可用时⛔不许插队。",
+        "⭐ alsoUsedFor": "⭐ 本表还兼一个用途：**显式 `--provider` 上没有本档主落点**时，在同档里找该 provider 真有的落点（如 `--provider volcengine-coding` ⇒ glm-5.3-flash），并记入 `tier_substitutions` 报告。⛔ 与「用户显式给了 model 就不许替换」不冲突。"
+      }
     },
     "availabilityEscalation": {
       "_note": "🔴 与【质量/成本升档】正交的**第二种换档理由**（用户 2026-09-09）。⛔ 别混。",
@@ -2485,11 +2523,12 @@
       },
       "deepseek-v4.1-flash": {
         "label": "Deepseek-V4.1-Flash",
-        "credit": 0.06
+        "credit": 0.03
       }
     },
-    "⭐ cheapestPaid": "⭐ 最便宜的付费档并列两个 **0.06x**：`glm-5.3-flash` 与 `deepseek-v4.1-flash`。⇒ 同价 ⇒ 选哪个只由**能力 + 可靠性**决定（见 v41FlashEval_20260910）。",
-    "⚠️ notInWhitelist": "⚠️ 未定档⛔未进白名单：`glm-5.3`(0.79) · `glm-5.2`(0.79) · `glm-5.1`(0.79) · `glm-5v-turbo`(0.71) · `minimax-m3`(0.25) · `minimax-m2.7`(0.19) · `kimi-k2.7`(0.57) · `kimi-k2.6`(0.52)。⚠️ `minimax-m2.7` 只要 0.19x，比 T2 的 `deepseek-v4-flash`(0.17x) 略贵、比 T3 便宜一大截 ⇒ **若测出能力够，它是 T2/T3 之间的空档候选**。⛔ 但没实测就不许进阶梯。"
+    "⭐ cheapestPaid": "⭐ 最便宜的付费档是 **`deepseek-v4.1-flash` 0.03x**，**只有 `glm-5.3-flash`(0.06x) 的一半**。⇒ 折算 83% 有效率后仍是 **0.036x**，比 glm 单发还便宜约 40% ⇒ **T1 主落点在价格上就已经成立**，⛔ 不必依赖能力那半边论证。",
+    "⚠️ notInWhitelist": "⚠️ 未定档⛔未进白名单：`glm-5.3`(0.79) · `glm-5.2`(0.79) · `glm-5.1`(0.79) · `glm-5v-turbo`(0.71) · `minimax-m3`(0.25) · `minimax-m2.7`(0.19) · `kimi-k2.7`(0.57) · `kimi-k2.6`(0.52)。⚠️ `minimax-m2.7` 只要 0.19x，比 T2 的 `deepseek-v4-flash`(0.17x) 略贵、比 T3 便宜一大截 ⇒ **若测出能力够，它是 T2/T3 之间的空档候选**。⛔ 但没实测就不许进阶梯。",
+    "🔴 rateChangedMidSession": "🔴 **`deepseek-v4.1-flash` 在同一天内从 0.06x 降到 0.03x**（用户两张 `/model` 面板截图相隔约一小时）。面板里它的**位置也上移了**（从最末移到 hy3-x 之后）⇒ 列表顺序像是按推荐/促销排的。⇒ ⭐ **cb 倍率有时效，⛔ 快照不能当常量用**。任何「谁更便宜」的结论都要标日期，涉及定档时先重新看一眼面板。"
   },
   "🔴 ladderT3Change_20260910": {
     "change": "T3 `deepseek-v4-pro`(0.51x) → **`qwen3.8-max`** @ `pi/bailian-token-plan`",
@@ -2521,5 +2560,32 @@
     ],
     "_why": "🔴 **全局禁用型号**，⛔ 与 blockedModels(provider-keyed) 正交。provider-keyed 表天生漏（0910：v4-pro 漏了 EXEMPT 里的 volcengine-chat；且没列过的 provider 结构上拦不住）；且只给 `--model` 不给 provider 时 §1 的 validate() 整段不执行。⇒ 「不允许 agent 自己派发某型号」是**全局**陈述，必须落在全局那一层。",
     "⚠️ whyTopLevel": "⚠️ ⛔ 不能放在 whitelist 下面 —— whitelist 的**值为 list** 的键会被解析成「某 provider 的允许清单」⇒ 实测报出「provider `blockedModelsAnyProvider` 没有渠道缩写」。这是同一类坑第三次：**说明键混进数据表**。"
+  },
+  "outputValidationRequired": {
+    "models": [
+      "deepseek-v4.1-flash"
+    ],
+    "_why": "🔴 判据：该型号有**「产出看着正常但其实是垃圾」**的已实证失败形态 ⇒ 只看 exit 0 会收下垃圾。⛔ 以前这条只写在散文里 —— 那拦不住任何东西（同 `glm-latest` 的教训：规则必须落到会被执行的那一层）。",
+    "signals": [
+      "过短（<5000 字）",
+      "正文含 `<｜｜DSML｜｜` 等内部标记",
+      "开头是续接语",
+      "⭐ 不足同批其他产出中位数的 35%（这一条不依赖预判「坏长什么样」）"
+    ],
+    "reference": "~/AgentWorkspace/tmp/v41flash-bench-20260910/validate_cell.py"
+  },
+  "🔴 freeTierStatus_20260910": {
+    "window": "hy4 免费期 = **2026-08-28 ~ 09-10**，⭐ **含 09-10 当日**（用户原话「8月28日–9月10日，每日赠送免费额度」）。",
+    "⚠️ notContinuous": "⚠️ 是**每日赠额**，⛔ 不是连续免费期 —— **不回复 = 当日赠额已用完**，须主动换模型。",
+    "probe_20260910": "✅ 2026-09-10 实测三个免费 id **全部秒回**：`hy4-preview` 6s · `hy3` 8s · `hy3-x` 4s，`requestModelId` 回显一致，且三者都在假 id 的 400 权威清单里。",
+    "🔴 judgeByProbe": "🔴 **判据是探活，⛔ 不是面板上的 x0.00** —— 那是**价格**，免费期结束或当日赠额耗尽后价格仍可能显示 0，表现为**排队/不回复**而不是报错。",
+    "nextChange": "⚠️ **09-11 起** hy4 应当停止赠额 ⇒ T0 落空，默认落点变成 T1 `deepseek-v4.1-flash`。⭐ §2 的 T0 分支本来就先 `promo_active()` + `probe_ok()`，⇒ **会自愈**，⛔ 不需要按日期硬改。"
+  },
+  "⚠️ suspectedAlias_20260910": {
+    "id": "volcengine-agent-plan/kimi-k3",
+    "why": "⚠️ 缺点版本号 —— cb 的 400 权威清单里是 `kimi-k3-1`。⭐ 判据：**同一族在别处存在更具体的 id ⇒ 较短那个就是别名**。这比「含 `latest`」更普适 —— §3g 守卫只认字面 `latest`，所以漏了它。",
+    "probe_20260910": "🔴 用 `只输出:OK` 极小 prompt 探活 **挂起 >8 分钟无响应**（已 kill）。⚠️ 极小 prompt 也挂 ⇒ 属另一种根因，⛔ 不是 prompt 长度问题。",
+    "status": "🔴 **待核实**：是别名、是火山侧就这么命名、还是根本服务不了。⛔ 在此之前**不作为推荐落点**；⛔ 也不直接进 BLOCKED_MODELS —— 没证据就屏蔽会堵死可能合法的路径（见 feedback-plugging-a-gap-blocks-valid-paths）。",
+    "foundBy": "2026-09-10 异构审查（bailian/deepseek-v4-flash-0731，234s）指出 §3.2a 表格与 WALLET_PREF 不符时顺带暴露。"
   }
 }

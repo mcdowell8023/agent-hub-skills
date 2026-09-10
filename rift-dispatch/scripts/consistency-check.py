@@ -286,6 +286,19 @@ if m:
     chk(sk_blk == cat_blk,
         f"屏蔽名单 SKILL≠catalog: 仅SKILL={ {k: sorted(sk_blk.get(k,set())-cat_blk.get(k,set())) for k in sk_blk} } "
         f"仅catalog={ {k: sorted(cat_blk.get(k,set())-sk_blk.get(k,set())) for k in cat_blk} }")
+    # 🔴 §3j 产出校验清单必须与 catalog 一致，且**必须在 §2 里被真正读取**
+    #    ⛔ 只声明一个集合不算落地 —— 那就是「规则只写在散文里」的变体。
+    om = re.search(r"OUTPUT_VALIDATION_REQUIRED\s*=\s*\{(.*?)\n\}", S, re.S)
+    chk(om is not None, "SKILL 里找不到 OUTPUT_VALIDATION_REQUIRED")
+    if om:
+        sk_ov = set(re.findall(r"'([A-Za-z0-9._\-]+)'", om.group(1)))
+        cat_ov = set(d.get('outputValidationRequired', {}).get('models', []))
+        chk(sk_ov == cat_ov, f"产出校验清单 SKILL={sorted(sk_ov)} ≠ catalog={sorted(cat_ov)}")
+        chk(S.count('OUTPUT_VALIDATION_REQUIRED') >= 3,
+            "⛔ OUTPUT_VALIDATION_REQUIRED 只被声明、没被读取 ⇒ 等于只写在散文里")
+        chk('requires_output_validation = model in OUTPUT_VALIDATION_REQUIRED' in S,
+            "⛔ 缺 `requires_output_validation = model in OUTPUT_VALIDATION_REQUIRED` —— 校验要求必须算进决策结果")
+
     # 🔴 §3i 全局禁用集必须与 catalog 一致（0910 新增那一层）
     gm = re.search(r"BLOCKED_MODELS_ANY_PROVIDER\s*=\s*\{(.*?)\}", S, re.S)
     chk(gm is not None, "SKILL 里找不到 BLOCKED_MODELS_ANY_PROVIDER")
