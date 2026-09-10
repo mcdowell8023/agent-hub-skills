@@ -8,6 +8,7 @@ normalize_provider 去掉 pi 前缀 / 新增未赋值变量）全部假绿。
    markdown 是唯一真源，⛔ 改坏它这里必红。
 """
 import re, sys, pathlib, textwrap
+from datetime import datetime as DT
 
 B = pathlib.Path(__file__).resolve().parent.parent
 SRC = (B / 'SKILL.md').read_text()
@@ -18,6 +19,9 @@ class Delegated(Exception): pass
 class Exhausted(Exception): pass
 class FreeUnavailable(Exception): pass      # 0909: --free 但拿不到 T0
 class ConflictFreeReview(Exception): pass   # 0909: --free 撞 review 硬例外
+class ReviewProviderConflict(Exception): pass  # 0909 第 6 轮: review 的 provider 被显式改成非 Copilot
+class NoLanding(Exception): pass            # 0909: 本档在所有池+同档替代里都没有可用落点
+class BlockedModel(Exception): pass         # 0909: 用户点名屏蔽的型号
 class Result:
     def __init__(s): s.agent_id, s.run_id = 'ag-1', 'run-1'
 
@@ -35,6 +39,7 @@ def run_case(c):
         'user_input':        'x',
         'task_context':      None,
         'resolve_short_name': lambda m: {'v4-pro': 'deepseek-v4-pro'}.get(m, m),
+        # ⚠️ 空串要原样透传 —— 空 --model 的校验靠 args.model 本身，⛔ 不靠 resolve 结果
         'classify':          lambda _: c['task_type'],
         'estimate_scope':    lambda *_: c.get('scope', 'small'),
         'resolve_worktree':  lambda _: '/tmp/wt',
@@ -43,13 +48,22 @@ def run_case(c):
         'CAPABILITY_BLOCKERS': {'algorithm', 'perf', 'architecture'},
         'promo_active':      lambda m: c.get('promo_ok', True),
         'probe_ok':          lambda m: c.get('probe_ok', True),
-        'first_available':   lambda lst: lst[0],
+        # ⚠️ 桩要能表达「某些落点不可用」，否则 TIER_PEERS 兜底分支永远测不到
+        'first_available':   lambda lst: next(
+            ((u, m) for u, m in lst if f'{u}/{m}' not in set(c.get('unavailable', ()))), None),
         'model_id_on':       lambda u, m: PROVIDER_ID.get(u, {}).get(m, m),
-        'is_dev_task':       lambda tt: tt not in ('review',),
+        # ⚠️ force_cli 是【测试专用】旋钮：review 改成顶层分支后，review 永远落 copilot，
+        #    自然路径下已没有「cli 规模的任务走到 LAST_RESORT」这条 —— 但那个 channel 守卫
+        #    是**防御性**的（防将来改 is_dev_task），仍要测得到。
+        'is_dev_task':       lambda tt: (not c.get('force_cli')) and tt not in ('review',),
         'is_large_review':   lambda sc: sc == 'large',
-        'is_night_window':   lambda: c.get('night', False),   # ⭐ 百炼夜间 5 折窗口
-        'provider_available': lambda u: True,
-        'downgrade':         lambda u, m: (u, m),
+        'now':               lambda: c.get('when', __import__('datetime').datetime(2026,9,10,15,0)),
+                             # ⚠️ 默认取【工作日 15:00】= 两家都原价，避免用例被折扣顺序影响
+        # ⚠️ 0909 第 4 轮起，provider_available / downgrade 已【不在 §2 管线里】——
+        #    可用性只有一套真源（§5 的 first_available）。桩保留只为兼容 §6 前置检查表。
+        'provider_available': lambda u: u not in set(c.get('dead_providers', ())),
+        # ⚠️ 桩要能表达「旧 downgrade() 换成低档模型」，否则 §6 的降档风险测不到
+        'downgrade':         lambda u, m: c.get('downgrade_to', (u, m)),
         'clamp_to_supported': lambda m, t: t,
         'default_thinking':  lambda m: 'high' if m.startswith('hy') else 'xhigh',
         'execute':           lambda *a: Result(),
@@ -63,10 +77,14 @@ def run_case(c):
         'report_ladder_exhausted_and_stop': lambda: (_ for _ in ()).throw(Exhausted()),
         'report_free_unavailable_and_stop': lambda b=None: (_ for _ in ()).throw(FreeUnavailable()),
         'report_conflict_free_vs_review_and_stop': lambda: (_ for _ in ()).throw(ConflictFreeReview()),
+        'report_review_provider_conflict_and_stop': lambda *a: (_ for _ in ()).throw(ReviewProviderConflict()),
+        'report_no_landing_and_stop': lambda m=None: (_ for _ in ()).throw(NoLanding()),
+        'report_blocked_model_and_stop': lambda *a: (_ for _ in ()).throw(BlockedModel()),
     }
     src = ("def _decide():\n" + textwrap.indent(BODY, '    ')
            + "\n    return dict(upstream=upstream, model=model, provider=provider,"
-             " channel=channel, thinking=thinking)\n")
+             " channel=channel, thinking=thinking,"
+             " availability_escalations=availability_escalations)\n")
     ns = dict(stub)
     exec(compile(src, '<SKILL.md §2>', 'exec'), ns)     # 🔴 NameError 会在这里炸出来
     return ns['_decide']()
@@ -82,6 +100,30 @@ CASES = [
       task_type='core', block='unknown'),
  dict(n='pi/京东同样必拦', provider='pi/jdcloud-joyagent', model='DeepSeek-V4-pro',
       task_type='core', block='unknown'),
+ # 🔴 覆盖率发现的缺口：空 --model 是输入错误，⛔ 不是「没指定」
+ dict(n='空 --model → 报冲突（⛔ 不当成没指定）', model='   ', task_type='core', block='conflict'),
+ # 🔴 第 7 轮审查：review + 非 Copilot provider 必须报【review 冲突】，⛔ 不是 P0 的 disabled/whitelist
+ dict(n='review + deepseek → 报 review 冲突（⛔ 不是 disabled）', task_type='review', scope='small',
+      provider='deepseek', model='deepseek-v4-pro', review_provider_conflict=True),
+ dict(n='review + cb → 报 review 冲突（⛔ 不是白名单冲突）', task_type='review', scope='small',
+      provider='codebuddy-code', model='gpt-5.5', review_provider_conflict=True),
+ # ⛔ 非 review 时 P0 照常先拦
+ dict(n='非 review + deepseek 仍报 disabled', task_type='core',
+      provider='deepseek', model='deepseek-v4-pro', block='disabled'),
+ # 🔴 用户点名屏蔽的型号（2026-09-09）—— ⛔ 豁免 provider 也拦得住
+ dict(n='火山 Doubao 必拦', provider='volcengine-coding', model='doubao-seed-2.1-turbo',
+      task_type='core', blocked_model=True),
+ dict(n='火山 ark-code-latest 必拦', provider='pi/volcengine-agent-plan', model='ark-code-latest',
+      task_type='core', blocked_model=True),
+ dict(n='Copilot gpt-5-mini 必拦', provider='github-copilot', model='gpt-5-mini',
+      task_type='core', blocked_model=True),
+ dict(n='Copilot mai-code-1-flash-picker 必拦', provider='github-copilot',
+      model='mai-code-1-flash-picker', task_type='core', blocked_model=True),
+ # ⛔ 反例：没被点名的⛔不许误伤
+ dict(n='Copilot gpt-5.5 照常放行', provider='github-copilot', model='gpt-5.5',
+      task_type='core', want=dict(upstream='github-copilot', model='gpt-5.5')),
+ dict(n='待测的 grok-4.6 ⛔ 不在屏蔽名单里', provider='github-copilot', model='grok-4.6',
+      task_type='core', want=dict(upstream='github-copilot', model='grok-4.6')),
  # 放行类
  dict(n='火山显式放行且带 pi 前缀', provider='volcengine-coding', model='deepseek-v4-flash',
       task_type='core', want=dict(provider='pi/volcengine-coding', model='deepseek-v4-flash', channel='paseo')),
@@ -101,6 +143,27 @@ CASES = [
  dict(n='大审查走 Paseo', task_type='review', scope='large',
       want=dict(upstream='github-copilot', model='gpt-5.5',
                 provider='pi/github-copilot', channel='paseo')),
+ # 🔴 review 硬例外⛔不许静默覆盖显式 --provider（0909 第 5 轮审查）
+ # 🔴 review × 显式输入交叉矩阵（0909 第 6 轮审查：这些洞此前全部抓不住）
+ dict(n='review + 显式非 copilot provider → 报冲突', task_type='review', scope='small',
+      provider='volcengine-coding', review_provider_conflict=True),
+ dict(n='review + 显式 provider + 显式 model → 仍报冲突（⛔ 不许绕过）', task_type='review',
+      scope='small', provider='volcengine-coding', model='deepseek-v4-flash',
+      review_provider_conflict=True),
+ dict(n='--free + review + 显式 model → 仍报 free×review 冲突', free=True, task_type='review',
+      model='v4-pro', conflict_free_review=True),
+ dict(n='review + 显式 model=gpt-5.5 → 落 copilot（⛔ 不掉进 cb 合成池）', task_type='review',
+      scope='small', model='gpt-5.5',
+      want=dict(upstream='github-copilot', model='gpt-5.5', channel='cli')),
+ dict(n='review + 显式 copilot provider → 照常', task_type='review', scope='small',
+      provider='github-copilot',
+      want=dict(upstream='github-copilot', model='gpt-5.5', channel='cli')),
+ # ⚠️1 LAST_RESORT 的 provider 串也要断言（防未来把 claude 加进 PI_HOSTED 拼出 pi/claude）
+ # ⚠️2 只给 provider、补出的默认 model 不可用 → 也要停
+ dict(n='显式 provider 无 model，补出的默认 model 不可用 → 停止',
+      provider='volcengine-coding', task_type='core',
+      unavailable={'volcengine-coding/hy4-preview', 'volcengine-coding/glm-5.3-flash'},
+      no_landing=True),
  dict(n='短审查走 CLI', task_type='review', scope='small',
       want=dict(upstream='github-copilot', model='gpt-5.5',
                 provider='github-copilot', channel='cli')),
@@ -109,17 +172,20 @@ CASES = [
       want=dict(model='deepseek-v4-pro', upstream='volcengine-coding')),
  dict(n='只给 provider 不被 T0 换成 cb', provider='volcengine-coding', task_type='core',
       want=dict(upstream='volcengine-coding')),
- # ⭐ 夜间折扣：🔴 只改【用哪个池】，⛔ 绝不改【用哪个模型档位】
- dict(n='夜间 T2 优先百炼', task_type='core', blockers={'algorithm'}, failed=1, night=True,
-      want=dict(upstream='bailian-token-plan', model='deepseek-v4-flash-0731')),
- dict(n='白天 T2 仍走火山', task_type='core', blockers={'algorithm'}, failed=1, night=False,
-      want=dict(upstream='volcengine-coding', model='deepseek-v4-flash')),
- dict(n='夜间 T3 优先百炼且带 -0813', task_type='core', blockers={'algorithm'}, failed=2, night=True,
-      want=dict(upstream='bailian-token-plan', model='deepseek-v4-pro-0813')),
- # 🔴 关键反例：夜间⛔不得把模型档位冲掉（旧时段策略就是栽在这）
- dict(n='夜间 T1 档位不被冲掉', task_type='core', blockers={'algorithm'}, failed=0, night=True,
-      want=dict(model='glm-5.3-flash', upstream='volcengine-coding')),
- dict(n='夜间免费档仍是 T0', task_type='core', night=True,
+ # ⭐ 折扣窗口：🔴 只在【档位内选落点】起作用，⛔ 不得跨档下调
+ #    DT(周三15:00)=两家都原价 · DT(周三19:00)=仅 cb 打折 · DT(周三23:00)=两家都打折
+ dict(n='高峰(周三15点) T2 走轮换首位火山', task_type='core', blockers={'algorithm'}, failed=1,
+      when=DT(2026,9,9,15), want=dict(upstream='volcengine-coding', model='deepseek-v4-flash')),
+ dict(n='非高峰(周三19点) T2 优先 cb（仅它打折）', task_type='core', blockers={'algorithm'}, failed=1,
+      when=DT(2026,9,9,19), want=dict(upstream='codebuddy-code', model='deepseek-v4-flash')),
+ dict(n='深夜(周三23点) 两家都打折→回到轮换序', task_type='core', blockers={'algorithm'}, failed=1,
+      when=DT(2026,9,9,23), want=dict(upstream='bailian-token-plan', model='deepseek-v4-flash-0731')),
+ dict(n='周末白天 cb 也打折', task_type='core', blockers={'algorithm'}, failed=1,
+      when=DT(2026,9,12,15), want=dict(upstream='codebuddy-code', model='deepseek-v4-flash')),
+ # 🔴 关键反例：任何时段都⛔不得把档位冲掉
+ dict(n='深夜 T1 档位不被冲掉', task_type='core', blockers={'algorithm'}, failed=0,
+      when=DT(2026,9,9,23), want=dict(model='glm-5.3-flash')),
+ dict(n='深夜免费档仍是 T0', task_type='core', when=DT(2026,9,9,23),
       want=dict(upstream='codebuddy-code', model='hy4-preview')),
  # --free 新语义（0909：不再委派，只影响选档）
  dict(n='--free 无排除 → T0', free=True, task_type='core',
@@ -138,6 +204,112 @@ CASES = [
  # ⛔ 不带 --free 时能力类排除仍跳 T0（证明放宽只对 --free 生效）
  dict(n='无 --free 时能力类排除照旧跳 T0', task_type='core', blockers={'algorithm'},
       want=dict(model='glm-5.3-flash')),
+ # ⭐ 同档替代（TIER_PEERS）：本档模型四个池全不可用 ⇒ 换【同档】落点，⛔ 不升档
+ dict(n='T3 四池全不可用 → 落同档 qwen3.8-max', task_type='core', blockers={'algorithm'}, failed=2,
+      unavailable={'volcengine-coding/deepseek-v4-pro', 'volcengine-agent-plan/deepseek-v4-pro',
+                   'bailian-token-plan/deepseek-v4-pro-0813', 'codebuddy-code/deepseek-v4-pro'},
+      want=dict(upstream='bailian-token-plan', model='qwen3.8-max',
+                provider='pi/bailian-token-plan')),
+ # 🔴 反例：主落点可用时⛔不许被同档替代插队
+ dict(n='T3 主落点可用 → ⛔ 不用同档替代', task_type='core', blockers={'algorithm'}, failed=2,
+      want=dict(upstream='volcengine-coding', model='deepseek-v4-pro')),
+ # 🔴 T3 主池+peer 全不可用 ⇒ 【可用性升档】到 T4，⛔ 不停在半路
+ dict(n='T3 主池+peer 全不可用 → 升到 T4', task_type='core', blockers={'algorithm'}, failed=2,
+      unavailable={'volcengine-coding/deepseek-v4-pro', 'volcengine-agent-plan/deepseek-v4-pro',
+                   'bailian-token-plan/deepseek-v4-pro-0813', 'codebuddy-code/deepseek-v4-pro',
+                   'bailian-token-plan/qwen3.8-max'},
+      want=dict(model='kimi-k3-2', availability_escalations=[('deepseek-v4-pro','kimi-k3-2','unavailable')])),
+ # ⭐ 可用性升档（用户 2026-09-09 决定：允许【向上】换档 + 必须报告）
+ # 🔴 反例保留：T1 全不可用时⛔不许掉进 T3 的 peer，只许升到【相邻】的 T2
+ dict(n='T1 全不可用 → 向上换档到 T2（⛔ 不是 T3 的 peer）', task_type='core', blockers={'algorithm'},
+      unavailable={'volcengine-coding/glm-5.3-flash', 'volcengine-agent-plan/glm-5.3-flash',
+                   'codebuddy-code/glm-5.3-flash'},
+      want=dict(model='deepseek-v4-flash', upstream='volcengine-coding',
+                availability_escalations=[('glm-5.3-flash','deepseek-v4-flash','unavailable')])),
+ dict(n='T1+T2 全不可用 → 一路升到 T3', task_type='core', blockers={'algorithm'},
+      unavailable={'volcengine-coding/glm-5.3-flash', 'volcengine-agent-plan/glm-5.3-flash',
+                   'codebuddy-code/glm-5.3-flash',
+                   'volcengine-coding/deepseek-v4-flash', 'volcengine-agent-plan/deepseek-v4-flash',
+                   'bailian-token-plan/deepseek-v4-flash-0731', 'codebuddy-code/deepseek-v4-flash'},
+      want=dict(model='deepseek-v4-pro', upstream='volcengine-coding',
+                availability_escalations=[('glm-5.3-flash','deepseek-v4-flash','unavailable'),
+                                          ('deepseek-v4-flash','deepseek-v4-pro','unavailable')])),
+ # 🔴 T3 的同档替代仍然【优先于】升档 —— 同档能落就⛔不许涨到 T4
+ dict(n='T3 四池不可用但 peer 可用 → 落 peer，⛔ 不升 T4', task_type='core',
+      blockers={'algorithm'}, failed=2,
+      unavailable={'volcengine-coding/deepseek-v4-pro', 'volcengine-agent-plan/deepseek-v4-pro',
+                   'bailian-token-plan/deepseek-v4-pro-0813', 'codebuddy-code/deepseek-v4-pro'},
+      want=dict(model='qwen3.8-max', availability_escalations=[])),
+ # 🔴 阶梯到顶仍拿不到 ⇒ LAST_RESORT claude/claude-sonnet-5@max（⛔ 不停在半路）
+ dict(n='T4 也拿不到 → 落 LAST_RESORT sonnet-5@max', task_type='core', blockers={'algorithm'}, failed=3,
+      unavailable={'codebuddy-code/kimi-k3-2'},
+      want=dict(upstream='claude', model='claude-sonnet-5', thinking='max',
+                availability_escalations=[('kimi-k3-2','claude-sonnet-5','LAST_RESORT')])),
+ dict(n='T3→T4 全不可用 → 一路到 LAST_RESORT（⛔ 不回落低档）', task_type='core',
+      blockers={'algorithm'}, failed=2,
+      unavailable={'volcengine-coding/deepseek-v4-pro', 'volcengine-agent-plan/deepseek-v4-pro',
+                   'bailian-token-plan/deepseek-v4-pro-0813', 'codebuddy-code/deepseek-v4-pro',
+                   'bailian-token-plan/qwen3.8-max', 'codebuddy-code/kimi-k3-2'},
+      want=dict(upstream='claude', model='claude-sonnet-5',
+                availability_escalations=[('deepseek-v4-pro','kimi-k3-2','unavailable'),
+                                          ('kimi-k3-2','claude-sonnet-5','LAST_RESORT')])),
+ # 🔴 连 LAST_RESORT 都没有才停止
+ dict(n='付费档全不可用 + claude 也不可用 → 停止', task_type='core', blockers={'algorithm'},
+      unavailable={'volcengine-coding/glm-5.3-flash', 'volcengine-agent-plan/glm-5.3-flash',
+                   'codebuddy-code/glm-5.3-flash',
+                   'volcengine-coding/deepseek-v4-flash', 'volcengine-agent-plan/deepseek-v4-flash',
+                   'bailian-token-plan/deepseek-v4-flash-0731', 'codebuddy-code/deepseek-v4-flash',
+                   'volcengine-coding/deepseek-v4-pro', 'volcengine-agent-plan/deepseek-v4-pro',
+                   'bailian-token-plan/deepseek-v4-pro-0813', 'codebuddy-code/deepseek-v4-pro',
+                   'bailian-token-plan/qwen3.8-max', 'codebuddy-code/kimi-k3-2',
+                   'claude/claude-sonnet-5'},
+      no_landing=True),
+      # ⚠️ 判据用 unavailable 而⛔不是 provider_available —— 0909 第 4 轮起 LAST_RESORT 做
+      #    【model 级】探活（claude 活着但 sonnet-5 拿不到，也必须停）。
+ # 🔴 反例：⛔ 任何情况都不许【向下】换档 —— T3 起步、全不可用，⛔ 不许回落 T1/T2
+ dict(n='T3 全不可用 ⛔ 不许回落到更低档', task_type='core', blockers={'algorithm'}, failed=2,
+      unavailable={'volcengine-coding/deepseek-v4-pro', 'volcengine-agent-plan/deepseek-v4-pro',
+                   'bailian-token-plan/deepseek-v4-pro-0813', 'codebuddy-code/deepseek-v4-pro',
+                   'bailian-token-plan/qwen3.8-max'},
+      want=dict(model='kimi-k3-2')),   # ⛔ ⛔ 绝不能是 glm-5.3-flash / deepseek-v4-flash
+ # ⛔ 没有可用性问题时⛔不许无故升档
+ dict(n='一切可用 → availability_escalations 必须为空', task_type='core', blockers={'algorithm'},
+      want=dict(model='glm-5.3-flash', availability_escalations=[])),
+ # ── 第 4 轮审查补 ──────────────────────────────────────────────
+ # ❌1 LAST_RESORT ⛔ 不许覆盖用户显式 --thinking
+ dict(n='LAST_RESORT ⛔ 不覆盖显式 --thinking', task_type='core', blockers={'algorithm'},
+      failed=3, thinking='low', unavailable={'codebuddy-code/kimi-k3-2'},
+      want=dict(upstream='claude', model='claude-sonnet-5', thinking='low')),
+ # ❌2 LAST_RESORT 要做 model 级探活，⛔ 不能只查 provider
+ dict(n='claude 活着但 sonnet-5 拿不到 → 停止', task_type='core', blockers={'algorithm'},
+      failed=3, unavailable={'codebuddy-code/kimi-k3-2', 'claude/claude-sonnet-5'},
+      no_landing=True),
+ # ❌3 §6 的旧 downgrade() ⛔ 不许把档位降下去
+ dict(n='⛔ 收尾 downgrade 不得降到更低档', task_type='core', blockers={'algorithm'}, failed=2,
+      dead_providers={'volcengine-coding'},
+      downgrade_to=('codebuddy-code', 'glm-5.3-flash'),   # 破坏性桩：企图从 T3 降到 T1
+      want=dict(model='deepseek-v4-pro')),                # ⛔ 绝不能变成 glm-5.3-flash
+ # 🔴 第 4 轮删掉 §6 的 downgrade() 后留下的缺口：显式 provider 不可用时⛔不能静默派过去
+ dict(n='显式 provider+model 不可用 → 停止（⛔ 不静默派死通道）',
+      provider='volcengine-coding', model='deepseek-v4-flash', task_type='core',
+      unavailable={'volcengine-coding/deepseek-v4-flash'}, no_landing=True),
+ # ⛔ 反例：显式落点可用时⛔不许被换掉，也⛔不许误报停止
+ dict(n='显式 provider+model 可用 → 照常放行', provider='volcengine-coding',
+      model='deepseek-v4-flash', task_type='core',
+      want=dict(upstream='volcengine-coding', model='deepseek-v4-flash',
+                provider='pi/volcengine-coding', availability_escalations=[])),
+ # ⚠️2 kimi-k3-2 进 WALLET_PREF 后，默认合成池⛔不该再掩盖它
+ # ❌5 LAST_RESORT 固定走 Paseo —— provider 表里 claude 只有 create_agent 路径
+ dict(n='LAST_RESORT 必须走 paseo（即使是 cli 规模）', task_type='core', scope='small',
+      force_cli=True, blockers={'algorithm'}, failed=2,
+      unavailable={'volcengine-coding/deepseek-v4-pro', 'volcengine-agent-plan/deepseek-v4-pro',
+                   'bailian-token-plan/deepseek-v4-pro-0813', 'codebuddy-code/deepseek-v4-pro',
+                   'bailian-token-plan/qwen3.8-max', 'codebuddy-code/kimi-k3-2'},
+      want=dict(upstream='claude', model='claude-sonnet-5', channel='paseo',
+                provider='claude')),   # ⛔ 绝不能是 pi/claude
+ dict(n='T4 落 cb kimi-k3-2（显式在 WALLET_PREF 里）', task_type='core',
+      blockers={'algorithm'}, failed=3,
+      want=dict(upstream='codebuddy-code', model='kimi-k3-2')),
 ]
 
 fails = []
@@ -149,6 +321,10 @@ for c in CASES:
         if c.get('exhausted'): fails.append(f"{c['n']}: 期望阶梯到顶停止，实际 {got}"); continue
         if c.get('free_unavailable'): fails.append(f"{c['n']}: 期望 --free 不可用停止，实际 {got}"); continue
         if c.get('conflict_free_review'): fails.append(f"{c['n']}: 期望 free×review 冲突，实际 {got}"); continue
+        if c.get('review_provider_conflict'): fails.append(f"{c['n']}: 期望 review provider 冲突，实际 {got}"); continue
+        if c.get('blocked_model'): fails.append(f"{c['n']}: 期望被屏蔽，实际 {got}"); continue
+        if c.get('no_landing'):
+            fails.append(f"{c['n']}: 期望明确报「无可用落点」并停止，实际落到 {got.get('upstream')}/{got.get('model')}"); continue
         for k, v in c['want'].items():
             if got.get(k) != v:
                 fails.append(f"{c['n']}: {k} 期望 {v!r} 实际 {got.get(k)!r}")
@@ -162,6 +338,12 @@ for c in CASES:
         if not c.get('free_unavailable'): fails.append(f"{c['n']}: 意外报 --free 不可用")
     except ConflictFreeReview:
         if not c.get('conflict_free_review'): fails.append(f"{c['n']}: 意外报 free×review 冲突")
+    except ReviewProviderConflict:
+        if not c.get('review_provider_conflict'): fails.append(f"{c['n']}: 意外报 review provider 冲突")
+    except NoLanding:
+        if not c.get('no_landing'): fails.append(f"{c['n']}: 🔴 意外报『无可用落点』——本档应当有落点")
+    except BlockedModel:
+        if not c.get('blocked_model'): fails.append(f"{c['n']}: 🔴 意外判为被屏蔽型号")
     except NameError as e:
         fails.append(f"{c['n']}: 🔴 伪代码里有未定义名 —— {e}")
     except Exception as e:

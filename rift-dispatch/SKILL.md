@@ -21,19 +21,25 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 
 | # | 规则 | 落点 |
 |---|---|---|
-| 1 | **便宜优先，逐级升档** | 免费档（`hy4-preview` → `hy3`，0.00x）先试 → 付费从 **`glm-5.3-flash`（0.06x）** 起步 → `deepseek-v4-flash`（0.17x）→ `deepseek-v4-pro`（0.51x）→ `kimi-k3-2`（1.62x）。⛔ **每一级向上的唯一入口是「上一档已在本任务做砸过一轮」**，理由里要写明哪一轮、砸在哪。写不出来不许升。⚠️ 例外：`algorithm`/`perf`/并发实现 直接从 `deepseek-v4-flash` 起步（routing §6） |
+| 1 | **便宜优先，逐级升档** | 免费档（`hy4-preview` → `hy3`，0.00x）先试 → 付费从 **`glm-5.3-flash`（0.06x）** 起步 → `deepseek-v4-flash`（0.17x）→ `deepseek-v4-pro`（0.51x）→ `kimi-k3-2`（1.62x）。⛔ **每一级【质量/成本升档】的唯一入口是「上一档已在本任务做砸过一轮」**，理由里要写明哪一轮、砸在哪。写不出来不许升。⚠️ 这条⛔**不管【可用性换档】**——模型在所有 provider 都拿不到时允许向上换档（必须报告），见 §2 第 5 段。⚠️ 例外：`algorithm` / `perf` / **并发诊断** / 并发实现 四类直接从 `deepseek-v4-flash` 起步（routing §6） |
 | 2 | 🔴 **按「要不要看得见」分通道，不是按工具分** | 🔴 **开发实施类 + 大审查 → Paseo；短任务 / 短审查 → `pi -p`**。判据是**规模**不是任务类型——Paseo 能看进度、中途干预、拿结构化状态；`pi -p` 跑完即退不堆 serve。⛔ **开发任务和大审查都不要走 `pi -p`**：它不进 Paseo agent 列表，你看不见也打不断（实测大审查走 `pi -p` 跑满 35 分钟零输出） |
-| 3 | 🔴 **审查的硬约束是「异构」** | ⛔ **评审模型族 ≠ 实施模型族**（全局红线 #8），是**不变量**，不是针对某个模型的禁令。🔴 **含主会话：主会话就是 Claude，我自己写的东西不得派 `claude/*` 去审**。族对照表见 routing §5。⭐ 模型固定 **`github-copilot/gpt-5.5`**；⚠️ **通道另按规模定**：大审查走 Paseo `pi/github-copilot/gpt-5.5`，短审查走 `pi -p`（⛔ prompt ≤200 字符） |
+| 3 | 🔴 **审查的硬约束是「异构」** | ⛔ **评审模型族 ≠ 实施模型族**（全局红线 #8），是**不变量**，不是针对某个模型的禁令。🔴 **含主会话：主会话就是 Claude，我自己写的东西不得派 `claude/*` 去审**。族对照表见 routing §5。⭐ **未显式指定时**默认 **`github-copilot/gpt-5.5`**（⛔ 不是「不可覆盖」；显式换 provider 会报冲突）；⚠️ **通道另按规模定**：大审查走 Paseo `pi/github-copilot/gpt-5.5`，短审查走 `pi -p`（⛔ prompt ≤200 字符） |
+
+🔴 **两种换档理由是正交的，⛔ 别混**：**质量/成本换档**只因「本任务做砸过一轮」，⛔ 不得跨档**下调**；
+**可用性换档**（所有 provider 都拿不到）只许**向上**、必须**报告**，到顶仍拿不到 ⇒ `claude/claude-sonnet-5@max`
+（🔴 **LAST_RESORT**：整套钱包体系就是为了省 Claude 额度，走到这里必须显著告知）。
 
 ⚠️ **派发认 model id，⛔ 不认 label**：`hy4-preview`(0.00x) 与 `hy4-preview-x`(**0.29x**) 的 label 完全相同。
 
-⚠️ **免费档时间线**：`08-31 hy3 止` → `09-12 hy4 止` → 免费档清零，默认落点变成 `glm-5.3-flash`。
+⚠️ **免费档时间线**：`08-31 hy3 止` → **`09-10 hy4 止`**（🔴 2026-09-09 用户更正，⛔ 不是 09-12；且是**每日赠额**⛔非连续免费期，**不回复 = 当日已被限**须主动换）→ 免费档清零，默认落点变成 `glm-5.3-flash`。
 
 🔴 **钱包优先级**（routing §3.5，与档位阶梯**正交**）：
-① 火山 / codebuddy **已付费套餐**（边际成本≈0）→ ~~② 京东云积分~~（⛔ 2026-09-09 停用）→ ③ ⛔ DeepSeek 官方 API（**现金**，永远兜底）。
-⇒ **`deepseek-v4-pro` / `deepseek-v4-flash` / `glm-5.3-flash` 都是首选火山、次选 codebuddy**。
+① **已付费套餐**（边际成本≈0）→ ~~② 京东云积分~~（⛔ 2026-09-09 停用）→ ~~③ DeepSeek 官方 API~~（🔴 **⛔ 已不是自动兜底**，2026-09-09 改为**手动路径**：它还在 opencode `disabled_providers` 里，写成自动兜底 = 假通道；需用户明确接受现金开销 + 解除 disabled 后显式指定）。
+⇒ ⭐ **自动路径的最后一站是 `claude/claude-sonnet-5` @ `max`（LAST_RESORT）**，⛔ 不是官方 API。
+⇒ ①层内部是 🔴 **轮换，⛔ 不是固定优先级**：`volcengine-coding` · `volcengine-agent-plan` · `bailian-token-plan` · `codebuddy-code` 地位相同。
+**具体落哪个由 `WALLET_PREF` + 当前折扣窗口决定**（§2 / routing §3.5），⛔ 本文件不再钉死先后。
 
-⛔ **京东云通道 2026-09-09 已停用**（额度用尽、消耗太快）。配置归档在 `~/.pi/agent/providers-disabled/jdcloud-joyagent.json`，含恢复清单。⇒ 钱包只剩 ① 已付费套餐 和 ③ 官方 API 兜底。
+⛔ **京东云通道 2026-09-09 已停用**（额度用尽、消耗太快）。配置归档在 `~/.pi/agent/providers-disabled/jdcloud-joyagent.json`，含恢复清单。⇒ 自动路径的钱包只剩 **① 已付费套餐**；③ 官方 API 已改为**手动**路径，⛔ 不在自动降级链里。
 
 ## Prerequisites
 
@@ -93,7 +99,19 @@ WHITELIST = {                                   # P0，routing §1
 # ⛔ jdcloud-joyagent 2026-09-09 停用（额度用尽、消耗太快）——已从 ~/.pi/agent/models.json 移除。
 #    ⚠️ 配置完整归档在 ~/.pi/agent/providers-disabled/jdcloud-joyagent.json（含恢复清单）。
 #    ⇒ 现在派它会落到「未知 provider」被拦，这是预期行为。
-DISABLED_PROVIDERS = ['deepseek']               # 🔴 官方 API，现金兜底，当前被 disable
+# 🔴 用户点名屏蔽的型号（2026-09-09）。⛔ 与 WHITELIST/EXEMPT 正交 ——
+#    豁免 provider 也拦得住（否则 `--provider github-copilot --model gpt-5-mini` 会直接放行）。
+BLOCKED_MODELS = {
+  'volcengine-coding':    {'doubao-seed-2.0-lite', 'doubao-seed-2.1-turbo'},
+  'volcengine-agent-plan': {'doubao-seed-2.0-lite', 'doubao-seed-2.0-mini', 'doubao-seed-2.1-turbo',
+                            'doubao-seed-evolving', 'ark-code-latest'},
+  'github-copilot':       {'gpt-5-mini', 'gpt-5.3-codex', 'gpt-5.4-mini',
+                           'gemini-3.5-flash', 'gemini-3.6-flash', 'mai-code-1-flash-picker'},
+}
+# ⚠️ 屏蔽的是【型号】不是 provider ⇒ 同一 provider 的其它型号照常可用。
+# ⚠️ ⛔ 别把它跟 DISABLED_PROVIDERS 合并 —— 那个是整个 provider 停用，措辞和出路都不同。
+
+DISABLED_PROVIDERS = ['deepseek']               # 🔴 官方 API（现金）。⛔ 不是自动兜底，只能【手动】用
 EXEMPT_PROVIDERS   = ['claude', 'codex', 'opencode', 'github-copilot',
                       'volcengine-coding', 'volcengine-agent-plan', 'volcengine-chat',
                       'bailian-token-plan']            # 阿里云百炼，2026-09-09 接入
@@ -110,21 +128,63 @@ CAPABILITY_BLOCKERS = {'algorithm', 'perf', 'architecture'}      # 能力短板�
 # ⛔ 物理不可用类（⛔ --free 也不放宽）：'multimodal'（会正常计费，免费不成立）
 #    'quota_exhausted' · 'probe_queued'（探活未秒回）· 'failed_this_task'（绕过会死循环）
 WALLET_PREF = {                                 # (upstream, 该 provider 上的真实 modelId)
-  # 🔴 三池【轮换】，⛔ 不是固定优先级（用户 2026-09-09）——火山 / 百炼 / cb 地位相同。
+  # 🔴 多池【轮换】，⛔ 不是固定优先级（用户 2026-09-09）——火山【两个套餐】/ 百炼 / cb 地位相同。
   #    加百炼正是因为火山与 cb 这个月量不够 ⇒ 用哪个由「哪个还有量」决定，撞限额换下一个。
-  'deepseek-v4-pro':   [('volcengine-coding',  'deepseek-v4-pro'),
-                        ('bailian-token-plan', 'deepseek-v4-pro-0813'),    # ⚠️ id 带 -0813
-                        ('codebuddy-code',     'deepseek-v4-pro')],
-  'deepseek-v4-flash': [('volcengine-coding',  'deepseek-v4-flash'),
-                        ('bailian-token-plan', 'deepseek-v4-flash-0731'),  # ⚠️ id 带 -0731
-                        ('codebuddy-code',     'deepseek-v4-flash')],
-  'glm-5.3-flash':     [('volcengine-coding',  'glm-5.3-flash'),
-                        ('codebuddy-code',     'glm-5.3-flash')],
-                        # ⚠️ 百炼没有 glm-5.3-flash ⇒ 只在火山与 cb 之间轮换
+  'deepseek-v4-pro':   [('volcengine-coding',    'deepseek-v4-pro'),
+                        ('volcengine-agent-plan', 'deepseek-v4-pro'),        # ⭐ 另一份火山套餐
+                        ('bailian-token-plan',    'deepseek-v4-pro-0813'),   # ⚠️ id 带 -0813
+                        ('codebuddy-code',        'deepseek-v4-pro')],
+  'deepseek-v4-flash': [('volcengine-coding',    'deepseek-v4-flash'),
+                        ('volcengine-agent-plan', 'deepseek-v4-flash'),
+                        ('bailian-token-plan',    'deepseek-v4-flash-0731'), # ⚠️ id 带 -0731
+                        ('codebuddy-code',        'deepseek-v4-flash')],
+  'glm-5.3-flash':     [('volcengine-coding',    'glm-5.3-flash'),
+                        ('volcengine-agent-plan', 'glm-5.3-flash'),
+                        ('codebuddy-code',        'glm-5.3-flash')],
+                        # ⚠️ 百炼没有 glm-5.3-flash ⇒ 只在火山两套餐与 cb 之间轮换
+  'kimi-k3-2':         [('codebuddy-code',        'kimi-k3-2')],
+                        # ⚠️ 只有 cb 一家。⭐ 显式列出而⛔不靠默认合成池——
+                        #    靠默认值会让「新加的阶梯模型忘了配 wallet」静默变成 cb 落点。
 }
-# ⭐ 百炼限时夜间 5 折（22:00 – 次日 08:00）适用的【阶梯模型】
-#    ⛔ glm-5.3-flash 不在内（百炼无对应型号）；⛔ qwen3.8-flash 本身不享折扣
-NIGHT_DISCOUNTED = {'deepseek-v4-pro', 'deepseek-v4-flash'}
+# ⭐ 火山【两个套餐】= 两个独立额度池，⛔ 不是同一个（用户 2026-09-09：「额度相互轮换就行」）
+#    coding = …/api/coding/v3（8 模型）· agent-plan = …/api/plan/v3（13 模型）
+#    阶梯三档在两边【id 完全相同】⇒ 撞限额直接换另一个，⛔ 不用改 model 名。
+
+# ⭐ 同档替代：换位盲评实测【与本档同档】的其它模型。🔴 这是【档内换落点】，⛔ 不是升降档。
+#    ⛔ 只在本档模型的所有池都拿不到时才用（**可用性**理由）；主落点可用时⛔不许插队。
+#    ⚠️ 这跟【质量/成本升档】（做砸才升）是两条路，⛔ 别混。
+TIER_PEERS = {
+  'deepseek-v4-pro': [('bailian-token-plan', 'qwen3.8-max')],
+}
+
+# 🔴 最后兜底 —— ⛔ 只在【阶梯到顶仍拿不到】时才走（用户 2026-09-09 授权）
+LAST_RESORT = ('claude', 'claude-sonnet-5', 'max')      # Paseo: claude/claude-sonnet-5 · mode=auto
+# ⭐ **整套钱包体系存在的目的就是【不占用 Claude 套餐额度】**（留给主会话）。
+#    ⛔ 但「不能不干活」优先于「省额度」⇒ 到顶了宁可用它，也⛔不要停在半路。
+#    🔴 走到这里 = 正在烧掉这套体系本来要保护的东西 ⇒ **必须显著报告**，⛔ 不许静默。
+#    ⛔ 它⛔不是阶梯的 T5，⛔ 不参与「做砸就升档」那条路径 —— 只有可用性耗尽才够得着。
+# 依据（2026-09-09 换位盲评，判 gpt-5.5·medium，两臂 thinking 一致、prompt 逐字相同）：
+#   总分 qwen3.8-max 99.5 vs deepseek-v4-pro 102.0（/120，差 2.5）——
+#   而同一轮实测【A 位本身有 +2.5 分优势】⇒ ⛔ 这个差不构成谁更强，判定为【同档】。
+# ⚠️ 分项分化明显，⛔ 但这条【只在这两者之间成立】——未与 glm-5.3-flash / kimi-k3-2 比过：
+#      架构题 qwen 37.5 > v4-pro 31.0 ｜ 代码实现题 v4-pro 33.0 > qwen 25.5 ｜ 并发诊断基本平
+#   ⇒ ⛔ 不要据此写「架构题走 qwen」——架构类的入口档是 T1，跟本表不在同一层。
+# ⛔ 未测：qwen3.8-max 与 deepseek-v4-pro-0813 在百炼的 credits 倍率 ⇒ 【档内挑便宜】那步还没依据，
+#    所以本表只当【兜底】排在最后，⛔ 不参与折扣排序。
+# ⭐ 各池各有折扣窗口，⛔ 窗口不一样，别只记住其中一个
+DISCOUNT_WINDOWS = {
+  'bailian-token-plan': {                      # 每天 22:00 – 次日 08:00
+     'models': {'deepseek-v4-pro-0813', 'deepseek-v4-flash-0731', 'qwen3.8-max'},
+     'when':   lambda dt: dt.hour >= 22 or dt.hour < 8},
+  'codebuddy-code': {                          # ⛔【工作日 09-12 / 14-18】之外都打折
+     'models': {'deepseek-v4-flash', 'deepseek-v4-pro'},
+     'when':   lambda dt: not (dt.weekday() < 5 and (9 <= dt.hour < 12 or 14 <= dt.hour < 18))},
+}
+def is_discounted_now(upstream, model_id, dt=now()):
+    w = DISCOUNT_WINDOWS.get(upstream)
+    return bool(w) and model_id in w['models'] and w['when'](dt)
+# ⚠️ codebuddy 的折扣面**远大于**百炼：它只在工作日两段高峰是原价，其余（含整个周末）都 5 折。
+#    ⇒ ⛔ 别把规则记成「夜间优先百炼」——多数时段其实是 codebuddy 在打折。
 
 def split_provider(s):
     """pi/jdcloud-joyagent/X → ('pi','jdcloud-joyagent')；codebuddy-code → (None,'codebuddy-code')"""
@@ -137,6 +197,9 @@ def normalize_provider(upstream, channel):
 def validate(upstream, model):
     """🔴 P0。⛔ 三层依次判——只写「在白名单里才校验」会让未知 provider 静默跳过。
        ⚠️ model 为 None 时只校验 provider 本身。"""
+    # 🔴 屏蔽名单**最先判** —— ⛔ 放在豁免判断之后就等于对豁免 provider 失效
+    if model is not None and model in BLOCKED_MODELS.get(upstream, ()):
+        report_blocked_model_and_stop(upstream, model)
     if upstream in DISABLED_PROVIDERS:      report_disabled_and_stop()
     elif upstream in WHITELIST:
         if model is not None and model not in WHITELIST[upstream]:
@@ -146,6 +209,10 @@ def validate(upstream, model):
 # 🔴 显式值单独存，⛔ 后续阶段只读不写
 explicit_upstream = split_provider(args.provider)[1] if args.provider else None
 explicit_model    = resolve_short_name(args.model)   if args.model    else None
+# 🔴 ⛔ 后面一律用 `is None` 判，⛔ 不许用 truthiness ——
+#    `explicit_model or 'gpt-5.5'` 会把空串/解析成空值的非法输入【静默当成没指定】（0909 第 7 轮审查）。
+if args.model is not None and not str(args.model).strip():
+    report_conflict_and_stop()      # ⛔ 空 --model 是输入错误，不是「没指定」
 explicit_thinking = args.thinking                                # 可为 None
 
 task_type = classify(user_input)          # routing §6；⚠️ concurrency 要先判子类
@@ -156,20 +223,44 @@ failed_paid_tiers_in_this_task = count_failed_paid_tiers(task_context)
 #   ⛔ 只数【付费阶梯内】做砸的档数：T0 免费档失败⛔不计、同一档重试⛔不计
 #   ⚠️ 数不出来（无本任务历史）就是 0，⛔ 不要凭「任务看着难」估一个值
 upstream, model, thinking = explicit_upstream, explicit_model, explicit_thinking
+availability_escalations = []    # ⭐【可用性升档】留痕，⛔ 收尾必须报告（§7）
 
 # ═══ 1. 显式 provider 先过 P0 ═══ 此时 model 可能仍是 None，validate 允许
+# 🔴 ⛔ review 的 provider 冲突必须【抢在 P0 之前】判（0909 第 7 轮审查）——
+#    否则 `review --provider deepseek` 报的是「provider 已停用」、
+#    `review --provider codebuddy-code --model gpt-5.5` 报的是「白名单不匹配」，
+#    **用户拿到的原因全是错的**（真实原因是「审查通道不能换 provider」）。
+if task_type == 'review' and explicit_upstream not in (None, 'github-copilot'):
+    report_review_provider_conflict_and_stop(explicit_upstream)
 if explicit_upstream is not None:
     validate(explicit_upstream, explicit_model)
 
 # ═══ 2. --free 只置标志，⛔ 不提前退出（落点在第 4 段）═══
 want_free = args.free and explicit_model is None
 
-# ═══ 3. review 硬例外 ═══ 只定【模型】，⛔ 不在这里定通道（通道统一在第 5 段定）
-if task_type == 'review' and explicit_model is None:
-    # 🔴 冲突必须在这里判 —— 第 4 段是 elif，review 一旦定了 model 就永远进不去，
-    #    把判断放那边等于 want_free 静默作废、照样派付费审查（0909 审查抓到）。
-    if want_free: report_conflict_free_vs_review_and_stop()   # ⛔ 不替用户决定牺牲哪边
-    upstream, model = 'github-copilot', 'gpt-5.5'
+# ═══ 3. review 硬例外 ═══ 只定【模型 + 默认 provider】，⛔ 不在这里定通道（通道统一在第 6 段）
+# 🔴🔴 ⛔ 这一段【不许】被 explicit_model 挡住（0909 第 6 轮审查）——
+#    原先写的是 `if task_type == 'review' and explicit_model is None:`，于是
+#    `--model X` 一加就整段绕过，三个洞同时开：
+#      ① `--free × review` 冲突被【静默吞掉】（want_free 自己也带 explicit_model 门）
+#      ② `review --model gpt-5.5` 掉进普通阶梯，去试【codebuddy-code/gpt-5.5】（cb 根本没有它）
+#      ③ `review --provider 火山 --model X` 绕过 provider 冲突判断，直接派到实施族上
+#    ⇒ 判断条件只能是 task_type，⛔ 不能再带 explicit_model。
+if task_type == 'review':
+    # ⛔ 用 args.free 而⛔不是 want_free —— want_free 自带 `and explicit_model is None`，
+    #    在这里用它等于把洞 ① 留着。
+    if args.free: report_conflict_free_vs_review_and_stop()   # ⛔ 不替用户决定牺牲哪边
+    model = 'gpt-5.5' if explicit_model is None else explicit_model
+    #                 ↑ ⛔ 用 `is None`，⛔ 不用 `or` —— 见第 1 段那条注释
+    # 🔴 ⛔ 不许静默覆盖显式 --provider：本段职责是「未指定时给默认」，⛔ 不是「强行改成 copilot」。
+    if explicit_upstream is None:
+        upstream = 'github-copilot'          # ⭐ review 的默认 provider
+    else:
+        # 🔴 走到这里 explicit_upstream **必然是** 'github-copilot' —— 其它值在【第 1 段】
+        #    （P0 之前那个 review 冲突检查）就被 report_review_provider_conflict_and_stop 拦掉了。
+        # ⚠️ 这里原本重复写了一遍 elif + 报错，**覆盖率实测那几行从没被走到** ⇒ 是死代码。
+        #    死代码在「当规范读」的伪代码里有害：读的人会以为拦截发生在这里。
+        assert explicit_upstream == 'github-copilot'
     # ⚠️ 措辞校准：是「**未显式指定时**默认固定 gpt-5.5」，⛔ 不是「不可覆盖」——
     #    P1 显式优先仍然成立（routing 附录 P1 在 P2 之前）。
     # ⛔ 但显式指定同族模型时必须报冲突：评审族 ≠ 实施族（routing §5）是不变量。
@@ -203,26 +294,86 @@ elif model is None:
 
 # ═══ 5. 选 provider ═══ ⚠️ 显式 provider 存在时⛔不许被换掉
 if upstream is None:
-    pool = WALLET_PREF.get(model, [('codebuddy-code', model)])
-    # ⭐ 夜间窗口（22:00–次日 08:00）百炼 5 折 ⇒ 把百炼提到轮换队首
-    # 🔴🔴 这里是【选池】不是【选模型】—— model 在上一段已经定死，本段⛔不许碰它。
-    #      2026-08-16 废止的旧时段策略之所以有害，正是因为 is_night() 会把按类型
-    #      选出的高档模型无条件冲掉。⛔ 任何把时段判断写进【选模型】那一段的实现都是错的。
-    if is_night_window() and model in NIGHT_DISCOUNTED:
-        pool = sorted(pool, key=lambda x: x[0] != 'bailian-token-plan')
-    upstream, model = first_available(pool)
+    # 🔴🔴 本段有【两个正交的换档理由】，⛔ 千万别混：
+    #   ① 质量/成本换档（第 4 段做完了）：升档唯一入口是「本任务做砸过一轮」，⛔ 不得跨档【下调】
+    #   ② 可用性换档（本段）：模型【拿不到】。只许【向上】，⛔ 永远不向下 —— 向下 = 质量回退
+    tier = next((i for i, (m, _) in enumerate(LADDER) if m == model), None)
+    while True:
+        pool = WALLET_PREF.get(model, [('codebuddy-code', model)])
+        # ⭐ 轮换时把【当前正在打折】的池排前（sorted 稳定 ⇒ 同为打折/同为原价时保持原轮换序）
+        # 🔴 这里是【档位内选落点】，⛔ 不许换成别的档位。
+        #    2026-08-12 那个 bug 的错误是 is_night() 把「做砸才升上去的高档模型」
+        #    换成了【低档】的便宜模型，越过了档位边界往下选。
+        # ⚠️ ⛔ 别跨钱包比价（火山包月 / cb credits 倍率 / 百炼积分，单位不可通约）——
+        #    只比「同一型号的多个池」，那一步才可算（同型号，一边打折一边不打）。
+        pool = sorted(pool, key=lambda x: not is_discounted_now(x[0], x[1]))
+        landed = first_available(pool)
+        if landed is None:
+            # ⭐ 本档模型所有池都拿不到 ⇒ 先在【同档】里换落点（⛔ 优先于升档：同档能落就别涨价）
+            # ⛔ 同档替代⛔不参与上面的折扣排序 —— 它没有价格依据，只是兜底。
+            landed = first_available(TIER_PEERS.get(model, []))
+        if landed is not None:
+            break
+        # ⭐ 同档也没有 ⇒ 【可用性升档】：往上走一档（用户 2026-09-09 决定：允许向上 + 必须报告）
+        # 🔴 ⛔ 只许 tier + 1。⛔ 任何 tier - 1 都是错的 —— 那是拿「拿不到」当借口做质量回退。
+        if tier is None or tier >= len(LADDER) - 1:
+            break                            # 到顶（或本就不在阶梯里）⇒ 交给下面的最后兜底
+        prev = model
+        tier += 1
+        model = LADDER[tier][0]
+        # ⛔ 记 (from, to, why) 三元组 —— 只记 to 的话，§7 打不出「原档位 → 逐级」那句话，
+        #    「必须报告」就会变成假实现（0909 第 4 轮审查）。
+        availability_escalations.append((prev, model, 'unavailable'))
+    if landed is None:
+        # 🔴 阶梯到顶仍拿不到 ⇒ LAST_RESORT。⛔ 这是「不能不干活」压过「省 Claude 额度」的唯一场景。
+        lr_up, lr_model, lr_thinking = LAST_RESORT
+        model_before_lr = model                  # ⛔ 先存，下面会被覆盖
+        # 🔴 ⛔ 必须做【model 级】探活 —— 只查 provider 抓不到「claude 活着但 sonnet-5 拿不到」，
+        #    而 claude 在豁免集里，validate() 对豁免 provider ⛔ 不校验 model ⇒ 会一路放行到派发才炸。
+        if first_available([(lr_up, lr_model)]) is not None:
+            upstream, model = lr_up, lr_model
+            # 🔴 ⛔ 不许覆盖用户显式 --thinking —— LAST_RESORT 的 'max' 只是【默认值】。
+            #    ⚠️ 静默升档会造成超预期 token 消耗（§3.2e 同一条纪律）。
+            thinking = explicit_thinking if explicit_thinking is not None else lr_thinking
+            availability_escalations.append((model_before_lr, lr_model, 'LAST_RESORT'))
+            warn('🔴 已落到 LAST_RESORT claude/claude-sonnet-5@max —— **正在消耗 Claude 套餐额度**，'
+                 '而这套钱包体系存在的目的就是省它。⛔ 必须在输出里显著告知用户。')
+        else:
+            report_no_landing_and_stop(model)   # 🔴 连兜底都没有才停，⛔ 不静默返回空
+    else:
+        upstream, model = landed
+    # ⚠️ 这里 model 可能被换成【该 provider 上的真实 id】——⛔ 那不是换模型，是同一模型的不同写法
     # ⚠️ 这里 model 可能被换成【该 provider 上的真实 id】（如京东是大写 DeepSeek-V4-pro）——
     #    ⛔ 那不是换模型，是同一个模型在不同 provider 上的 id 写法
-elif explicit_model is None:
-    model = model_id_on(upstream, model)   # 用户只给了 provider ⇒ 在该 provider 内取该模型的 id
+else:
+    # 🔴 **已绑定 upstream 的路径**（⛔ 不只是显式 provider）—— 会命中：
+    #    ① 显式 `--provider`（带或不带 model）② review 默认落点（第 3 段设的）
+    #    ③ T0 免费档（第 4 段设的）。这些都绕过了第 5 段的自动 provider 选择，
+    #    ⇒ 统一在这里做**一次落点探活**，⛔ 别让它们成为漏检口。
+    if explicit_model is None:
+        model = model_id_on(upstream, model)   # 用户只给了 provider ⇒ 在该 provider 内取该模型的 id
+    if first_available([(upstream, model)]) is None:
+        # ⛔ 显式指定的落点拿不到 ⇒ **报告并停止**。
+        # ⛔ 不许静默换 provider（违反「显式 provider ⛔ 不许被换掉」），
+        # ⛔ 也不许走可用性升档 —— 用户点名要这个，换掉就不是他要的东西了。
+        report_no_landing_and_stop(model)
 
 # ═══ 6. 统一收尾 ═══ 🔴 所有路径都走到这里，⛔ 上面任何分支都不许自己返回结果
 validate(upstream, model)                  # 🔴 自动选出的组合同样要过 P0
 channel = 'paseo' if is_dev_task(task_type) or is_large_review(scope) else 'cli'
 #   🔴 判据是「要不要看得见」（§3 通道判据总表）：开发实施类 + 大审查 → paseo；其余 → cli
-if not provider_available(upstream):
-    upstream, model = downgrade(upstream, model)     # routing §8
-    validate(upstream, model)
+if upstream == 'claude':
+    channel = 'paseo'
+    # 🔴 claude 在 provider 表里【只有 Paseo create_agent 一条路径】（mode=auto，§8）——
+    #    ⛔ 没有 `claude -p` 这条 CLI 通道。短任务落 LAST_RESORT 时若按规模判成 cli，
+    #    会拼出一个根本不存在的调用（0909 第 4 轮审查抓到）。
+    #    ⭐ 顺带：LAST_RESORT 本来就该【看得见】—— 它在烧 Claude 额度。
+# 🔴 这里【曾经】有第二套可用性机制：`if not provider_available(...): downgrade(...)`。
+#    ⛔ 已删除（0909 第 4 轮审查抓到）—— 它不受「⛔ 不得跨档下调」约束，
+#    能把 §5 刚升上去的档位又**降回低档**，还会绕开「显式 provider ⛔ 不许被换掉」，
+#    且不写 availability_escalations ⇒ **静默质量回退**。
+# ⭐ 现在可用性只有【一套】真源：§5 的 first_available + 同档替代 + 向上升档 + LAST_RESORT。
+#    ⛔ 不要再在收尾里加第二套判断 —— 两套信号会互相矛盾。
 provider = normalize_provider(upstream, channel)
 thinking = clamp_to_supported(model, thinking or default_thinking(model))  # §3.2e，⛔ 只降不升
 result   = execute(channel, provider, model, thinking)    # §3
@@ -233,9 +384,10 @@ save_memory(agent_id=agent_id, run_id=(None if channel == 'paseo' else result.ru
             thinking=thinking, cwd=cwd)              # §8
 print_summary()                                      # §7
 
-# ⛔ 没有时段分支。credits 制通道已无任何时段性折扣，⛔ 不要再写 is_night()——
-#    它曾把按类型选出的高档模型无条件冲掉（2026-08-12 异构审）。
-#    仍然成立：任何「换更便宜 provider」只作用于当前落点，⛔ 不下调已升上去的档位。
+# 🔴 时段判断【只出现在第 5 段（选 provider）】，⛔ 上面【选档位】那几段一律没有。
+#    ⚠️ 被废止的⛔不是「时段判断」本身，而是 2026-08-12 那种写法——
+#    `is_night()` 把做砸才升上去的高档模型换成【低档】便宜模型，越过了档位边界往下选。
+#    ⇒ 不变量是【⛔ 不得跨档下调】。第 5 段的 is_discounted_now() 只在档内换池，合规。
 ```
 
 ---
@@ -272,13 +424,18 @@ print_summary()                                      # §7
 |---|---|
 | `--provider jdcloud-joyagent --model GLM-5.2` | ⛔ **拦住**（JD 白名单只有两个 DeepSeek） |
 | `--provider pi/jdcloud-joyagent --model GLM-5.2` | ⛔ **同样拦住** —— 先 `split_provider` 取 upstream 再校验 |
-| `--provider pi/jdcloud-joyagent --model DeepSeek-V4-pro` | ✅ 放行，且 `settings` ⛔ **不含 modeId** |
+| `--provider pi/jdcloud-joyagent --model DeepSeek-V4-pro` | ⛔ **拦住** —— 京东 2026-09-09 停用，已移出白名单与豁免集 ⇒ 落「未知 provider」 |
 | `--provider volcengine-coding --model deepseek-v4-flash` | ✅ 放行（豁免集） |
 | `--provider github-copilot --model gpt-5.5` | ✅ 放行（豁免集） |
 | `--provider deepseek --model deepseek-v4-pro` | ⛔ **拦住**（DISABLED_PROVIDERS） |
 | 默认任务，**免费档可用** | → `codebuddy-code` + `hy4-preview`（T0，⛔ 还没进付费阶梯） |
 | 默认任务，免费档被排除/探活失败，0 次付费档做砸 | → `pi/volcengine-coding` + `glm-5.3-flash`（T1，钱包①） |
-| 默认任务，免费档已跳过，**2 次付费档**做砸（T1、T2 均失败） | → `pi/jdcloud-joyagent` + **`DeepSeek-V4-pro`**（T3，⚠️ 大小写） |
+| 默认任务，免费档已跳过，**2 次付费档**做砸（T1、T2 均失败） | → T3 `deepseek-v4-pro`，provider 按 `WALLET_PREF` 轮换 + 折扣窗口定（默认落 `pi/volcengine-coding`） |
+| T3 且**四个池全拿不到** | → 同档替代 `pi/bailian-token-plan` + `qwen3.8-max`（`TIER_PEERS`，⛔ 不升档） |
+| T3 且四个池与同档替代**都拿不到** | → **可用性升档**到 T4 `kimi-k3-2`（⛔ 只许向上），并在 §7 报告 |
+| 一路到 T4 仍拿不到 | → 🔴 `claude/claude-sonnet-5` @ `max`（**LAST_RESORT**，§7 必须显著告知在烧 Claude 额度） |
+| 连 `claude/claude-sonnet-5` 也拿不到 | ⛔ **停止并报告**（`report_no_landing_and_stop`），⛔ 不静默降档 |
+| 显式 `--thinking low` + 落到 LAST_RESORT | thinking 保持 **`low`**，⛔ 不被 LAST_RESORT 的 `max` 覆盖 |
 | `algorithm` 类，0 次付费档做砸 | → `pi/volcengine-coding` + `deepseek-v4-flash`（跳 T0，T2 起步） |
 | 只给 `--provider volcengine-coding` 不给 model | ✅ P1 仍校验该 provider，再按默认档位补 model |
 | 只给 `--model v4-pro` 不给 provider | ✅ 先按 WALLET_PREF 定 provider，再回 P0 校验 |
@@ -426,10 +583,40 @@ pi -p --provider github-copilot --model gpt-5.5 "{≤200 字符的 review_prompt
 | ⛔ **仅审查不做开发** | 用户 2026-08-20 明确。开发走 §3.2a 火山通道 |
 | ✅ **`claude-*` 已整族移除** | 2026-09-08 从 pi 的 Copilot 通道删掉——主会话就是 Claude，留着容易误用成自审 |
 
-可用异族评审（2026-09-08 实测 **17 个**，以 `~/.pi/agent/models.json` 为准）：
-`gpt-5.5`(⭐审查默认) · `gpt-5.6-sol` · `gpt-5.6-luna` · `gpt-5.6-terra` · `gpt-6-astra` · `gpt-5.4` · `gpt-5.4-mini` · `gpt-5.3-codex` · `gpt-5-mini` · `gemini-3.5-flash` · `gemini-3.6-flash` · `gemini-3.7-flash` · `gemini-3.8-flash` · `grok-4.5` · `grok-4.6` · `mai-code-1-flash-picker` · `mai-code-1.1-flash`
+可用异族评审（**11 个**，= pi 配置 17 个 − 用户 2026-09-09 屏蔽的 6 个）：
+`gpt-5.5`(⭐审查默认) · `gpt-5.6-sol` · `gpt-5.6-luna` · `gpt-5.6-terra` · `gpt-6-astra` · `gpt-5.4`
+· `gemini-3.7-flash` · `gemini-3.8-flash` · `grok-4.5` · `grok-4.6` · `mai-code-1.1-flash`
 
-🔴 **Claude 全族已于 2026-09-08 从 pi 的 Copilot 通道移除**（用户要求）——主会话就是 Claude，留着容易误用成自审。⚠️ 实现方式是在 `~/.pi/agent/models.json` 里显式定义 `github-copilot` provider 覆盖 `models-store.json`，⛔ 因为那个 store 会按 etag **自动刷新**，手改它会被冲掉。⚠️ 代价：Copilot 将来新增的模型**不会自动出现**，要手工补进 models.json。
+🔴 **⛔ 已屏蔽（`BLOCKED_MODELS`，用户 2026-09-09 点名）**：
+`gpt-5-mini` · `gpt-5.3-codex` · `gpt-5.4-mini` · `gemini-3.5-flash` · `gemini-3.6-flash` · `mai-code-1-flash-picker`
+✅ **那 5 个未知型号已测**（2026-09-09 三题盲评，⭐ 详见 catalog `blindEval_copilot5_20260909`）：
+
+| 档 | 模型 | /120 |
+|---|---|---|
+| ⭐ 第一 | `grok-4.5` ≈ `grok-4.6` | 109.5 · 106.0 |
+| 🔸 第二 | `gemini-3.7-flash` ≈ `gemini-3.8-flash` | 97.0 · 93.0 |
+| ⛔ 垫底 | `mai-code-1.1-flash` | 81.5 |
+
+🔴 **⛔ 不可与既有 /120 榜横比** —— 本轮走 `pi -p`（**无 agent 系统提示**），旧榜是 Paseo agent。
+⛔ **同档内不可分高下**：`grok-4.5` / `grok-4.6` 在 lru 与 kafka 两题**换位后第一名翻转**，
+差 3.5 与实测位置偏好（A 位比 E 位高 **2.83**）同量级；gemini 两个同理。
+⭐ 用户口径是「做个参考」⇒ **⛔ 未改派发阶梯**；审查默认仍是 `gpt-5.5`，
+grok 两个可作**异族审查备选**，⛔ `mai-code-1.1-flash` 不建议。
+
+🔴 **Copilot 通道调不到 Claude 族** —— 主会话就是 Claude，留着容易误用成自审。
+
+⚠️ **2026-09-09 实测更正：这⛔不是我们配出来的，是 GitHub 服务端拦的。**
+`models-store.json` 里 **`claude-*` 8 个全都还在**，`pi --list-models` 也看得到；
+但真发请求会拿到 **400 `model_not_supported`**。
+⇒ 旧记录说「实现方式是 models.json 覆盖 store」是**错的** —— 见下条。
+
+🔴 **⛔ 从 `models.json` 删条目【屏蔽不了 Copilot 模型】**（2026-09-09 实测）：
+pi 会**回落 `models-store.json`**。实测把 `gpt-5-mini` 从 models.json 删掉后，
+`pi -p --provider github-copilot --model gpt-5-mini` **照样返回 OK**。
+而 store 按 etag 自动刷新，改它也会被冲掉。
+⇒ **Copilot 侧的屏蔽只能靠本 skill 的 `BLOCKED_MODELS`**（P0 `validate()` 里拦）。
+⚠️ 对比：**火山两个 provider 删得掉** —— 它们只在 `models.json` 里定义，没有 store 兜底。
+⇒ `doubao-*` / `ark-code-latest` 已从 models.json 移除（归档 `~/.pi/agent/providers-disabled/blocked-models-20260909.json`）。
 ⛔ 不用 `codex/gpt-5.6-sol`——实测该 workspace `out of credits`。
 
 ✅ **端到端计时**（2026-08-20 实测，含 bug 的 JS 文件 + 要求 `VERDICT:` 行）：
@@ -489,9 +676,13 @@ pi -p --provider github-copilot --model gpt-5.5 "{≤200 字符的 review_prompt
 ⛔ **禁止静默升档**（会造成超预期 token 消耗）；降档必须在 §7 输出里回显，
 memory 记 `effectiveThinking` 字段留痕。
 
-⚠️ 火山通道（`volcengine-*`）只有 `off` / `on` / `auto` 三态，⛔ 不是六档；
-且 `volcengine-agent-plan` 上 `--variant` **静默失效**（实测：`@ai-sdk/openai` 的参数白名单
-把 `thinking` 丢掉了），要控思考强度得走 `volcengine-coding` 或 `volcengine-chat`。
+⚠️ 火山通道（`volcengine-*`）只有 `off` / `on` / `auto` 三态，⛔ 不是六档。
+
+🔴 **旧警告「`volcengine-agent-plan` 上 `--variant` 静默失效」⛔ 不适用于 pi 通道**（2026-09-09 实测更正）：
+两个 endpoint 经 pi 传 `thinking.type` 都**真生效** —— coding `disabled/enabled` = `reasoning_tokens` **0 / 155**，
+agent-plan = **0 / 165**。⛔ 那条结论的主语是**客户端**不是 provider：opencode 走 `@ai-sdk/openai`
+（Responses API），参数白名单把 `thinking` 丢了；pi 走 `openai-completions`，**两条路径不同**。
+⇒ 走 pi 时两个套餐地位相同，都能控思考强度；只有走 opencode 才要绕开 agent-plan。
 
 > 这条和「⛔ 创建后必须核实实际生效的模型」是同一类问题：**请求值 ≠ 运行值**。
 > 那次是静默降级到别的模型，这次是档位不存在被静默忽略。
@@ -508,7 +699,7 @@ ssh hub "paseo run --detach \
   \"\$(cat /tmp/prompt.txt)\""
 ```
 
-⚠️ Hub `--cwd` 必须是 `/home/mcdowell/...`（不是 `/Users/mcdowell/...`）。
+⚠️ Hub `--cwd` 必须是 Hub 上的 Linux 家目录路径 `/home/<user>/...`，⛔ 不是 Mac 的 `/Users/<user>/...`。
 ⚠️ 中文 prompt 先 `scp` 成文件再 `$(cat …)`，⛔ 不要内联进 SSH 引号（转义会炸）。
 
 ---
@@ -609,6 +800,12 @@ ssh hub "paseo run --detach \
 子会话已创建
   Agent:  {short_id} — {title}
   Model:  {provider}/{model} · thinking: {thinking}{降档时追加 " → {effective_thinking}（该模型无 {thinking} 档）"}
+{availability_escalations 非空时，整块加在这里 —— ⛔ 不许省略：
+  🔴 可用性升档: {原档位模型} → {逐级列出} （原因：所有 provider 都拿不到，⛔ 不是任务做砸）
+     ⚠️ 这比原计划贵。若你更想等额度恢复，现在中止：paseo agent archive {short_id}
+  ⭐ 落到 claude-sonnet-5(LAST_RESORT) 时【额外】显著提示：
+  🔴🔴 已在消耗 **Claude 套餐额度** —— 这套钱包体系存在的目的就是省它。
+       仅因「阶梯到顶仍拿不到，不能不干活」才走到这一步。}
   任务类型: {task_type}（{推荐理由}）
   CWD:    {cwd}
   Gates:  agent-gates ✓ / ⚠ 未安装
@@ -645,7 +842,7 @@ ssh hub "paseo run --detach \
 
 子会话完成后，按 `agent-review-protocol` 做交叉审查：
 
-- 代码 / 文档变更 → 模型固定 `github-copilot/gpt-5.5`（⛔ 换族，见 routing §5），
+- 代码 / 文档变更 → **未显式指定时**默认 `github-copilot/gpt-5.5`（⛔ 换族，见 routing §5；显式换 provider 会报 review 冲突），
   **通道**按规模分流：**大审查** → Paseo `pi/github-copilot/gpt-5.5`；**短审查** → `pi -p --provider github-copilot --model gpt-5.5`（§3 通道判据总表）
 - 审查发现按 ❌/⚠️/💡 分级，❌ 必须修复
 

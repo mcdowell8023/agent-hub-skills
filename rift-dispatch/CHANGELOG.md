@@ -2,7 +2,7 @@
 
 ## v11.3 (2026-09-09)
 
-**京东云停用 → 阿里云百炼接入**，钱包①层从「固定顺序」改为「三池轮换」。
+**京东云停用 → 阿里云百炼接入**，钱包①层从「固定顺序」改为**多池轮换**（火山两套餐 / 百炼 / codebuddy）。
 
 ### ⛔ 京东云停用（归档，不删）
 
@@ -39,33 +39,359 @@
 🔴 `compat.supportsDeveloperRole: false` 是**实测得出**（传 `role=developer` 报
 `not one of ['system','assistant','user','tool','function']`），⛔ 不是照抄火山猜的。
 
-### 🔴 钱包①层：固定顺序 → 三池轮换
+### 🔴 钱包①层：固定顺序 → 多池轮换
 
 用户明确：**火山 / 百炼 / codebuddy 一样，就是轮换关系**；加百炼正是因为**火山与 cb 这个月量不够**。
 ⇒ catalog 的 `modelProviderPreference` 从 `{first, then}` 改为 `rotation` 列表，
 文档不再把先后钉死，改成「用哪个由**哪个还有量**决定，撞限额换下一个」。
 
-### ⭐⚠️ 夜间 5 折 —— 时段策略回来了，但形态不同
+### ⭐⚠️ 折扣窗口 —— 时段策略回来了，但形态不同，而且**两家窗口不一样**
 
-百炼限时：**每晚 22:00 – 次日 08:00**，`deepseek-v4-pro-0813` / `deepseek-v4-flash-0731`
+**百炼**：每晚 **22:00 – 次日 08:00**，`deepseek-v4-pro-0813` / `deepseek-v4-flash-0731`
 / `qwen3.8-max` credits 减半（⛔ `qwen3.8-flash` 不在内）。
+
+**codebuddy**（用户补充后才知道）：`Deepseek-V4-Flash` / `Deepseek-V4-Pro`
+**工作日 09:00-12:00 / 14:00-18:00 是高峰原价，其余全部时段 5 折**。
+
+🔴 **我第一版把规则写成「夜间优先百炼」，是错的。** codebuddy 一周 168 小时里
+**只有 20 小时原价**，覆盖面远大于百炼那 10 小时/天。
+⇒ 正确规则：**轮换时优先【当前正在打折】的那家**；同为打折或同为原价则保持原轮换序。
 
 🔴🔴 **这直接撞上 2026-08-16 废止的时段策略，必须说清区别。**
 旧策略有害的原因是 `is_night()` 会**把按任务类型选出的高档模型无条件冲掉**。
-本条⛔**不碰模型选择**——档位由阶梯定完之后，才用它在【同一模型的多个池】之间挑一个：
+本条 `discountWindows` ⛔**不碰模型选择**——档位由阶梯定完之后，
+才用它在【**同一模型**的多个池】之间挑一个（⚠️ 更广义的「档内就该挑便宜」见下一节）：
 
 ```python
 # ═══ 5. 选 provider ═══
-if is_night_window() and model in NIGHT_DISCOUNTED:
-    pool = sorted(pool, key=lambda x: x[0] != 'bailian-token-plan')
+pool = sorted(pool, key=lambda x: not is_discounted_now(x[0], x[1]))
 #   🔴 这里是【选池】不是【选模型】—— model 上一段已定死，本段⛔不许碰
 ```
 
-⇒ 加了两道守卫：`consistency-check.py` 断言**夜间判断⛔不得出现在「选模型」段落**；
-`pipeline-test.py` 加 5 条夜间用例，含一条**关键反例**「夜间 T1 档位不被冲掉」。
+### 🔴 用户纠正：不变量是「⛔ 不跨档下调」，⛔ 不是「折扣不许影响选模型」
 
-✅ **验证了守卫测得出坏**：构造 3 个违规（夜间判断混进选模型段 / `NIGHT_DISCOUNTED`
+我写过一句总结：「折扣影响**从哪家买**，⛔ 不影响**买哪个**」。用户指出这是**过度概括**——
+如果 `glm-5.3-flash` 与 `deepseek-v4-flash` 能力打平而前者更便宜，那当然该选便宜的。
+
+⇒ 真正的形状是**两步**：
+**第 1 步 选档位**（按任务类型 + 做砸记录，⛔ 价格不参与）→
+**第 2 步 档内选落点**（⭐ 就是要挑便宜的）。
+2026-08-12 那个 bug 的错误⛔不是「让价格参与了」，而是**跨过档位边界往【下】选**。
+
+⚠️ 从事故提炼规则时最容易犯的错：把**肇事动作**（"价格参与了选择"）写成禁令，
+而不是把**被违反的不变量**（"不得跨档下调"）写成禁令 —— 前者会顺手禁掉正当优化。
+
+⇒ 加了两道守卫：`consistency-check.py` 断言**时段判断⛔不得出现在「选模型」段落**；
+`pipeline-test.py` 加折扣用例，含关键反例「深夜 T1 档位不被冲掉」「深夜免费档仍是 T0」。
+
+✅ **验证了守卫测得出坏**：构造 3 个违规（时段判断混进选模型段 / 折扣清单
 与 catalog 不符 / 百炼 id 丢快照后缀），**3/3 全部抓住**。
+
+### 🔴 hy4 免费期我记错了（用户更正）
+
+原记「免费至 **09-12**」是错的：实际 **2026-08-28 ~ 09-10**，而且是**每日赠送免费额度**，
+⛔ 不是一段连续免费期。⚠️ **当日额度用完会被限，表现是【不回复】** ⇒ 必须**主动换模型**，
+⛔ 不要干等。这让「派长任务前先探活」从建议变成硬纪律。
+
+### ⭐ 火山**两个套餐**也是轮换关系（用户 2026-09-09）
+
+`volcengine-coding`（`…/api/coding/v3`，8 模型）与 `volcengine-agent-plan`
+（`…/api/plan/v3`，13 模型）是**两个独立额度池**（不同 key、不同 baseURL）。
+阶梯三档 `deepseek-v4-pro` / `deepseek-v4-flash` / `glm-5.3-flash` 在两边 **id 完全相同**
+⇒ 撞限额直接换 provider，⛔ 不用改 model 名。两者都进 `WALLET_PREF` 轮换。
+
+🔴 **顺带推翻一条躺了很久的警告**：skill 里写着
+「`volcengine-agent-plan` 上 `--variant` 静默失效，要控思考强度得走 `volcengine-coding`」。
+实测把范围钉死了 —— 经 pi 传 `thinking.type`，**两个 endpoint 都真生效**：
+coding `disabled/enabled` = `reasoning_tokens` **0 / 155**，agent-plan = **0 / 165**。
+
+⚠️ 那次失效的**主语是客户端，⛔ 不是 provider**：opencode 走 `@ai-sdk/openai`
+（Responses API），参数白名单把 `thinking` 丢了；pi 走 `openai-completions`，两条路径不同。
+`--variant` 本来就是 opencode 的 flag，警告里却只留下了 provider 名。
+⇒ 已把这条限定到 opencode（SKILL §3.2e · routing §7 · catalog 四处）。
+
+### 🔴 屏蔽名单 `BLOCKED_MODELS`（用户 2026-09-09 点名）
+
+火山 Doubao 全系 + `ark-code-latest`；Copilot 的 `gpt-5-mini` / `gpt-5.3-codex` / `gpt-5.4-mini`
+/ `gemini-3.5-flash` / `gemini-3.6-flash` / `mai-code-1-flash-picker`。
+
+⛔ **与白名单/豁免集正交，放在 `validate()` 最前面** —— 放在豁免判断之后就对豁免 provider 失效了
+（`github-copilot` 正好在豁免集里）。
+
+### ⛔ 「从配置里删掉」≠「屏蔽」
+
+我先把它们从 `~/.pi/agent/models.json` 删了，`pi --list-models` 也确实少了几个。**然后实测**：
+
+```
+pi -p --provider github-copilot --model gpt-5-mini '只输出：OK'   →  OK
+```
+
+**删了照样能调。** pi 会回落 `models-store.json`，而它按 etag **自动刷新**，改它也会被冲掉。
+⇒ Copilot 侧**唯一有效的屏蔽是派发层的 `BLOCKED_MODELS`**；那 6 个条目已**还原**
+（删了没用，反而丢掉 `thinkingLevelMap` 等元数据）。
+⚠️ **火山两个 provider 删得掉** —— 它们只在 models.json 里定义、无 store 兜底 ⇒ 保留移除 + 归档。
+**同一个动作在不同 provider 上效果完全不同**，⛔ 不能推广。
+
+🔴 **顺带证伪一条躺了很久的记录**：「Claude 全族已从 Copilot 通道移除，**实现方式**是
+models.json 覆盖 store」—— 实测 store 里 `claude-*` **8 个全在**，是 GitHub 服务端返回
+**400 `model_not_supported`** 拦的。**结论没错（调不到），归因错了。**
+⚠️ 归因错的代价是：我以为「照这个办法能屏蔽别的模型」，于是照做，做完还以为成了。
+⇒ ⛔ **判据是「真发一次请求返回什么」，⛔ 不是「列表里有没有」。**
+
+### ✅ 决策树完整性：新增 `coverage-check.py`，§2 覆盖率 **100%**
+
+`pipeline-test.py` 只保证「**跑过的**路径行为对」，⛔ 不保证「**所有**路径都跑过」。
+新脚本用 `sys.settrace` 收 §2 伪代码被走到的行，实测揪出两处：
+
+| 发现 | 处理 |
+|---|---|
+| 空 `--model` 的报错分支**从没被测过** | 补用例（空串是输入错误，⛔ 不是「没指定」） |
+| `review` 分支里有一段**死代码** | 第 1 段的 pre-P0 检查已把非 Copilot provider 拦掉，那个 `elif` 永远为假 ⇒ 改成 `assert` 记录不变量 |
+
+🔴 **死代码在「当规范读」的伪代码里有害** —— 读的人会以为拦截发生在那里。
+
+⚠️ 写这个脚本第一版用**启发式**判续行（「上一行以逗号结尾」），被**行尾注释**骗过
+（`('a','b'),   # 注释`）⇒ 5 行误报。改用 `code object` 的 **`co_lines()`** 取
+「真正能产生 line 事件的行」，⛔ 不猜。
+
+✅ 验证它测得出坏：塞**运行时不可达**分支 → 抓住；复现真实事故形状（前面拦过的条件后面又写一遍
+`elif`）→ 抓住。⚠️ `if False:` 抓不住（会被常量折叠、`co_lines` 里根本没有）—— 那是 linter 的活。
+
+⇒ 现在是**三个校验**：`consistency-check`（跨文件数据）· `pipeline-test`（行为）· `coverage-check`（完整性）。
+
+### 🔴 查了一遍「测评结果都进 skill 了吗」—— 结果是**没有**
+
+用户一问才发现三处漏：
+
+| 漏的东西 | 后果 |
+|---|---|
+| `qwen3.8-max` 那轮的分**只写在散文里**（`tierPeers.evidence` 的字符串） | agent 扫 `blindEval` 字段时**一个数都看不到** |
+| 5 个 Copilot 型号**连 `models` 条目都没有** | 分只躺在顶层轮次记录里，按 model id 查不到 |
+| `h2hEval` / `jdVsVolcEval` 用的是**臂标签**（`v4flash` / `jd`）⛔ 不是 model id | 同上，按 model id 查不到 |
+
+⇒ 全部补齐：per-model `blindEval` + `blindEvalByRound`、轮次记录加 `_armToModel`。
+现在 **6 轮结构化分数 · 23 个模型有数值字段**，按 model id 全查得到。
+
+⚠️ **`deepseek-v4-pro` 一个模型就有 4 轮分**（86 / 96 / 104 / 102，口径各不相同）
+⇒ 加 `blindEvalByRound`，⛔ 别拿单个 `blindEval.total` 去对所有轮。
+
+### 🔴 §3e 守卫：测评必须落成【按 model id 查得到的数值】
+
+⛔ 只写进散文不算 —— 同 `feedback-change-the-data-not-the-prose-rule`：**数值字段权重远高于散文**。
+
+⚠️ 写这个守卫踩了两个坑：
+- **`e` 撞车**：模块级 `e` 是错误列表，我拿它当循环变量 ⇒ `AttributeError`。
+- **假设只有一种结构**：六轮记录实际有**五种**（`scores_120` / `totals_120` /
+  `scores:{model:{...total}}` / `scores:{task:{arm:n}}` / 臂标签）⇒ 改成写 `round_totals()` normalizer，
+  **认不出就返回空，⛔ 不猜**。
+
+✅ 用 4 个破坏场景验证测得出坏（删 per-model 字段 / total 对不上 / 删 `_armToModel` / 新轮次模型无条目）：**4/4 全抓**。
+
+### ✅ 5 个未知 Copilot 型号已评分（用户口径「做个参考」⇒ ⛔ 未改阶梯）
+
+| 档 | 模型 | /120 | LRU | 并发 | Kafka |
+|---|---|---|---|---|---|
+| ⭐ 第一 | `grok-4.5` | **109.5** | 33.5 | 37.5 | 38.5 |
+| ⭐ 第一 | `grok-4.6` | **106.0** | 33.5 | 35.5 | 37.0 |
+| 🔸 第二 | `gemini-3.7-flash` | 97.0 | 28.5 | 36.0 | 32.5 |
+| 🔸 第二 | `gemini-3.8-flash` | 93.0 | 29.5 | 29.5 | 34.0 |
+| ⛔ 垫底 | `mai-code-1.1-flash` | 81.5 | 27.5 | 23.0 | 31.0 |
+
+🔴 **⛔ 不可与既有 /120 榜横比** —— 本轮走 `pi -p -nt -ns -nc`（**无 agent 系统提示**），
+旧榜是 **Paseo agent** 跑的。⭐ 只在这 5 个之间成立。
+
+⛔ **同档内不可分高下**：`grok-4.5` / `grok-4.6` 在 **lru 与 kafka 两题的第一名换位后翻转**，
+总分差 3.5 与实测位置偏好（A 位比 E 位高 **2.83**）同量级。gemini 两个同理（差 4.0）。
+✅ **垫底那条是稳的**：`mai-code-1.1-flash` 三题全负、落后 11.5 分。
+
+### 🔴 多臂盲评的方法坑：**逆序去不掉正中间那个的偏**
+
+两个朝向用了 `ABCDE` + `EDCBA`。但**逆序对奇数臂的中位是恒等变换** ——
+`mai-code-1.1-flash` 两轮都坐 C，**它的分从头到尾没被去偏**。
+（本轮它垫底 11.5 分、三题全负 ⇒ 结论仍成立；换个差距小的场景就会出错。）
+⇒ **多臂盲评的朝向要用【循环移位】，⛔ 不要用逆序。**
+
+⚠️ 顺带固化一条判据：**换位后各题第一名是否翻转** —— 翻转就是「不可分」，
+⛔ 不管总分差了多少。只有「差距 > 位置偏好幅度 **且** 方向不翻」才敢排先后。
+
+⚠️ 跑第一轮时 `grok-4.5` 只回了 54 字的「我打算怎么做」⇒ 三题都加了**统一输出指令**
+（直接给答案、⛔ 不要计划/摘要/澄清问题），五个模型完全相同。
+
+⚠️ 还踩了个老坑：`local model=$1 tkey=$2 o="$B/raw/${model}--${tkey}"` ——
+**同一条 `local` 里后面的赋值看不到前面的**，15 个任务全写进同一个 `--.txt` 互相覆盖。
+⇒ 拆成多条 + 加空参数断言。（同 `feedback-bash-integration-patterns` §声明顺序）
+
+### 🔴 拆开两种「换档理由」+ 新增 LAST_RESORT（用户 2026-09-09 决策）
+
+第 3 轮异构审查抓到一个**真实的语义冲突**（⛔ 不是文档漂移）：
+`model-routing.md` §8 降级链允许 `glm-5.3-flash → deepseek-v4-flash`（T1→T2）、
+`deepseek-v4-flash → cb/deepseek-v4-pro`（T2→T3）这样**因拿不到而换档**，
+而我这轮给 T3 新加的分支却是「停止并报告」—— **同一条链里 T1/T2 升档、T3 停止**，前后不一致。
+
+根因是**两种换档理由从来没被拆开写**：
+
+| | 触发 | 允许 |
+|---|---|---|
+| **质量/成本换档** | 本任务上一档**做砸过一轮** | 向上一档。⛔ 不得跨档**下调** |
+| **可用性换档** | 该模型在**所有 provider** 都拿不到 | ⭐ 只许**向上** + **必须报告**。⛔ 永远不向下 |
+
+⇒ 不变量「⛔ 不得跨档下调」防的是**质量回退**，「升档需做砸」防的是**成本虚高**——
+两条都在质量/成本轴上，⛔ 跟「拿不拿得到」是**正交**的。
+向下换档在两个轴上都错：既是质量回退，又是拿「拿不到」当借口。
+
+**新的完整顺序**：四池轮换 → 同档替代（`TIER_PEERS`，⭐ 优先于升档，同档能落就别涨价）
+→ 可用性升档 `tier+1` 回到第一步 → 阶梯到顶（T4）仍拿不到 → **`LAST_RESORT`**。
+
+### 🔴 `LAST_RESORT` = `claude/claude-sonnet-5` @ `max`
+
+**第 4 轮异构审查在这块新逻辑上抓到 4 个真 bug**（⛔ 不是文档漂移）：
+
+| # | 问题 | 根因 |
+|---|---|---|
+| 1 | LAST_RESORT **覆盖了用户显式 `--thinking`** | `thinking = lr_thinking` 无条件赋值 —— `'max'` 本该只是**默认值** |
+| 2 | LAST_RESORT 只查 `provider_available('claude')`，⛔ 不查 model | `claude` 在**豁免集**里 ⇒ `validate()` 对它⛔不校验 model ⇒ 「claude 活着但 sonnet-5 拿不到」会一路放行到派发才炸 |
+| 3 | §6 收尾还留着**第二套可用性机制** `if not provider_available(): downgrade()` | 它⛔不受「不得跨档下调」约束，能把 §5 刚升上去的档位**降回低档**，还绕开「显式 provider ⛔不许被换掉」，且不写 `availability_escalations` ⇒ **静默质量回退** |
+| 4 | 短任务落 LAST_RESORT 会拼出 `cli + claude` | `claude` 在 provider 表里**只有 Paseo `create_agent` 一条路径**，⛔ 没有 `claude -p` |
+
+⇒ ③ 的修法是**删掉**那套机制，⛔ 不是给它加约束：
+**可用性从此只有一套真源**（§5 的 `first_available` → 同档替代 → `tier+1` → LAST_RESORT）。
+⚠️ 两套可用性信号并存，本身就是 bug 的温床 —— 它们会互相矛盾。
+
+另外把 `availability_escalations` 从「只记 to」改成 **`(from, to, why)` 三元组** ——
+只记 to 的话 §7 打不出「原档位 → 逐级」那句话，「必须报告」会变成**假实现**。
+
+### 🔴 反残留守卫（§3d）—— 别再靠人眼扫漂移
+
+**第 5 轮：守卫自己被审出两个缺口，修完后它一次抓出 17 条**（人眼四轮才抓 13 条）：
+
+| 缺口 | 后果 |
+|---|---|
+| 只扫 `SKILL.md` / `model-routing.md` | ⛔ **漏了第三份** `model-catalog.json` —— 补缺口时**范围也要补全** |
+| 「唯一入口」之外的同义写法没覆盖 | `做砸才升` / `才升 K3` / `做砸过一轮才` 全漏 |
+
+⚠️ 但 17 条里 **7 条是误报** —— 它把**描述 2026-08-12 那个旧 bug** 的句子
+（"`is_night()` 把做砸才升上去的高档模型换成低档…"）当成了**在立规则**。
+⇒ 加 `DESCRIPTIVE` 排除：句子里有 `is_night` / 「那个 bug」/「旧写法」= **在讲过去，⛔ 不在规定现在**。
+收窄后正好 **10 条真残留**，全部修完。
+
+🔴 **守卫收窄了两次，每次都要重新证明它还测得出坏** —— 已验证（2/2、4/4）。
+⚠️ 收窄一个误报多的守卫，很容易顺手把真阳性也关掉。
+
+### 第 6 轮：`review` 那道门把三个洞一起开着
+
+第 3 段的条件写的是 `if task_type == 'review' and explicit_model is None:` ——
+**`--model X` 一加，整段绕过**，三个洞同时开：
+
+| 洞 | 后果 |
+|---|---|
+| `--free × review` 冲突被**静默吞掉** | `want_free` 自己也带 `and explicit_model is None` ⇒ 两道门同时失效 |
+| `review --model gpt-5.5` **掉进普通阶梯** | 去试 `codebuddy-code/gpt-5.5` —— cb 根本没有它 ⇒ 报「白名单不匹配」，用户看到的原因完全不对 |
+| `review --provider 火山 --model X` | **绕过 provider 冲突判断**，直接派到实施族上（⛔ 违反异构不变量） |
+
+⇒ 条件收成**只看 `task_type`**；`--free` 判断改用 `args.free`（⛔ 不用带门的 `want_free`）；
+显式 model 保留、显式非 Copilot provider 报**专用**冲突
+（`report_review_provider_conflict_and_stop`）——
+⛔ 复用 `report_conflict_and_stop` 会给出「白名单不匹配」的**错误解释**。
+
+⚠️ **同一个 `and explicit_model is None` 门被复制到了三处**，这才是根因，⛔ 不是三个独立 bug。
+
+### 第 6 轮其余
+
+- 🔴 `model-routing.md` 把**顶层 `pi` 写进了豁免集** —— 它是**宿主**，豁免它等于让
+  `pi/jdcloud-joyagent/...` **整条绕过 upstream 校验**。⇒ 改成「校验对象是 `split_provider()` 后的 upstream」。
+- 附录 P0「不在白名单的 model id 一律不派」是**绝对句**，会误伤 `claude` LAST_RESORT 与 Copilot 审查
+  ⇒ 限定为「对白名单 provider」。
+- `toK3Condition` 补【质量/成本升档】限定（否则与「T3 全不可用可升 T4」直接打架）。
+- §3d 守卫**再补一类同义写法**：`做砸一轮才升`（⛔ 无「过」字）此前漏检 —— 这是 reviewer
+  指名的**具体盲区**，⛔ 不是泛泛建议。
+- `kimi-k3-2` 补进 `modelProviderPreference`（只有 cb 一家，但**显式列出**）；
+  `concurrency_diag` 补进「跳 T0 从 T2 起步」的四类清单。
+- LAST_RESORT 的 `channel` 守卫现在是**防御性**的（review 改顶层后，自然路径已没有
+  「cli 规模走到 LAST_RESORT」）⇒ 测试用 `force_cli` 旋钮保持可测。
+
+`pipeline-test.py` 50 → **53 条**。
+
+### 第 5 轮其余修复
+
+- **`review` 硬例外静默覆盖显式 `--provider`**：注释写「只定模型」，代码却 `upstream, model = ...`。
+  ⇒ 只在 `explicit_upstream is None` 时给默认；显式指定了别的 provider ⇒ **报冲突**。
+  ⚠️ 它还会让后面的显式落点可用性检查**查错对象**（查 copilot 而非用户点名的那个）。
+- **删掉 §6 `downgrade()` 留下的缺口**：显式 `--provider` 路径**完全没有可用性检查**了
+  ⇒ 补 `first_available([(upstream, model)])`，拿不到就**停止**（⛔ 不静默换 provider、⛔ 不升档）。
+- `architecture` 起步档在 routing §3.3 还写着 T2（真源是 **T1**）；
+  「跳过 T0」被写成「直接从 T1 起步」（⛔ 两件事：跳 T0 是一回事，付费起步档按 `entryTier` 定）。
+- 「T0 拿不到 → 落 T1」缺 `--free` 限定（显式 `--free` 拿不到必须**停止**，⛔ 不静默转付费）。
+- **「兜底」一词撞车**：`opencode` 是**执行适配器**的兜底（怎么跑），`LAST_RESORT` 是**可用性降级链**
+  的最后一站（跑哪个模型）—— 两个都叫「兜底」，已分别改名。
+- 「白名单之外一律禁止」是**绝对句**，与 `claude` 走豁免集的 LAST_RESORT 打架 ⇒ 限定为「对白名单 provider」。
+
+`pipeline-test.py` 45 → **50 条**。
+
+
+四轮审查里 **13 条** 是同一形状：**改了权威定义，但速查表 / 用例表 / 降级链 / 历史段没跟着改**。
+校验脚本只比**结构化数据**，markdown 表格和散文它一个都不看 ⇒ 漂移全积在那里。
+
+⇒ `consistency-check.py` 新增 §3d：对**当前规则两份**（`SKILL.md` / `model-routing.md`）做
+「主题命中 + 缺限定语」扫描，并断言 LAST_RESORT 四件套（provider 串 / thinking / 常量 / catalog）三份一致。
+
+✅ **上线即抓到 6 条审查没列出的残留**（其中 2 条是**误报** —— 它把「与官方 API 的**价格对比**」
+小节也算成了路由断言）。⇒ 收窄成「必须同时命中**主题**和**在断言路由角色**」才报。
+⚠️ **守卫误报多了会被忽略**，跟漏报一样有害。
+✅ 收窄后用 4 个破坏场景验证仍**测得出坏**（4/4）。
+
+
+
+用户原话：**「我们本质是为了不占用 claude 套餐额度，但是不能不干活，所以 sonnet 5 max 作为最后兜底」**。
+
+⇒ 这句话同时给出了**目的**和**它的边界**：
+- 整套钱包体系（火山两套餐 / 百炼 / codebuddy 轮换、折扣窗口、阶梯）存在的**唯一目的**
+  就是 ⛔ **不占用 Claude 套餐额度**（留给主会话）。
+- ⛔ 但**「不能不干活」优先于「省额度」** ⇒ 到顶了宁可用它，也⛔不要停在半路。
+- 🔴 走到这里 = **正在烧掉这套体系本来要保护的东西** ⇒ §7 输出**必须显著告知**，⛔ 不许静默。
+- ⛔ 它⛔**不是 T5**，⛔ 不参与「做砸就升档」那条路径 —— **只有可用性耗尽才够得着**。
+
+⛔ 连 `claude` 都不可用，才 `report_no_landing_and_stop`。
+
+### ⛔ `deepseek/*` 官方 API 从「自动兜底」降为「手动路径」
+
+它一直在 opencode 的 `disabled_providers` 里。写成自动兜底等于给了一条**假通道**——
+真走到那一步会**失败**，⛔ 不是花钱。⇒ 改成：需用户明确接受现金开销 + 解除 disabled 后手动指定。
+
+### 守卫
+
+`pipeline-test.py` 33 → **40 条**，新增「向上换档」「不许向下」「同档替代优先于升档」
+「到顶落 LAST_RESORT」「连 claude 都没有才停」「escalations 必须留痕」等用例。
+✅ **6 个破坏场景全部抓住**（`tier -= 1` / 不记 escalations / LAST_RESORT 不查可用性 /
+跳过同档替代 / 永不升档直接兜底 / LAST_RESORT thinking 降成 low）。
+
+### ⭐ `qwen3.8-max` 定档：与 `deepseek-v4-pro` **同档**，落地为 `TIER_PEERS`
+
+用户：「和其他模型一样啊，用来编码啊，qwen3.8-max 应该很强」（附 Arena 榜）。
+⇒ 跑了一轮**换位盲评**（vs `deepseek-v4-pro`，两臂 thinking=medium、prompt 逐字相同）：
+
+| 题目 | `qwen3.8-max` | `deepseek-v4-pro` |
+|---|---|---|
+| LRU（代码实现） | 25.5 | **33.0** |
+| 并发诊断 | 36.5 | **38.0** |
+| Kafka 架构 | **37.5** | 31.0 |
+| **总分 /120** | 99.5 | 102.0 |
+
+⇒ 差 2.5/120，**判同档（T3）**。新增 `TIER_PEERS`：**本档四个池全拿不到时**才换到它，
+⛔ 主落点可用时不插队（credits 倍率还没测，没有价格依据）。
+同时新增 `report_no_landing_and_stop()` —— 全拿不到就**明确停止**，
+⛔ 不静默升档（升档唯一入口是做砸过）、⛔ 不静默降档。
+
+🔴 **方法升级：每题跑两个朝向，把评委的位置偏好测出来。**
+实测 **A 位平均比 B 位高 2.5 分**，与两臂总分差同量级 ⇒ ⛔ **单朝向盲评的名次不可信**。
+✅ 本轮三题胜负方向换位后**全部保持**，方向是稳的。
+⚠️ 回看 09-08 那轮（京东 vs 火山）：**A 位 3 战全胜**、京东占 A 位 2/3、只领先 4 分
+⇒ 那 4 分很可能大部分是位置偏好。⛔ 不推翻其结论（原文已写明 4 分在噪声内），但机制清楚了。
+
+⚠️ 评分表里加了**反冗长护栏**（本轮两份最大差 5.8×）。验证它有效：Kafka 题 qwen 写 99KB 赢了，
+但 LRU 题 qwen 同样更长却**输 7.5 分** ⇒ 评委⛔没有单纯奖励长度。
+
+⛔ **未测**：`qwen3.8-max` 与 `deepseek-v4-pro-0813` 在百炼的 credits 倍率
+⇒ 【档内挑便宜】那一步还没依据。`qwen3.8-flash` 同样**未定档**（无实测）。
 
 ### 🔧 node 版本管理器被 PATH 屏蔽（本机修复，非 skill 改动）
 
@@ -77,7 +403,7 @@ if is_night_window() and model in NIGHT_DISCOUNTED:
 ③ `bl` 改由 volta 管（pin `node@26.7.0`），卸掉 homebrew 那份重复安装。
 ⚠️ homebrew 的 node 未卸（`brew uses --installed node` 为空，无依赖，但卸载属清理类操作需先 dry-run）。
 
-catalog 6.1.0 → **6.2.0**。
+catalog 6.1.0 → **6.14.0**。
 
 
 ## v11.2 (2026-09-08)
@@ -693,6 +1019,8 @@ thinking 两组反例、异构对照表、降级链、探活纪律、`-x` 陷阱
 ### 🏆 Hy4 preview 三题全胜，接替第一顺位
 
 用户告知 codebuddy 新增 Hy4 preview，免费至 2026-09-12 00:00。同轮三臂盲评（题库逐字复用
+
+> ⚠️ **已被 v11.3 更正**：hy4 免费实际是 **2026-08-28 ~ 09-10**，且是**每日赠额**⛔ 非连续免费期。本段的 09-12 是旧误记。
 08-16 存档原题，`thinking=high`，创建后核 `runtimeInfo` 确认无静默降级，匿名 A/B/C 且位置逐题轮换，
 评委 `github-copilot/gpt-5.5`，prompt ≤200 字符）：
 
@@ -734,11 +1062,15 @@ K3 的倍数也跟着变了：贵 v4-flash 从 **32 倍**降到 **9.5 倍**。�
 | id | 费率 | |
 |---|---|---|
 | `hy4-preview` | **0.00x** | 免费至 09-12 |
+
+> ⚠️ **已被 v11.3 更正**：hy4 免费实际是 **2026-08-28 ~ 09-10**，且是**每日赠额**⛔ 非连续免费期。本段的 09-12 是旧误记。
 | `hy4-preview-x` | **0.29x** | ⚠️ 同名收费版 |
 | `hy3` / `hy3-x` | 0.00x / 0.05x | 同一模式 |
 
 **同一个 label、两个 id、一免费一收费。** 🔴 派发必须认 id，按 label 匹配会选错。
 ⚠️ 附带风险：09-12 限免结束后若平台把 hy4-preview 直接切成收费，费率会从 0 跳到 **0.29x**，
+
+> ⚠️ **已被 v11.3 更正**：hy4 免费实际是 **2026-08-28 ~ 09-10**，且是**每日赠额**⛔ 非连续免费期。本段的 09-12 是旧误记。
 比当时的 v4-flash(0.17x) 还贵——⛔ 不能想当然地「免费结束就自动落回同名收费版」。
 
 ### 🔴 v4-pro 门禁：从散文改成机器可读字段
@@ -809,6 +1141,7 @@ hy4 并发 首轮  assistant#1  status=incomplete      7 字符 'aborted'
 
 配置一个文件 `~/.pi/agent/models.json`（600 权限），两个火山套餐各一个 provider：
 `volcengine-coding`(7 模型) + `volcengine-agent-plan`(12 模型)，**19 个逐个 `pi -p` 实跑通过**。
+> ⚠️ **计数已过期**：🔴 v11.3（2026-09-09）起是 **coding 8 / agent-plan 13**（两边都补了 `glm-5.3-flash`）。当前值以 `oneshotChannels.pi.providers` 与 `pi --list-models` 为准。
 
 **pi 相对 codex 的关键优势**：模型条目自带 provider ⇒ 19 个能同时列出、界面直接切，
 不像 codex 一个 session 锁死一个 provider。
@@ -1026,6 +1359,8 @@ volcengine 这条被重申了一次，说明原先埋在 model-routing.md 约束
 | provider | npm | 模型数 | `--variant` |
 |---|---|---|---|
 | `volcengine-agent-plan` | `@ai-sdk/openai`（Responses） | 12 | ❌ 静默失效 |
+
+> ⚠️ **计数已过期**：本段的火山模型数是当时快照。🔴 v11.3（2026-09-09）起是 **coding 8 / agent-plan 13**（两边都补了 `glm-5.3-flash`）。
 | **`volcengine-chat`** | `@ai-sdk/openai-compatible`（Chat） | 3 | ✅ `off`/`on`（+`auto` 仅 ark-code-latest） |
 
 `volcengine-chat` 只配了 `ark-code-latest` · `deepseek-v4-pro` · `deepseek-v4-flash`。
@@ -1274,6 +1609,10 @@ catalog 新增 `sameRoundEval_20260816`；v4-pro 去掉 `deprecated`、tier B→
 
 - **新增「⛔ 硬性约束 5」**：credits 制通道已无任何时段性折扣，派发链 24 小时不变，
   决策树删除 `is_night()` 判断（SKILL.md 伪代码第 6 步整步移除）
+  > 🔴 **2026-09-09（v11.3）已收窄这一条**：它是**当时针对 qcn 折扣结束**的结论。
+  > 百炼与 codebuddy 各自有折扣窗口后，时段判断以**新形态**回归（只在【档内选落点】介入）。
+  > 真正长期成立的不变量是 **⛔ 不得跨档下调**，⛔ 不是「不许有时段判断」。
+  > 现行规则见 v11.3 与 `walletPriority.discountWindows`。
 - **连带作废两条**：08-12「约束 4-5 夜间也先给 Hy3」（不必再说，全天都是 Hy3）；
   08-02「约束 2-2 夜间默认 qcn」（唯一依据「夜间 0.01x 全场最低」已不成立）
 - **qcn 降为「cb 断供时的降级备选」**，不再主动选：性价比 101.5/0.50 = **203**，
