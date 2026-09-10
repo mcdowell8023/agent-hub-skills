@@ -92,8 +92,19 @@ args = parse_args(user_input)
 want_free = False          # 第 2 段按 args.free/explicit_model 定值，⛔ 不在别处冒出
 
 WHITELIST = {                                   # P0，routing §1
-  'codebuddy-code':   ['hy4-preview', 'hy3', 'glm-5.3-flash',
-                       'deepseek-v4-flash', 'deepseek-v4-pro', 'kimi-k3-2'],
+  'codebuddy-code':   ['hy4-preview', 'hy3', 'hy3-x', 'glm-5.3-flash',
+                       'deepseek-v4.1-flash',    # ⭐ 2026-09-10 换代，0.06x
+                       'kimi-k3-1'],
+  # 🔴 2026-09-10 用户停用 `deepseek-v4-pro`：⛔ agent 不得自行派发（见 BLOCKED_MODELS）。
+  # 🔴 **2026-09-10 换代**：cb 上 `deepseek-v4-flash` → `deepseek-v4.1-flash`，
+  #    `kimi-k3-2` → `kimi-k3-1`。⛔ 旧 id 已从白名单**移除**。
+  # ⚠️ 旧 id 请求它们【不报错】—— 但那是**别名**，服务端静默解析到新型号。
+  #    权威判据是【假 id 的 400 报错正文】：`400 model [x] service info not found`
+  #    后面会附「Currently supported models for your account」的完整清单
+  #    —— 那 15 个里**没有** deepseek-v4-flash / kimi-k3-2。⭐ 比 list_models 更硬。
+  # 🔴🔴 **陈旧版本别名比无版本别名更危险**：它带着版本号，却指向**另一个版本** ⇒
+  #    标题会写 `cb-dspF4` 而实际跑的是 `dspF4.1`，**标题在说谎**，
+  #    正好击穿 §3.1 标题规范存在的意义。⇒ ⛔ 必须从白名单移除，不能只加注释。
   'qoderclicn':       ['qmodel_38max'],
 }
 # ⛔ jdcloud-joyagent 2026-09-09 停用（额度用尽、消耗太快）——已从 ~/.pi/agent/models.json 移除。
@@ -102,13 +113,44 @@ WHITELIST = {                                   # P0，routing §1
 # 🔴 用户点名屏蔽的型号（2026-09-09）。⛔ 与 WHITELIST/EXEMPT 正交 ——
 #    豁免 provider 也拦得住（否则 `--provider github-copilot --model gpt-5-mini` 会直接放行）。
 BLOCKED_MODELS = {
-  'volcengine-coding':    {'doubao-seed-2.0-lite', 'doubao-seed-2.1-turbo'},
+  # 🔴 `glm-latest` 两边都列 —— ⛔ 它只在 agent-plan 上存在，但**万一将来 coding 也上**，
+  #    漏一边就等于留了个口子。屏蔽名单宁可写重，⛔ 不要赌「那边没有」。
+  # 🔴 2026-09-10 用户停用 `deepseek-v4-pro` ⇒ ⛔ agent 不得自行派发。
+  #    它在**五个** provider 上都有（含 volcengine-chat），百炼那份 id 还带 -0813 后缀 ⇒ 五个 key 全写，
+  #    漏一个就是一个绕过口（与 glm-latest 宁可写重同一个理由）。
+  #    ⚠️ validate() 对屏蔽型号走 report_blocked_model_and_stop —— 是**停**不是换落点。
+  #    这是刻意的：用户的要求是「不允许 agent 自己派发」，那么升档撞到 T3 就该**停下来
+  #    回到用户**，⛔ 不该自己挑个替代悄悄继续。⛔ 因此本次**不动 LADDER** ——
+  #    换档位要连带改 WALLET_PREF / TIER_PEERS / 一堆用例，且工作区里还压着别人未完成的
+  #    kimi-k3 换代迁移（实测基线 pipeline-test 已有 37 条失败），进去只会把两件事缠在一起。
+  'volcengine-coding':    {'doubao-seed-2.0-lite', 'doubao-seed-2.1-turbo', 'glm-latest',
+                           'deepseek-v4-pro'},
   'volcengine-agent-plan': {'doubao-seed-2.0-lite', 'doubao-seed-2.0-mini', 'doubao-seed-2.1-turbo',
-                            'doubao-seed-evolving', 'ark-code-latest'},
+                            'doubao-seed-evolving', 'ark-code-latest', 'glm-latest',
+                            'deepseek-v4-pro'},
+  'codebuddy-code':       {'deepseek-v4-pro'},
+  'bailian-token-plan':   {'deepseek-v4-pro', 'deepseek-v4-pro-0813'},
+  'volcengine-chat':      {'deepseek-v4-pro'},   # 🔴 0910 异构审抓到的漏口：
+                          #    它在 EXEMPT_PROVIDERS 里 ⇒ 显式 --provider volcengine-chat
+                          #    --model deepseek-v4-pro 本来能绕过 P0。
+                          #    ⚠️ 上面注释曾写「四个 provider 全写」—— **数错了，是五个**。
+                          #    ⇒ 已加 §3h 结构性守卫：屏蔽覆盖由 catalog 的 providers 表推，
+                          #       ⛔ 不再靠人肉列举（同 §3g 的思路）。
   'github-copilot':       {'gpt-5-mini', 'gpt-5.3-codex', 'gpt-5.4-mini',
                            'gemini-3.5-flash', 'gemini-3.6-flash', 'mai-code-1-flash-picker'},
 }
 # ⚠️ 屏蔽的是【型号】不是 provider ⇒ 同一 provider 的其它型号照常可用。
+
+# 🔴 **全局禁用型号** —— ⛔ 与上面那张 provider-keyed 表【正交】。
+#    上表回答「这个 provider 上不许用哪些」，本集回答「**这个型号哪儿都不许用**」。
+#    ⛔ 为什么必须有这一层（0910 异构审 gpt-5.5 连开两枪）：
+#      ① provider-keyed 表天生漏 —— 我写 v4-pro 时列了四个 provider、注释还写「四个全写」，
+#         实际是**五个**（漏了 EXEMPT 里的 volcengine-chat，显式指定就能绕过）；
+#         而 `--provider github-copilot --model deepseek-v4-pro` 这类**没列过的 provider**
+#         结构上永远拦不住。
+#      ② 只给 `--model` **不给 provider** 时，§1 的 `if explicit_upstream is not None: validate()`
+#         **压根不执行** ⇒ 要到 §5 把池探活完、收尾 validate() 才拦 ⇒ 用户明令禁用的型号被真请求了一遍。
+BLOCKED_MODELS_ANY_PROVIDER = {'deepseek-v4-pro'}   # 🔴 用户 2026-09-10：⛔ 不允许 agent 自己派发
 # ⚠️ ⛔ 别把它跟 DISABLED_PROVIDERS 合并 —— 那个是整个 provider 停用，措辞和出路都不同。
 
 DISABLED_PROVIDERS = ['deepseek']               # 🔴 官方 API（现金）。⛔ 不是自动兜底，只能【手动】用
@@ -120,7 +162,19 @@ EXEMPT_PROVIDERS   = ['claude', 'codex', 'opencode', 'github-copilot',
 PI_HOSTED = ('volcengine-coding', 'volcengine-agent-plan', 'volcengine-chat',
              'bailian-token-plan', 'github-copilot')   # ⛔ 京东已停用
 LADDER = [('glm-5.3-flash', 0.06), ('deepseek-v4-flash', 0.17),
-          ('deepseek-v4-pro', 0.51), ('kimi-k3-2', 1.62)]      # T1..T4
+          ('qwen3.8-max', None),     ('kimi-k3-1', 1.62)]      # T1..T4
+# 🔴 2026-09-10 T3 由 `deepseek-v4-pro` 换成 `qwen3.8-max` —— 用户禁用了前者。
+#    ⛔ 为什么不是「撞 T3 就停」：那会把 **T4 的 K3 永久掐断**（i 走不到 3），
+#       升档链在 T2 之后就断了。⇒ 换落点，⛔ 不是砍档。
+#    ⛔ 为什么不是「留着 v4-pro 靠 §6 拦」：§5 先 first_available(pool) 再 §6 validate()
+#       ⇒ 会**真的探活五个池**才被拦（0910 异构审 #3 抓到）。
+#    ⭐ 依据：换位盲评 qwen3.8-max 99.5 vs v4-pro 102.0（/120，差 2.5，而 A 位偏好本身 +2.5）
+#       ⇒ 判定同档 ⇒ 它本就是 T3 的 TIER_PEERS，直接顶上不改档位定义。
+#    ⚠️ 费率写 `None` 是**故意的**：百炼是 token 套餐、这个 id 的 credits 倍率⛔未测。
+#       ⛔ 不许填个数字凑齐 —— 逻辑只读 LADDER[i][0]，这一列纯文档。
+# ⚠️ T4 的 id 是 `kimi-k3-1`（cb 服务端权威清单）—— ⛔ 2026-09-10 前写的 `kimi-k3-2` 是别名。
+# ⚠️ T2 的 `deepseek-v4-flash` 在**火山两套餐 + 百炼**上仍是真实型号；
+#    ⛔ 只有 cb 那份变成了指向 v4.1 的别名 ⇒ 见 WALLET_PREF：T2 的池已去掉 cb。
 ENTRY  = {'algorithm': 1, 'perf': 1, 'concurrency_impl': 1, 'concurrency_diag': 1}
 # routing §2 免费档排除清单分两类。free_blockers(task_type,args) ⇒ 命中项的 set()，
 # 空集 = 不排除。⚠️ 只有【能力类】能被 --free 放宽：
@@ -130,19 +184,29 @@ CAPABILITY_BLOCKERS = {'algorithm', 'perf', 'architecture'}      # 能力短板�
 WALLET_PREF = {                                 # (upstream, 该 provider 上的真实 modelId)
   # 🔴 多池【轮换】，⛔ 不是固定优先级（用户 2026-09-09）——火山【两个套餐】/ 百炼 / cb 地位相同。
   #    加百炼正是因为火山与 cb 这个月量不够 ⇒ 用哪个由「哪个还有量」决定，撞限额换下一个。
-  'deepseek-v4-pro':   [('volcengine-coding',    'deepseek-v4-pro'),
-                        ('volcengine-agent-plan', 'deepseek-v4-pro'),        # ⭐ 另一份火山套餐
-                        ('bailian-token-plan',    'deepseek-v4-pro-0813'),   # ⚠️ id 带 -0813
-                        ('codebuddy-code',        'deepseek-v4-pro')],
+  'qwen3.8-max':       [('bailian-token-plan',    'qwen3.8-max')],
+                        # 🔴 T3 只有**一个池** —— ⚠️ 这是本次换档留下的**已知弱点**：
+                        #    v4-pro 当年有四池轮换，qwen3.8-max 只在百炼。撞限额直接进
+                        #    【可用性升档】到 T4（1.62x），⛔ 中间没有缓冲。
+                        #    ⇒ 待办：测 qwen3.8-flash 或 minimax-m2.7(cb 0.19x) 能否补 T3 第二池。
+                        # ⛔ v4-pro 的四池已整块移除（用户 2026-09-10 禁用）——
+                        #    留着它就等于留着一条会被探活的路径。
   'deepseek-v4-flash': [('volcengine-coding',    'deepseek-v4-flash'),
                         ('volcengine-agent-plan', 'deepseek-v4-flash'),
-                        ('bailian-token-plan',    'deepseek-v4-flash-0731'), # ⚠️ id 带 -0731
-                        ('codebuddy-code',        'deepseek-v4-flash')],
+                        ('bailian-token-plan',    'deepseek-v4-flash-0731')], # ⚠️ id 带 -0731
+                        # 🔴 **⛔ 三池，不是四池** —— cb 已于 2026-09-10 换代：
+                        #    `deepseek-v4-flash` ⛔ **不在账号权威清单里**（假 id 的 400 正文实测），
+                        #    但派它仍返回 200 ⇒ 🔴 **实际跑的是哪套权重测不出来**。
+                        #    ⚠️ echo 字段（requestModelId / providerData.model）是**请求回显**，
+                        #    ⛔ 不是运行值 —— 本例已自证：它回显了服务端清单里没有的 id。
+                        #    ⇒ ⛔ 不派旧 id（不确定跑的是谁，就不该派）。
+                        #    ⚠️ 要用 cb 的新型号请显式 --model deepseek-v4.1-flash
+                        #    （已定档：⛔ 不进阶梯，首次产出有效率仅 1/3，见 catalog v41FlashEval_20260910）。
   'glm-5.3-flash':     [('volcengine-coding',    'glm-5.3-flash'),
                         ('volcengine-agent-plan', 'glm-5.3-flash'),
                         ('codebuddy-code',        'glm-5.3-flash')],
                         # ⚠️ 百炼没有 glm-5.3-flash ⇒ 只在火山两套餐与 cb 之间轮换
-  'kimi-k3-2':         [('codebuddy-code',        'kimi-k3-2')],
+  'kimi-k3-1':         [('codebuddy-code',        'kimi-k3-1')],
                         # ⚠️ 只有 cb 一家。⭐ 显式列出而⛔不靠默认合成池——
                         #    靠默认值会让「新加的阶梯模型忘了配 wallet」静默变成 cb 落点。
 }
@@ -154,7 +218,10 @@ WALLET_PREF = {                                 # (upstream, 该 provider 上的
 #    ⛔ 只在本档模型的所有池都拿不到时才用（**可用性**理由）；主落点可用时⛔不许插队。
 #    ⚠️ 这跟【质量/成本升档】（做砸才升）是两条路，⛔ 别混。
 TIER_PEERS = {
-  'deepseek-v4-pro': [('bailian-token-plan', 'qwen3.8-max')],
+  # 🔴 2026-09-10 清空 —— 原本是 `deepseek-v4-pro` → `qwen3.8-max`。
+  #    用户禁用 v4-pro 后 qwen3.8-max **升为 T3 主落点** ⇒ 本档不再有同档替代。
+  #    ⇒ T3 唯一池拿不到时走【可用性升档】到 T4（那条路径已有用例覆盖）。
+  #    ⛔ 不要为了「让表非空」把某个未测模型填进来 —— 同档替代的唯一依据是换位盲评。
 }
 
 # 🔴 最后兜底 —— ⛔ 只在【阶梯到顶仍拿不到】时才走（用户 2026-09-09 授权）
@@ -177,7 +244,14 @@ DISCOUNT_WINDOWS = {
      'models': {'deepseek-v4-pro-0813', 'deepseek-v4-flash-0731', 'qwen3.8-max'},
      'when':   lambda dt: dt.hour >= 22 or dt.hour < 8},
   'codebuddy-code': {                          # ⛔【工作日 09-12 / 14-18】之外都打折
-     'models': {'deepseek-v4-flash', 'deepseek-v4-pro'},
+     # 🔴 2026-09-10 换代连带后果：cb 上**已无** deepseek-v4-flash ⇒ 从折扣集移除。
+     # ⚠️ `deepseek-v4.1-flash` 是否继承这个峰谷折扣 **⛔ 未确认**（用户当时只说
+     #    「Deepseek-V4-Flash、Deepseek-V4-Pro」）⇒ ⛔ 先不加，别拿推测当依据。
+     # ⇒ 现在 T2（deepseek-v4-flash）**吃不到 cb 折扣了** —— 它的三个池里没有 cb。
+     # 🔴 2026-09-10 再连带：唯一成员 deepseek-v4-pro 已被用户禁用 ⇒ 折扣集**空**
+     #    ⇒ **cb 折扣目前对阶梯没有任何作用点**。⛔ 不要因此删掉本条目 ——
+     #       `deepseek-v4.1-flash` 若确认继承峰谷折扣，它就会复活。
+     'models': set(),
      'when':   lambda dt: not (dt.weekday() < 5 and (9 <= dt.hour < 12 or 14 <= dt.hour < 18))},
 }
 def is_discounted_now(upstream, model_id, dt=now()):
@@ -197,11 +271,15 @@ def normalize_provider(upstream, channel):
 def validate(upstream, model):
     """🔴 P0。⛔ 三层依次判——只写「在白名单里才校验」会让未知 provider 静默跳过。
        ⚠️ model 为 None 时只校验 provider 本身。"""
-    # 🔴 屏蔽名单**最先判** —— ⛔ 放在豁免判断之后就等于对豁免 provider 失效
-    if model is not None and model in BLOCKED_MODELS.get(upstream, ()):
+    if upstream in DISABLED_PROVIDERS:
+        report_disabled_and_stop()          # 🔴 provider 级停用**先报** —— 它比型号级更根本
+    # 🔴 屏蔽名单必须在【白名单/豁免判断之前】—— ⛔ 放到豁免之后就对豁免 provider 失效。
+    #    ⚠️ 但也⛔不能抢在 DISABLED 之前：`--provider deepseek --model <被禁型号>`
+    #       的真实原因是**整个 provider 停用**，报成「型号被禁」是给了错原因（同 0909 R7 的教训）。
+    if model is not None and (model in BLOCKED_MODELS_ANY_PROVIDER          # 🔴 全局，与 provider 无关
+                              or model in BLOCKED_MODELS.get(upstream, ())):  # provider-keyed
         report_blocked_model_and_stop(upstream, model)
-    if upstream in DISABLED_PROVIDERS:      report_disabled_and_stop()
-    elif upstream in WHITELIST:
+    if upstream in WHITELIST:
         if model is not None and model not in WHITELIST[upstream]:
             report_conflict_and_stop()      # ⇒ pi/jdcloud-joyagent/GLM-5.2 在这里被拦
     elif upstream not in EXEMPT_PROVIDERS:  report_unknown_provider_and_stop()
@@ -297,6 +375,12 @@ if upstream is None:
     # 🔴🔴 本段有【两个正交的换档理由】，⛔ 千万别混：
     #   ① 质量/成本换档（第 4 段做完了）：升档唯一入口是「本任务做砸过一轮」，⛔ 不得跨档【下调】
     #   ② 可用性换档（本段）：模型【拿不到】。只许【向上】，⛔ 永远不向下 —— 向下 = 质量回退
+    # 🔴 探活**之前**拦下全局禁用型号 —— 要求是「⛔ 不许真去请求它」，⛔ 不是「最先报错」。
+    #    ⛔ 不能只靠本段收尾的 validate()：那在 first_available() 之后，池已经被逐个探过了
+    #    （0910 异构审 #1）。⛔ 也不能放到 §1 —— 那会把 provider 停用 / review 冲突的
+    #    真实原因盖掉（实测把三条既有用例判成了「型号被屏蔽」）。⇒ 位置就在这里。
+    if model in BLOCKED_MODELS_ANY_PROVIDER:
+        report_blocked_model_and_stop(explicit_upstream, model)
     tier = next((i for i, (m, _) in enumerate(LADDER) if m == model), None)
     while True:
         pool = WALLET_PREF.get(model, [('codebuddy-code', model)])
@@ -430,9 +514,9 @@ print_summary()                                      # §7
 | `--provider deepseek --model deepseek-v4-pro` | ⛔ **拦住**（DISABLED_PROVIDERS） |
 | 默认任务，**免费档可用** | → `codebuddy-code` + `hy4-preview`（T0，⛔ 还没进付费阶梯） |
 | 默认任务，免费档被排除/探活失败，0 次付费档做砸 | → `pi/volcengine-coding` + `glm-5.3-flash`（T1，钱包①） |
-| 默认任务，免费档已跳过，**2 次付费档**做砸（T1、T2 均失败） | → T3 `deepseek-v4-pro`，provider 按 `WALLET_PREF` 轮换 + 折扣窗口定（默认落 `pi/volcengine-coding`） |
-| T3 且**四个池全拿不到** | → 同档替代 `pi/bailian-token-plan` + `qwen3.8-max`（`TIER_PEERS`，⛔ 不升档） |
-| T3 且四个池与同档替代**都拿不到** | → **可用性升档**到 T4 `kimi-k3-2`（⛔ 只许向上），并在 §7 报告 |
+| 默认任务，免费档已跳过，**2 次付费档**做砸（T1、T2 均失败） | → T3 `qwen3.8-max` @ `pi/bailian-token-plan`（⚠️ 只此一池） |
+| T3 那**一个池拿不到** | → **可用性升档**到 T4 `kimi-k3-1`（⛔ 只许向上），并在 §7 报告。⛔ 本档已无同档替代 |
+| ⛔ 显式 `--model deepseek-v4-pro` | → **停止并报告**（`report_blocked_model_and_stop`）—— 用户 2026-09-10 禁用，⛔ agent 不得自行派发 |
 | 一路到 T4 仍拿不到 | → 🔴 `claude/claude-sonnet-5` @ `max`（**LAST_RESORT**，§7 必须显著告知在烧 Claude 额度） |
 | 连 `claude/claude-sonnet-5` 也拿不到 | ⛔ **停止并报告**（`report_no_landing_and_stop`），⛔ 不静默降档 |
 | 显式 `--thinking low` + 落到 LAST_RESORT | thinking 保持 **`low`**，⛔ 不被 LAST_RESORT 的 `max` 覆盖 |
@@ -446,7 +530,7 @@ print_summary()                                      # §7
 
 ```
 create_agent({
-  title: "[Dev] {task_short_title}",
+  title: "[Dev] {task_short_title} · {channel_abbr}-{model_abbr}",   // 🔴 见下「标题规范」
   provider: "{provider}/{model}",
   relationship: { kind: "subagent" },
   workspace: { kind: "current" },
@@ -457,6 +541,42 @@ create_agent({
   labels: { "rift-dispatch": "true" }
 })
 ```
+
+#### 🔴 标题规范：**必须**带「渠道-模型」后缀，且**必须带版本号**
+
+```
+{原标题} · {渠道}-{模型缩写}
+```
+
+| 例 | 说明 |
+|---|---|
+| `[Dev] 修 CRM 登录三态 · 百炼-dspF4` | 百炼的 `deepseek-v4-flash-0731` |
+| `[Dev] 拆 transport 插件 · 火山C-dspF4` | 火山 **coding** 套餐的 `deepseek-v4-flash` |
+| `[Dev] 同上但换池 · 火山A-dspF4` | 火山 **agent-plan** 套餐 —— ⛔ 两个套餐是独立额度池，必须能分出来 |
+| `[Review] 审 diff · Cop-gpt5.5` | Copilot 的 `gpt-5.5` |
+| `[Dev] 兜底重跑 · Cld-son5` | LAST_RESORT |
+
+🔴 **⛔ 缩写必须含版本号**：`dspF4` / `glmF5.3` / `k3.2` / `gpt5.5`。
+⛔ 不许写 `dsp` / `glm` / `kimi` —— **未来上 `dspF4.1`，与 `dspF4` 差距很大**，
+标题里看不出版本，回头翻 agent 列表就分不清哪个产出是哪代模型做的（用户 2026-09-10）。
+
+⭐ **GA 快照后缀（`-0731` / `-0813`）故意不进缩写** —— 渠道前缀已经把它区分开了
+（`百炼-dspF4` 就是 0731 那份，`火山C-dspF4` 是无后缀那份）。
+🔴 ⚠️ **例外**：若某渠道**同时**暴露同一代的两个快照（如百炼同时有 `-0731` 和 `-0902`），
+必须追加 `@快照` ⇒ `百炼-dspF4@0731`。⛔ 否则两个 agent 标题一模一样，分不出来。
+
+🔴 **⛔ 无版本别名已进 `BLOCKED_MODELS`，由 P0 `validate()` 硬拦**（用户 2026-09-10）。
+⚠️ 先前只在这里写了句「不许派」—— **那拦不住任何东西**，跟 cb 换代时我只加注释不移白名单
+是同一个错。⇒ 规则必须落到**会被执行的那一层**。
+`glm-latest` 派发前必须先解析成具体型号（火山 `glm-latest` / `glm-5.2` → **`glm-5.3`**）。
+⚠️ 对比：`hy4-preview` **可以**派 —— `preview` 是它真实 id 的一部分，缩写 `hy4` 仍带版本。
+⚠️ 两类别名都要拦，⛔ 别只想着无版本那种：
+  · **无版本别名**（`glm-latest`）—— 一眼看出要解析
+  · **陈旧版本别名**（cb 的 `deepseek-v4-flash` → v4.1）—— 🔴 **更危险**，带着版本号却指向另一版本，标题会说谎
+
+📎 **完整缩写表**（渠道 10 · 模型 30）在 catalog `agentTitleConvention`。
+✅ `consistency-check.py` §3f 守着四条：每个可派发落点都有缩写 · 缩写必须带数字 ·
+无版本别名⛔不得有缩写 · **同渠道内⛔不许两个模型撞同一缩写**。
 
 #### 🔴 `settings` 必须按 provider 生成，⛔ 不能无条件传 `modeId`
 
@@ -550,7 +670,7 @@ create_agent({ provider: "pi/volcengine-coding/deepseek-v4-flash",
 |---|---|
 | ⭐ 默认 | `pi/volcengine-coding/deepseek-v4-flash` |
 | 升档（上一档做砸过一轮） | `pi/volcengine-coding/deepseek-v4-pro` |
-| Agent Plan 独有 5 个 | `pi/volcengine-agent-plan/{ark-code-latest,kimi-k3,doubao-seed-evolving,glm-latest,doubao-seed-2.0-mini}` |
+| Agent Plan 独有（⚠️ 已剩 1 个可派） | `pi/volcengine-agent-plan/kimi-k3`。⛔ `ark-code-latest` / `doubao-seed-evolving` / `doubao-seed-2.0-mini` 已进 `BLOCKED_MODELS`；⛔ `glm-latest` 是无版本别名不许直接派（先解析成 `glm-5.3`） |
 | 原有通道（不变） | `codebuddy-code/*` · `qoderclicn/qmodel_38max` · `claude/*` · `codex/*` |
 
 ⚠️ `pi/volcengine-*/kimi-k2.7-code` 的 `thinkingOptions` 为 `null`（官方注明不支持 reasoning summaries），
@@ -631,6 +751,26 @@ pi 会**回落 `models-store.json`**。实测把 `gpt-5-mini` 从 models.json �
 这正是它比 opencode 省机器的原因：opencode 每个 Paseo agent 起一个独立 serve
 （实测 1–1.5GB，agent idle 后不回收），pi 处理完即退出。
 
+#### 🔴 3.2c-bis codebuddy `-p` 采数据必须用 `--output-format json`
+
+🔴 **`codebuddy -p` 的 text 模式只把【最后一条】assistant 写到 stdout。**
+长输出被 cb 内部拆成多条 assistant 消息时，**前面的块全丢**。
+
+⭐ **实测**（2026-09-10）：同一格用 json 抓 transcript 有 **2 条** assistant
+（33721 + 13659 = 47380 字符），text 模式 stdout 只有后者 **13659** ⇒ **丢了 33721 字符**。
+⚠️ 连带查出 `deepseek-v4-pro` 的 kafka 那格也被截过（10514 → 拼接后 **16128**）。
+
+```bash
+codebuddy -p --output-format json --model <m> --tools "" "<prompt>" > out.json
+# 再把 transcript 里【所有】 role==assistant 的 text 按序拼接
+```
+
+⚠️ **差点归因错**：看到产出开头是「继续（接上一条…）」，我第一反应是
+「这模型爱自行分块，是它的行为风险」—— **错了**，是 harness 丢数据。
+⇒ 🔴 看到「续篇」先查 **transcript 有几条 assistant**，⛔ 别先怪模型。
+
+✅ 走 `pi -p` 的通道（火山/百炼/Copilot）**不受影响**——pi 是单条输出。
+
 #### 3.2d opencode（🔻 兜底，排最后）
 
 **没有禁用**，但排在 pi 之后。卡死根因见 routing §7：
@@ -663,6 +803,7 @@ pi 会**回落 `models-store.json`**。实测把 `gpt-5-mini` 从 models.json �
 | `kimi-k3` | ⚠️ 无映射表（pi 按默认处理，⛔ 未验证） | ⚠️ 未实测 |
 | `mai-code-1-flash-picker` | `low` `medium` `high`　⛔无 off minimal xhigh max | ⚠️ 未实测 |
 | `mai-code-1.1-flash` | `low` `medium` `high`　⛔无 off minimal xhigh max | ⚠️ 未实测 |
+| `bailian-token-plan/deepseek-v4-flash-0731` | 🔴 走 pi 时**六档全空转**（见下方专条） | ✅ **已实测** |
 | `pi/volcengine-*/kimi-k2.7-code` | ⚠️ `thinkingOptions` 为 `null` | ⛔ 不要传 |
 | ~~claude 系~~ | ⛔ 已从 pi 的 Copilot 通道移除（§3.2c）；Paseo 派 `claude/*` 时是 `low`/`medium`/`high`/`max` | — |
 
@@ -675,6 +816,25 @@ pi 会**回落 `models-store.json`**。实测把 `gpt-5-mini` 从 models.json �
 ⚠️ `thinkingLevelMap` 为 `null` 的（gemini 全系、kimi 两个）⛔ 无依据可查，别猜，先实测。
 ⛔ **禁止静默升档**（会造成超预期 token 消耗）；降档必须在 §7 输出里回显，
 memory 记 `effectiveThinking` 字段留痕。
+
+🔴 **`bailian-token-plan/deepseek-v4-flash-0731`：走 pi 时思考档位【整体空转】**（2026-09-10 实测）
+
+它的 `thinkingLevelMap` 是空的 ⇒ pi 没有映射可用，**不往请求里塞任何思考参数**。实测结论：
+
+| 侧 | 现象 | 证据 |
+|---|---|---|
+| **pi** | 8 种输入**全部接受**（不传 / `off` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`），非法值有清晰 warning | 逐个跑通 |
+| **pi** | 🔴 `off` 与 `high` **表现相同** ⇒ pi ⛔ **没有**把 `off` 映射成关闭 | 同一道鸡兔同笼题，两档答案都对 **3/3** |
+| **API 直连** | ⭐ **二态真生效**：`enable_thinking:false` 或 `thinking:{type:disabled}` ⇒ `reasoning_tokens` 变 `None` | 两种写法都复现 |
+| **API 直连** | ⛔ `reasoning_effort` 三档**不生效** | n=4 均值 low **766** > high **426** > medium **392**，⛔ 不单调；而基线（不传）自身波动 **[315, 1151]** 就把三档差异全盖住了 |
+
+⇒ **派发时传 `xhigh` 是安全的**（不报错），⛔ **但也没有任何额外效果** —— 传什么都一样。
+⇒ 真要控这个模型的思考强度，只能**绕开 pi 直连 API**，用 `enable_thinking` / `thinking.type` 的**二态**。
+
+⚠️ **⛔ 一般不要关它的思考**：API 侧关掉后，那道小学鸡兔同笼题直接做错（答 `6` / `24`，正确 `23`）。
+
+⚠️ **证据强度**：pi 侧那条是**用答案对错反推**的（3/3 都对），⛔ 不是直接读到 `reasoning_tokens`
+——`pi -p` 不暴露 usage。它与 API 侧「关掉就答错」两头对照才立得住，⛔ 单看 3/3 不够。
 
 ⚠️ 火山通道（`volcengine-*`）只有 `off` / `on` / `auto` 三态，⛔ 不是六档。
 
@@ -768,6 +928,7 @@ ssh hub "paseo run --detach \
 | 改返回结构？→ 是否要求消费方自查 | 高频事故：后端改了前端没跟上 |
 | 是否要求真实浏览器验证 | happy-dom 里 `getBoundingClientRect()` 恒 0×0，TDesign 浮层会被 `isHidden` guard 立刻关闭，导致"点不动"假阴性 |
 | **permission_mode 传了吗** | 漏传导致整批任务卡在权限询问上不执行 |
+| 🔴 **标题带「渠道-模型」后缀了吗？版本号在里面吗** | ⛔ 漏标 ⇒ 回头翻 agent 列表分不清哪个产出是哪代模型做的（`dspF4` vs 未来的 `dspF4.1` 差距很大）|
 
 ### 收割时（⛔ 不能只看 agent 的报告）
 
@@ -798,7 +959,7 @@ ssh hub "paseo run --detach \
 
 ```
 子会话已创建
-  Agent:  {short_id} — {title}
+  Agent:  {short_id} — {title}          # 🔴 title 必须已带 · {渠道}-{模型缩写}（§3.1 标题规范）
   Model:  {provider}/{model} · thinking: {thinking}{降档时追加 " → {effective_thinking}（该模型无 {thinking} 档）"}
 {availability_escalations 非空时，整块加在这里 —— ⛔ 不许省略：
   🔴 可用性升档: {原档位模型} → {逐级列出} （原因：所有 provider 都拿不到，⛔ 不是任务做砸）

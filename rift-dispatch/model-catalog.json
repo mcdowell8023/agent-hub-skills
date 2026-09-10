@@ -1,15 +1,15 @@
 {
-  "version": "6.14.0",
+  "version": "6.27.1",
   "lastUpdated": "2026-09-09",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
     "codebuddy-code": [
       "hy4-preview",
       "hy3",
+      "hy3-x",
       "glm-5.3-flash",
-      "deepseek-v4-flash",
-      "deepseek-v4-pro",
-      "kimi-k3-2"
+      "deepseek-v4.1-flash",
+      "kimi-k3-1"
     ],
     "qoderclicn": [
       "qmodel_38max"
@@ -82,15 +82,19 @@
       "_note": "🔴 用户 2026-09-09 点名屏蔽的【型号】。⛔ 与 whitelist/exempt **正交** —— 豁免 provider 也拦得住，否则 `--provider github-copilot --model gpt-5-mini` 会直接放行。",
       "_notSameAsDisabled": "⛔ 别与 whitelist.disabled(provider 级停用) 合并：那个是整个 provider 停用，措辞和出路都不同。",
       "volcengine-coding": [
+        "deepseek-v4-pro",
         "doubao-seed-2.0-lite",
-        "doubao-seed-2.1-turbo"
+        "doubao-seed-2.1-turbo",
+        "glm-latest"
       ],
       "volcengine-agent-plan": [
+        "ark-code-latest",
+        "deepseek-v4-pro",
         "doubao-seed-2.0-lite",
         "doubao-seed-2.0-mini",
         "doubao-seed-2.1-turbo",
         "doubao-seed-evolving",
-        "ark-code-latest"
+        "glm-latest"
       ],
       "github-copilot": [
         "gpt-5-mini",
@@ -105,8 +109,21 @@
         "github-copilot": "🔴 **只能靠 rift-dispatch 的 BLOCKED_MODELS**（P0 validate 里拦）。⛔ 从 ~/.pi/agent/models.json 删条目**无效** —— pi 回落 models-store.json（2026-09-09 实测：删掉 gpt-5-mini 后仍能调用成功）；store 按 etag 自动刷新，改它会被冲掉。",
         "volcengine-*": "✅ **删得掉** —— 这两个 provider 只在 models.json 里定义、无 store 兜底。doubao-* / ark-code-latest 已移除，归档 ~/.pi/agent/providers-disabled/blocked-models-20260909.json",
         "_claudeCorrection": "⚠️ 旧记录「Claude 全族靠 models.json 覆盖 store 移除」是**错的**：store 里 claude-* 8 个全在，是 GitHub 服务端返回 400 model_not_supported 拦的。"
-      }
-    }
+      },
+      "🔴 versionlessAliases": "🔴 **无版本别名必须进本表由 P0 validate() 硬拦**（用户 2026-09-10）——先前只在 SKILL 散文里写「不许派」，**那拦不住任何东西**，跟 cb 换代时只加注释不移白名单是同一个错。⇒ 规则必须落到**会被执行的那一层**。⚠️ `glm-latest` 两个火山 provider 都列 —— 它目前只在 agent-plan 上存在，但漏一边就是口子，屏蔽名单宁可写重。⚠️ 两类别名都要拦：**无版本别名**(glm-latest，一眼可辨) + **陈旧版本别名**(cb 的 deepseek-v4-flash→v4.1，🔴 更危险：带版本号却指向另一版本，标题会说谎)。",
+      "codebuddy-code": [
+        "deepseek-v4-pro"
+      ],
+      "bailian-token-plan": [
+        "deepseek-v4-pro",
+        "deepseek-v4-pro-0813"
+      ],
+      "🔴 deepseekV4Pro_20260910": "🔴 用户 2026-09-10 停用 deepseek-v4-pro：⛔ agent 不得自行派发。**五个** provider 全覆盖（含 volcengine-chat，百炼 id 带 -0813）—— ⚠️ 首版只写了四个，volcengine-chat 在 EXEMPT 里，漏它等于留了个显式指定就能绕过的口；由异构审查（gpt-5.5）抓出+ whitelist['codebuddy-code'] 移除。⚠️ validate() 走 report_blocked_model_and_stop —— 是**停**不是换落点，刻意如此：升档撞到 T3 就该停下来回到用户。⛔ 本次未动 LADDER（换档位要连带改 WALLET_PREF/TIER_PEERS和一批用例，而工作区里压着未完成的 kimi-k3 换代迁移，基线已有 37 条 pipeline-test 失败） ⇒ 后续要恢复 T3 可派，同档替代是 qwen3.8-max（换位盲评 99.5 vs 102.0 /120，本就同档）。用户本人要用 v4-pro 仍可显式指定并承担。",
+      "volcengine-chat": [
+        "deepseek-v4-pro"
+      ]
+    },
+    "_cbLegacyNote": "🔴 **2026-09-10 换代**：cb 上 deepseek-v4-flash → deepseek-v4.1-flash，kimi-k3-2 → kimi-k3-1。旧 id 请求【不报错】但那是**别名**（服务端静默解析）。权威判据是**假 id 的 400 报错正文**：`400 model [x] service info not found` 后附「Currently supported models for your account」15 个 —— ⭐ 比 list_models 更硬。🔴🔴 **陈旧版本别名比无版本别名更危险**：它带版本号却指向另一个版本 ⇒ 标题会写 cb-dspF4 而实跑 dspF4.1，**标题说谎** ⇒ ⛔ 必须移出白名单，⛔ 不能只加注释。"
   },
   "providerRateSnapshot": {
     "_note": "paseo list_models 实测，用于对照 models.*.providers.*.credit 是否过期",
@@ -123,11 +140,11 @@
       "glm-5v-turbo": 0.71,
       "minimax-m3-pay": 0.25,
       "minimax-m2.7": 0.26,
-      "kimi-k3-2": 1.62,
       "kimi-k2.7": 0.57,
       "kimi-k2.6": 0.52,
       "deepseek-v4-pro": 0.51,
-      "deepseek-v4-flash": 0.17
+      "deepseek-v4-flash": 0.17,
+      "kimi-k3-1": 1.62
     },
     "qoderclicn": {
       "qmodel_38max": 0.5,
@@ -171,7 +188,7 @@
       "supersededBy": "🔴 walletPriority.discountWindows（2026-09-09）：百炼 22:00-08:00、codebuddy 工作日 09-12/14-18 之外全部时段。⭐ 只在【档位内选落点】介入，⛔ 不参与选档位 ⇒ 与上面的不变量不冲突。"
     },
     "escalation": {
-      "rule": "T0 hy4-preview (0.00x，至 **09-10**) → hy3 (0.00x，至 08-31) → T1 glm-5.3-flash → T2 deepseek-v4-flash → T3 deepseek-v4-pro → T4 kimi-k3-2",
+      "rule": "T0 hy4-preview (0.00x，至 **09-10**) → hy3 (0.00x，至 08-31) → T1 glm-5.3-flash → T2 deepseek-v4-flash → T3 deepseek-v4-pro → T4 kimi-k3-1",
       "toK3Condition": "⛔ 【质量/成本升档】：要 v4-pro 也做砸才升 K3。⚠️ **可用性换档⛔不受此约束** —— T3 池 + 同档替代全不可用时可升 T4（见 walletPriority.availabilityEscalation）。⛔ 不做预防性升档（2026-08-02 n=1 + 2026-08-06 n=12 两次实测支撑）。K3 是 v4-flash 的 9.5 倍、glm-5.3-flash 的 27 倍。",
       "k3Status": "✅ 2026-08-16 用户恢复启用，作为极致档 / 唯一升档目标。原 P5.4『0723 实测不可靠、定弃用、改派 M3』的结论失效（M3 也已关闭）。⚠️ 0723 观察到的现象保留为已知风险：反复空转、报进度就 idle、git 无产出 —— 派完必须核 git 是否真有 commit",
       "noFallbackForK3": "🔴 K3 撞限额时【白名单内】无替代（唯一 S 级，M3 已关闭）⇒ 2026-09-09 起走 **LAST_RESORT claude/claude-sonnet-5@max**（见 claudeModels.claude-sonnet-5.lastResort），⛔ 不再是「只能报告用户」；连它也拿不到才停止",
@@ -356,7 +373,7 @@
       ],
       "providers": {
         "codebuddy-code": {
-          "modelId": "kimi-k3-2",
+          "modelId": "kimi-k3-1",
           "credit": 1.62
         }
       },
@@ -382,7 +399,7 @@
       "caution": "⚠️ 两条已知风险叠加：① thinking=high 在复杂架构题偶发陷入长时间推理不输出（概率性，非必现）② 2026-07-23 实测出现反复空转——报进度就 idle、git 无产出。用户 08-16 恢复启用时知悉此风险。⇒ **派 K3 后必须核 git 是否真有 commit，不能只看它报进度**",
       "paseo": {
         "provider": "codebuddy-code",
-        "model": "kimi-k3-2",
+        "model": "kimi-k3-1",
         "mode": "bypassPermissions",
         "thinking": "xhigh"
       },
@@ -397,7 +414,8 @@
         "❌「这是 algorithm / architecture 类，K3 分最高」→ 这两类各有更便宜的起步档：algorithm 从 deepseek-v4-flash(0.17x) 起、architecture 从 glm-5.3-flash(0.06x) 起，之后按【质量/成本升档】（本任务做砸过一轮）才升",
         "❌「反正只跑一次」→ 一次 K3 ≈ **9.5 次** deepseek-v4-flash ≈ **27 次** glm-5.3-flash",
         "❌「先用好的保险一点」→ 这就是「预防性升档」的原话，明令禁止"
-      ]
+      ],
+      "_idNote": "⚠️ cb 服务端权威 id 是 `kimi-k3-1`；`kimi-k3-2` 是**别名**（2026-09-10 实测），⛔ 不要用后者派发。"
     },
     "minimax-m3": {
       "label": "MiniMax-M3",
@@ -893,7 +911,8 @@
           "thinking": "medium",
           "note": "对照臂，见 qwen38maxEval_20260909"
         }
-      }
+      },
+      "🔴 disabledByUser_20260910": "🔴 **用户 2026-09-10 确认禁用：⛔ 不允许 agent 自行派发。**\n用户依据：「Deepseek-V4.1-Flash 能力强于 v4 pro，价格还差很多」。\n⚠️ **能力那半句⛔未被实测支持** —— 同口径 4 臂拉丁方里 v4.1-flash 36.0 vs v4-pro(cb) 33.6，但两题的第一名在四个朝向里都翻转 ⇒ 两者**不可分**。\n⭐ **价格那半句是硬的**：0.06x vs 0.51x = **便宜 8.5 倍**。⇒ 决定成立，依据落在价格上。\n🔴 实现方式：进 `BLOCKED_MODELS` **四个 provider 全写**（百炼那份 id 带 `-0813` 后缀），⛔ **不动 LADDER** —— validate() 撞屏蔽型号走 `report_blocked_model_and_stop()`，是**停下来回到用户**，⛔ 不是自己挑个替代悄悄继续。这正是用户「不允许 agent 自己派发」的字面要求。\n⚠️ 连带后果：cb 的折扣集只剩 `deepseek-v4-pro` ⇒ **cb 折扣对阶梯已无作用点**（`deepseek-v4.1-flash` 是否继承峰谷折扣仍⛔未确认）。⛔ 不要因此删掉 DISCOUNT_WINDOWS 的 cb 条目。"
     },
     "kimi-k2.6": {
       "label": "Kimi-K2.6",
@@ -1267,6 +1286,51 @@
       "tier": "⛔ 垫底",
       "dispatchNote": "⚠️ ⛔ **不在派发阶梯里**（用户口径「做个参考」）。⛔ 三题全负、落后 11.5 分，**不建议使用**。",
       "⛔_notSeparable": "同档内⛔不可分高下：lru/kafka 两题第一名换位后翻转（grok 对）；gemini 对差 4.0 同在噪声内。见 blindEval_copilot5_20260909"
+    },
+    "bailian-deepseek-v4-flash-0731": {
+      "label": "DeepSeek-V4-Flash (百炼 GA 0731)",
+      "provider": "bailian-token-plan",
+      "contextWindow": 1000000,
+      "nightDiscount": true,
+      "thinkingSupport": {
+        "_measuredOn": "2026-09-10",
+        "viaPi": "🔴 **六档全空转** —— thinkingLevelMap 为空 ⇒ pi 不塞任何思考参数。8 种输入全接受（含 off/xhigh/max），但 off 与 high 表现相同（同题答案都对 3/3）⇒ pi ⛔ 没把 off 映射成关闭。⇒ 派发传 xhigh 安全但⛔无额外效果。",
+        "viaDirectApi": "⭐ **二态真生效**：enable_thinking:false 或 thinking:{type:disabled} ⇒ reasoning_tokens 变 None（两种写法都复现）。",
+        "reasoningEffortNotHonored": "⛔ reasoning_effort 三档**不生效**：n=4 均值 low 766 > high 426 > medium 392（不单调），且基线波动 [315,1151] 已盖住三档差异。",
+        "⚠️_dontDisable": "⛔ 一般不要关思考 —— API 侧关掉后鸡兔同笼答错（6 / 24，正确 23）。",
+        "evidenceStrength": "⚠️ pi 侧是**答案对错反推**（pi -p 不暴露 usage），需与 API 侧「关掉就答错」两头对照才立得住，⛔ 单看 3/3 不够。"
+      }
+    },
+    "deepseek-v4.1-flash": {
+      "label": "Deepseek-V4.1-Flash",
+      "provider": "codebuddy-code",
+      "credit": 0.06,
+      "_addedOn": "2026-09-10（cb 2.147.0 新增）",
+      "priceVerified": "✅ cb 倍率 **0.06x**（= glm-5.3-flash 同价）⇒ 比 deepseek-v4-flash(0.17x) 便宜 **2.8×**、比 deepseek-v4-pro(0.51x) 便宜 **8.5×**。",
+      "dispatchNote": "⛔ **不进阶梯** —— 2026-09-10 已完成同口径盲评（见 v41FlashEval_20260910）。拦住它的⛔**不是能力**（同价、能力不弱于 T1 的 glm-5.3-flash），是**首次产出有效率 1/3**（glm 同轮 3/3）。⇒ 留在 cb 白名单，显式 `--model deepseek-v4.1-flash` 可派；🔴 派它必须校验产出，⛔ 不能只看 exit 0。",
+      "🔴 stabilityRisk_20260910": {
+        "finding": "🔴 **在 cb 上输出不稳定** —— 同一 prompt 两次跑差 70 倍：lru 30096 vs **426** 字符；concurrency 18720 vs **768**。短的那两次正文里出现 `<｜｜DSML｜｜ calls>` / `<｜｜DSML｜｜ invoke` —— **DeepSeek 内部工具调用标记泄漏进正文**，cb 未解析、响应塌掉。",
+        "notCausedByToolsFlag": "⚠️ 两次都用 `--tools \"\"` ⇒ ⛔ 不是这个参数**确定性**导致的，是**跑与跑之间不稳定**。",
+        "stableCase": "⭐ kafka 那题两次都稳（42154 / 40850）⇒ 不稳定与**题目/输出长度**相关，⛔ 不是全面不可用。",
+        "🔴 dispatchImplication": "🔴 **这比分数重要**：约 50% 概率产出坏输出的模型，不管盲评多少分都是**派发风险**。⇒ 派它必须校验产出（见 validate_cell 的多信号判据），⛔ 不能只看 exit 0。",
+        "data": "~/AgentWorkspace/tmp/v41flash-bench-20260910/"
+      },
+      "🔴 vendorClaimFalsified_20260910": "🔴 官方口径「**超越 Deepseek-V4-Pro**」⛔ **未被实测支持** —— 同口径 4 臂拉丁方里它 36.0 vs v4-pro(cb) 33.6 / v4-pro(火山) 33.4，但**每一题的第一名在四个朝向里都翻转** ⇒ 与 v4-pro **不可分**，⛔ 不构成「超越」。「比 V4-Flash 便宜」是真的（0.06x vs 0.17x）。⇒ 官方说法一半真一半没证据。",
+      "blindEval_20260910": {
+        "_note": "🔴 只代表本轮口径，⛔ 不与 08-21 / 08-28 / 09-08 各轮横比。",
+        "vsLadder_4arm": {
+          "concurrency": 37.5,
+          "kafka": 34.5,
+          "lru": "未判（volcFlash 那格取不到输出）"
+        },
+        "vsT1_h2h": {
+          "lru": 33.5,
+          "concurrency": 35.0,
+          "kafka": 34.0,
+          "mean3": 34.2
+        },
+        "firstAttemptValidRate": "1/3（对照：glm-5.3-flash 3/3）"
+      }
     }
   },
   "claudeModels": {
@@ -1941,32 +2005,19 @@
       }
     ],
     "modelProviderPreference": {
-      "deepseek-v4-pro": {
-        "rotation": [
-          "volcengine-coding",
-          "volcengine-agent-plan",
-          "bailian-token-plan",
-          "codebuddy-code"
-        ],
-        "bailianModelId": "deepseek-v4-pro-0813",
-        "why": "🔴 **轮换**（用户 2026-09-09），⛔ 不是固定顺序。⛔ **不要记成「夜间优先百炼」** —— 两家折扣窗口不同，codebuddy 一周 168 小时只有 20 小时原价，覆盖面远大于百炼的 22:00–08:00。⇒ 规则是【优先当前正在打折的那家】，见 discountWindows。",
-        "discountNote": "⭐ 轮换时优先当前正在打折的池，见 discountWindows",
-        "fallback_manualOnly": "🔴 **⛔ 已不是自动兜底**（用户 2026-09-09）：`deepseek/*` 官方 API（现金）仍在 opencode 的 disabled_providers 里 ⇒ 写成自动兜底等于给了一条**假通道**（真走到会失败，⛔ 不是花钱）。⇒ 现在是**手动路径**：需用户明确接受现金开销并解除 disabled 后，才可显式 --provider deepseek。",
-        "lastResort": "🔴 该模型的 WALLET_PREF 池全不可用 → 同档替代（⚠️ **仅 T3 有** TIER_PEERS）→ 可用性升档 tier+1 → 到顶(T4)仍拿不到 ⇒ claude/claude-sonnet-5@max。⚠️ ⛔ 别当通则记成「四池 + 同档替代」：T2 四池但【无】同档替代 · T1 三池 · T4 只有 cb（见 claudeModels.claude-sonnet-5.lastResort）"
-      },
       "deepseek-v4-flash": {
         "rotation": [
           "volcengine-coding",
           "volcengine-agent-plan",
-          "bailian-token-plan",
-          "codebuddy-code"
+          "bailian-token-plan"
         ],
         "bailianModelId": "deepseek-v4-flash-0731",
         "noJdcloud": true,
         "why": "🔴 **轮换**（用户 2026-09-09），⛔ 不是固定顺序。⛔ **不要记成「夜间优先百炼」** —— 两家折扣窗口不同，codebuddy 一周 168 小时只有 20 小时原价，覆盖面远大于百炼的 22:00–08:00。⇒ 规则是【优先当前正在打折的那家】，见 discountWindows。 ⛔ 京东已停用。",
         "discountNote": "⭐ 轮换时优先当前正在打折的池，见 discountWindows",
         "fallback_manualOnly": "🔴 **⛔ 已不是自动兜底**（用户 2026-09-09）：`deepseek/*` 官方 API（现金）仍在 opencode 的 disabled_providers 里 ⇒ 写成自动兜底等于给了一条**假通道**（真走到会失败，⛔ 不是花钱）。⇒ 现在是**手动路径**：需用户明确接受现金开销并解除 disabled 后，才可显式 --provider deepseek。",
-        "lastResort": "🔴 该模型的 WALLET_PREF 池全不可用 → 同档替代（⚠️ **仅 T3 有** TIER_PEERS）→ 可用性升档 tier+1 → 到顶(T4)仍拿不到 ⇒ claude/claude-sonnet-5@max。⚠️ ⛔ 别当通则记成「四池 + 同档替代」：T2 四池但【无】同档替代 · T1 三池 · T4 只有 cb（见 claudeModels.claude-sonnet-5.lastResort）"
+        "lastResort": "🔴 该模型的 WALLET_PREF 池全不可用 → 同档替代（⚠️ **仅 T3 有** TIER_PEERS）→ 可用性升档 tier+1 → 到顶(T4)仍拿不到 ⇒ claude/claude-sonnet-5@max。⚠️ ⛔ 别当通则记成「四池 + 同档替代」：T2 四池但【无】同档替代 · T1 三池 · T4 只有 cb（见 claudeModels.claude-sonnet-5.lastResort）",
+        "🔴 cbRemoved_20260910": "cb 已换代成 deepseek-v4.1-flash ⇒ **本档只剩三池**。⚠️ 连带：T2 **吃不到 cb 峰谷折扣**了（cb 上没这个模型）。"
       },
       "glm-5.3-flash": {
         "rotation": [
@@ -1978,12 +2029,34 @@
         "why": "⚠️ 百炼**没有** glm-5.3-flash（它只有 glm-5.2，且用户未选用）⇒ 只在火山【两个套餐】与 cb 之间轮换。⭐ cb 上的 glm-5.3-flash ⛔ 不在 codebuddy 折扣清单里（那份只含 deepseek 两个型号）⇒ 本档⛔无折扣可依据，按普通轮换。",
         "lastResort": "🔴 该模型的 WALLET_PREF 池全不可用 → 同档替代（⚠️ **仅 T3 有** TIER_PEERS）→ 可用性升档 tier+1 → 到顶(T4)仍拿不到 ⇒ claude/claude-sonnet-5@max。⚠️ ⛔ 别当通则记成「四池 + 同档替代」：T2 四池但【无】同档替代 · T1 三池 · T4 只有 cb（见 claudeModels.claude-sonnet-5.lastResort）"
       },
-      "kimi-k3-2": {
+      "kimi-k3-1": {
         "rotation": [
           "codebuddy-code"
         ],
         "why": "⚠️ **只有 cb 一家** —— ⛔ 没有轮换空间。⭐ 显式列出而⛔不靠默认合成池，否则「新加阶梯模型忘配 wallet」会静默变成 cb 落点。",
-        "lastResort": "🔴 cb 拿不到 ⇒ 已是阶梯顶 ⇒ 直接 claude/claude-sonnet-5@max（⛔ 无同档替代、⛔ 无更高档）"
+        "lastResort": "🔴 cb 拿不到 ⇒ 已是阶梯顶 ⇒ 直接 claude/claude-sonnet-5@max（⛔ 无同档替代、⛔ 无更高档）",
+        "cbModelId": "kimi-k3-1"
+      },
+      "qwen3.8-max": {
+        "rotation": [
+          "bailian-token-plan"
+        ],
+        "🔴 singlePool": "🔴 **T3 只有一个池** —— ⚠️ 本次换档的**已知弱点**：v4-pro 当年四池轮换，qwen3.8-max 只在百炼。撞限额直接【可用性升档】到 T4（1.62x），⛔ 中间无缓冲。⇒ 待办：测 `qwen3.8-flash` 或 cb 的 `minimax-m2.7`(0.19x) 能否补 T3 第二池。",
+        "discountNote": "⭐ 百炼折扣窗口 22:00–08:00，qwen3.8-max 在折扣集内。⚠️ 单池情况下折扣不改落点，只改成本。",
+        "_replaced": "🔴 2026-09-10 由 `deepseek-v4-pro` 换来（用户禁用后者）。原四池轮换说明与手动兜底条款已随之作废，保留在 _formerV4ProEntry 供追溯。",
+        "_formerV4ProEntry": {
+          "rotation": [
+            "volcengine-coding",
+            "volcengine-agent-plan",
+            "bailian-token-plan",
+            "codebuddy-code"
+          ],
+          "bailianModelId": "deepseek-v4-pro-0813",
+          "why": "🔴 **轮换**（用户 2026-09-09），⛔ 不是固定顺序。⛔ **不要记成「夜间优先百炼」** —— 两家折扣窗口不同，codebuddy 一周 168 小时只有 20 小时原价，覆盖面远大于百炼的 22:00–08:00。⇒ 规则是【优先当前正在打折的那家】，见 discountWindows。",
+          "discountNote": "⭐ 轮换时优先当前正在打折的池，见 discountWindows",
+          "fallback_manualOnly": "🔴 **⛔ 已不是自动兜底**（用户 2026-09-09）：`deepseek/*` 官方 API（现金）仍在 opencode 的 disabled_providers 里 ⇒ 写成自动兜底等于给了一条**假通道**（真走到会失败，⛔ 不是花钱）。⇒ 现在是**手动路径**：需用户明确接受现金开销并解除 disabled 后，才可显式 --provider deepseek。",
+          "lastResort": "🔴 该模型的 WALLET_PREF 池全不可用 → 同档替代（⚠️ **仅 T3 有** TIER_PEERS）→ 可用性升档 tier+1 → 到顶(T4)仍拿不到 ⇒ claude/claude-sonnet-5@max。⚠️ ⛔ 别当通则记成「四池 + 同档替代」：T2 四池但【无】同档替代 · T1 三池 · T4 只有 cb（见 claudeModels.claude-sonnet-5.lastResort）"
+        }
       }
     },
     "othersUnchanged": "⚠️ 本表覆盖阶梯四档（glm-5.3-flash / deepseek-v4-flash / deepseek-v4-pro / kimi-k3-2）的 provider 轮换；其它模型按 availabilityEscalation 与 models.*.providers。",
@@ -2003,11 +2076,10 @@
       "codebuddy-code": {
         "window": "⛔【工作日 09:00-12:00 / 14:00-18:00】为高峰原价，**其余全部时段**（含整个周末）5 折",
         "rate": "积分 5 折",
-        "models": [
-          "deepseek-v4-flash",
-          "deepseek-v4-pro"
-        ],
-        "coverage": "⚠️ **覆盖面远大于百炼** —— 一周 168 小时里只有 20 小时是原价。⇒ ⛔ 别把规则记成「夜间优先百炼」，多数时段其实是 codebuddy 在打折"
+        "models": [],
+        "coverage": "⚠️ **覆盖面远大于百炼** —— 一周 168 小时里只有 20 小时是原价。⇒ ⛔ 别把规则记成「夜间优先百炼」，多数时段其实是 codebuddy 在打折",
+        "🔴 v4flashRemoved": "2026-09-10 换代后 cb 上已无 deepseek-v4-flash ⇒ 移出折扣集。⚠️ deepseek-v4.1-flash 是否继承峰谷折扣 **⛔ 未确认**（用户原话只提 V4-Flash / V4-Pro）⇒ ⛔ 先不加。",
+        "🔴 emptied_20260910": "🔴 唯一成员 `deepseek-v4-pro` 已被用户禁用 ⇒ **cb 折扣目前对阶梯没有任何作用点**。⛔ 不要因此删掉本条目 —— `deepseek-v4.1-flash` 若确认继承峰谷折扣，它就会复活。"
       },
       "overlap": "22:00–08:00 两家都打折 ⇒ 回到普通轮换（看谁有量）；工作日 09-12/14-18 两家都原价 ⇒ 同样普通轮换；其余时段只有 codebuddy 打折 ⇒ 优先 codebuddy",
       "caveat": "⚠️ 两个优惠都未标注截止日期，金额敏感时先复核控制台"
@@ -2015,18 +2087,7 @@
     "tierPeers": {
       "_note": "⭐ 【档内换落点】，🔴 ⛔ 不是升降档。只在本档模型的所有池都拿不到时才用；主落点可用时⛔不许插队。",
       "_invariant": "🔴 进本表的唯一依据是【换位盲评实测同档】（差值 < 同轮实测的位置偏好幅度）。⛔ 不许凭 Arena 名次或体感加。",
-      "deepseek-v4-pro": {
-        "peers": [
-          {
-            "upstream": "bailian-token-plan",
-            "modelId": "qwen3.8-max"
-          }
-        ],
-        "evidence": "2026-09-09 换位盲评：总分 99.5 vs 102.0 /120（差 2.5）；同轮实测 A 位本身 +2.5 分优势 ⇒ ⛔ 该差不构成谁更强，判【同档】。判 gpt-5.5·medium，两臂 thinking 一致、prompt 逐字相同、n=2/格（两朝向）。",
-        "taskSplit": "⚠️ 分项分化明显，⛔ 但【只在这两者之间成立】——未与 glm-5.3-flash / kimi-k3-2 比过：架构题 qwen 37.5 > v4-pro 31.0；代码实现题 v4-pro 33.0 > qwen 25.5；并发诊断基本平。⛔ 不要据此写「架构题走 qwen」——架构类入口档是 T1，不在本层。",
-        "openQuestion": "⛔ 未测 qwen3.8-max 与 deepseek-v4-pro-0813 在百炼的 credits 倍率 ⇒【档内挑便宜】那步还没依据 ⇒ 本表只作兜底，⛔ 不参与折扣排序。",
-        "data": "~/AgentWorkspace/tmp/qwen38max-vs-v4pro/scores.json"
-      }
+      "🔴 emptied_20260910": "🔴 **本表已空** —— 原本 `deepseek-v4-pro` → `qwen3.8-max`；用户 2026-09-10 禁用前者后，qwen3.8-max **升为 T3 主落点** ⇒ 本档不再有同档替代。⇒ T3 唯一池拿不到时走【可用性升档】到 T4。⛔ 不要为了让表非空而填未测模型 —— 进本表的唯一依据仍是换位盲评实测同档。"
     },
     "availabilityEscalation": {
       "_note": "🔴 与【质量/成本升档】正交的**第二种换档理由**（用户 2026-09-09）。⛔ 别混。",
@@ -2168,5 +2229,297 @@
     "taskSplit": "⚠️ 分项分化明显但**只在这两者之间成立**：架构 qwen +6.5 / 代码实现 v4-pro +7.5 / 并发基本平。⛔ 不要据此写「架构题走 qwen」。",
     "directionStable": "✅ 三题胜负方向换位后全部保持",
     "data": "~/AgentWorkspace/tmp/qwen38max-vs-v4pro/scores.json"
+  },
+  "agentTitleConvention": {
+    "_note": "🔴 用户 2026-09-10 要求：**每个 Paseo 子会话标题后面必须标注「什么渠道什么模型」**，用语义缩写，⛔ **必须带版本号**。",
+    "_why": "⚠️ 未来会上 dspF4.1，与 dspF4 **差距很大** ⇒ 标题里看不出版本，回头翻 agent 列表就分不清哪个产出是哪代模型做的。",
+    "format": "{原标题} · {渠道}-{模型缩写}",
+    "examples": [
+      "[Dev] 修 CRM 登录三态 · 百炼-dspF4",
+      "[Dev] 拆 transport 插件 · 火山C-dspF4",
+      "[Review] 审 rift-dispatch diff · Cop-gpt5.5",
+      "[Dev] 兜底重跑 · Cld-son5"
+    ],
+    "channelAbbr": {
+      "bailian-token-plan": "百炼",
+      "volcengine-coding": "火山C",
+      "volcengine-agent-plan": "火山A",
+      "volcengine-chat": "火山Ch",
+      "codebuddy-code": "cb",
+      "github-copilot": "Cop",
+      "qoderclicn": "qcn",
+      "claude": "Cld",
+      "codex": "Cdx",
+      "opencode": "oc"
+    },
+    "modelAbbr": {
+      "deepseek-v4-flash": "dspF4",
+      "deepseek-v4-flash-0731": "dspF4",
+      "deepseek-v4-pro": "dspP4",
+      "deepseek-v4-pro-0813": "dspP4",
+      "glm-5.3-flash": "glmF5.3",
+      "glm-5.3": "glm5.3",
+      "kimi-k3": "k3",
+      "kimi-k2.7-code": "k2.7C",
+      "hy4-preview": "hy4",
+      "hy4-preview-x": "hy4x",
+      "hy3": "hy3",
+      "hy3-x": "hy3x",
+      "qwen3.8-max": "qwM3.8",
+      "qwen3.8-flash": "qwF3.8",
+      "qmodel_38max": "qcnM3.8",
+      "minimax-m3": "m3",
+      "claude-sonnet-5": "son5",
+      "claude-opus-5": "opus5",
+      "gpt-5.5": "gpt5.5",
+      "gpt-5.4": "gpt5.4",
+      "gpt-5.6-sol": "gpt5.6sol",
+      "gpt-5.6-luna": "gpt5.6luna",
+      "gpt-5.6-terra": "gpt5.6terra",
+      "gpt-6-astra": "gpt6astra",
+      "grok-4.5": "grok4.5",
+      "grok-4.6": "grok4.6",
+      "gemini-3.7-flash": "gemF3.7",
+      "gemini-3.8-flash": "gemF3.8",
+      "mai-code-1.1-flash": "maiF1.1",
+      "deepseek-v4.1-flash": "dspF4.1",
+      "kimi-k3-1": "k3.1"
+    },
+    "🔴 rules": [
+      "⛔ **缩写必须含版本号** —— dspF4 / glmF5.3 / k3.2 / gpt5.5。⛔ 不许写成 dsp / glm / kimi。",
+      "⭐ **GA 快照后缀（-0731 / -0813）故意不进缩写** —— 渠道前缀已经把它区分开了（百炼-dspF4 就是 0731 那份）。",
+      "🔴 ⚠️ **例外**：若某个渠道【同时】暴露同一代的两个快照（如百炼同时有 -0731 和 -0902），必须追加 @快照 ⇒ `百炼-dspF4@0731`。⛔ 否则同名两个 agent 分不出来。",
+      "⛔ 同一代不同档位必须能分开：flash=F / pro=P（dspF4 vs dspP4）。",
+      "⛔ 渠道缩写要能分出【同一家的不同套餐】：火山C(coding) vs 火山A(agent-plan) —— 它们是两个独立额度池。"
+    ],
+    "🔴 noVersionlessAliases": "🔴 ⛔ **不许把无版本别名当派发落点** —— `glm-latest` 这类名字**按定义就带不出版本**，而本规范的全部意义就是标题里能看出版本。⇒ 派发前必须先解析成具体型号再派。⚠️ 已知解析：火山 `glm-latest` / `glm-5.2` → **`glm-5.3`**（2026-09 实测别名表）。⚠️ 对比：`hy4-preview` 可以派 —— `preview` 是它真实 id 的一部分，缩写 `hy4` 仍带版本。",
+    "🔴 staleVersionAlias": "🔴🔴 **陈旧版本别名比无版本别名更危险** —— `deepseek-v4-flash`(cb) 带着版本号却指向 v4.1 ⇒ 标题写 `cb-dspF4` 而实跑 `dspF4.1`，**标题在说谎**，正好击穿本规范存在的意义。⇒ ⛔ 这类别名必须从白名单**移除**，⛔ 不能只加注释。判据：**假 id 的 400 报错会附服务端权威清单**，不在清单里但请求不报错 = 别名。"
+  },
+  "poolQuotaState": {
+    "_note": "⚠️ **运行时状态，⛔ 不是规则** —— 会过期。判据永远是**实际探活**，⛔ 不是读这一段。记在这里只为省一次盲探。",
+    "_measuredAt": "2026-09-10",
+    "volcengine-coding": "🔴 **额度用尽** —— `429 {\"code\":\"AccountQuotaExceeded\"}`，重置时间 **2026-09-20 23:59:59 +0800**。⚠️ 同日一小时前 glm-5.3-flash 还 OK ⇒ 刚耗尽。",
+    "volcengine-agent-plan": "✅ 有量（2026-09-10 探活 OK，deepseek-v4-flash / v4-pro 都通）",
+    "bailian-token-plan": "✅ 有量（deepseek-v4-flash-0731 / v4-pro-0813 都通）",
+    "codebuddy-code": "✅ 有量（deepseek-v4.1-flash / v4-pro 实跑 6 格成功）",
+    "🔴 quotaErrorSignature": "`429` + `{\"code\":\"AccountQuotaExceeded\",\"message\":\"You have exceeded the monthly usage quota. It will reset at <时间>\"}` ⇒ ⭐ **报错正文里带重置时间**，别丢掉。",
+    "⭐ rotationValidated": "🔴 **2026-09-10 轮换首次实战生效**：coding 挂了，换 agent-plan 直接跑通（同 model id、独立额度池）。⇒ 昨天把 agent-plan 加进 WALLET_PREF 的价值当天兑现。"
+  },
+  "🔴 codebuddyHarnessBug_20260910": {
+    "bug": "🔴 **`codebuddy -p` 的 text 模式只把【最后一条】assistant 写到 stdout** —— 长输出被 cb 内部拆成多条 assistant 消息时，**前面的块全丢**。",
+    "evidence": "同一格用 `--output-format json` 抓 transcript：assistant **2 条**（33721 + 13659 = 47380 字符），而 text 模式 stdout 只有后者 13659。⇒ 丢了 33721 字符。",
+    "alsoHit": "⚠️ 连带发现 `cbPro--kafka` 也被截过：text 模式 10514 → json 拼接后 **16128**。⇒ 🔴 **我先前基于 text 模式数据算出的 Kafka 结论已作废**。",
+    "🔴 fix": "⭐ **cb 侧一律用 `--output-format json` + 拼接所有 assistant 文本**（脚本见 tmp 目录 `cb_harvest.py`）。⛔ 不要用 `codebuddy -p` 的裸 stdout 做数据采集。",
+    "⚠️ misattributionAvoided": "⚠️ 差点归因成「v4.1-flash 爱自行分块，是模型行为风险」—— **那是错的**，是 harness 丢数据。⇒ 看到「续篇」先查 transcript 有几条 assistant，⛔ 别先怪模型。",
+    "piUnaffected": "✅ 火山/百炼走 `pi -p` **不受影响**（单条输出）⇒ 那 6 格不用重抓。"
+  },
+  "v41FlashEval_20260910": {
+    "date": "2026-09-10",
+    "judge": "github-copilot/gpt-5.5 · thinking=medium",
+    "question": "deepseek-v4.1-flash 该放阶梯哪一档？",
+    "scale": "每题每份满分 40",
+    "⭐ design": "🔴 **循环移位拉丁方**，⛔ 不是逆序、⛔ 不是「位置逐题轮换」。n 臂就跑 n 个移位 ⇒ 每臂在每个位置恰好一次 ⇒ 位置偏好从臂均值里被**消掉**，不是分摊。（⛔ 4 臂只移 2 位无效：{臂0,臂2} 会共享位置集 {A,C}，整组吃到 A 位红利。）",
+    "roundA_ladder": {
+      "arms": {
+        "cbV41": "cb/deepseek-v4.1-flash",
+        "cbPro": "cb/deepseek-v4-pro",
+        "volcPro": "volcengine-coding/deepseek-v4-pro",
+        "volcFlash": "volcengine-coding/deepseek-v4-flash"
+      },
+      "⭐ whyTwoProArms": "v4.1-flash 只在 cb、v4-flash 只在火山 ⇒ 比较**按构造必然跨通道**。v4-pro 两边各跑一份当【跨口径校正臂】，才量得出 harness 差多少。实测 cbPro 33.6 vs volcPro 33.4 ⇒ **同模型跨通道差 0.2 分，可忽略**。",
+      "🔴 designMistake": "🔴 四臂里两臂给了同一个模型，却**没给 T1 的 glm-5.3-flash 留位置** —— 而定档要回答的正是「能不能顶掉 T1/T2」。⇒ 臂位是照「控混淆」分的，⛔ 没照「要回答的问题」分。用户一问 glm 就得现补一臂（见 roundB）。",
+      "means_4shift": {
+        "cbV41": 36.0,
+        "cbPro": 33.6,
+        "volcPro": 33.4,
+        "volcFlash": 32.8
+      },
+      "perTask": {
+        "concurrency": {
+          "cbV41": 37.5,
+          "cbPro": 34.8,
+          "volcPro": 33.8,
+          "volcFlash": 30.5
+        },
+        "kafka": {
+          "volcFlash": 35.0,
+          "cbV41": 34.5,
+          "volcPro": 33.0,
+          "cbPro": 32.5
+        }
+      },
+      "🔴 topRankFlips": "🔴 **两题的第一名在四个朝向里都翻转**（并发 cbV41→cbPro→volcPro→cbV41；Kafka cbV41→cbPro→volcPro→volcFlash）⇒ 四臂**互相不可分**，⛔ 36.0 vs 33.6 那 2.4 分不能读成「更强」。",
+      "lruMissing": "⛔ volcFlash--lru 三次全取不到输出（第三次拿到明确 `429 AccountQuotaExceeded`）⇒ 该题缺一臂，未送评。"
+    },
+    "roundB_h2h_vs_T1": {
+      "arms": {
+        "cbV41": "cb/deepseek-v4.1-flash",
+        "cbGlm": "cb/glm-5.3-flash"
+      },
+      "⭐ whySameChannel": "⭐ 两臂同在 cb ⇒ **无 harness 混淆**；两臂 × A/B 对调 = 完整拉丁方。",
+      "perTask": {
+        "lru": {
+          "cbV41": 33.5,
+          "cbGlm": 29.0
+        },
+        "concurrency": {
+          "cbV41": 35.0,
+          "cbGlm": 32.5
+        },
+        "kafka": {
+          "cbGlm": 35.5,
+          "cbV41": 34.0
+        }
+      },
+      "mean3": {
+        "cbV41": 34.2,
+        "cbGlm": 32.3
+      },
+      "pairedDiffs": "v4.1 − glm 逐格：+7 +2 +3 +2 +3 −6 ⇒ **5 正 1 负**",
+      "⭐ verdict": "⭐ **LRU 与并发两题、4 个朝向全胜**；Kafka 反向且翻转 ⇒ 该题不可分。总体：**不弱于 glm-5.3-flash**，两题上强于。",
+      "🔴 wrongYardstick": "🔴 我先前说「两臂差 1.9 < 位置偏好 2.5，所以只能算不弱于」——**这个比法错了**。A/B 对调已经把位置偏好从臂均值里**消掉**，它⛔不是这个估计的噪声底。该看配对差的离散度（sd≈4.4，几乎全来自 Kafka 那次 −6）。⇒ 立得住的是**逐题方向一致性**，⛔ 不是总平均那 1.9 分。",
+      "⚠️ lengthConfound": "⚠️ 篇幅差很大（Kafka v4.1 是 glm 的 **3.5×**：40850 vs 11616 字），rubric 已钉「长度不是质量信号」一节，读分时须核 `why` 讲的是不是具体技术点。",
+      "🔴 driverPromptBug": "🔴 `run-judge.sh` 的 PROMPT 把「A.txt ~ D.txt 四份」**写死**了 ⇒ 两臂题里评委去找不存在的 C/D，六格的 `why` 全在解释「文件不存在」。A/B 仍各自拿到真分数、映射表只取 A/B ⇒ **数字可用**；已改成按目录实际文件数生成 prompt。⚠️ 改 rubric 时漏了改**驱动 prompt** —— 同一件事有两处写死份数。"
+    },
+    "⭐ positionBiasMeasured": {
+      "_how": "拉丁方下每个位置的臂构成完全相同 ⇒ 各位置均值对总均值的偏离**就是纯位置效应**。",
+      "4arm_n8": {
+        "A": 36.8,
+        "B": 34.4,
+        "C": 33.0,
+        "D": 31.6,
+        "spread": "A−D = **5.2 分/40**"
+      },
+      "2arm_n6": {
+        "A": 34.5,
+        "B": 32.0,
+        "spread": "A−B = **+2.5**"
+      },
+      "⭐ replicated": "⭐ 两臂那 **+2.5** 与 2026-09-08 独立测到的两臂偏好**完全对上** ⇒ 这不是噪声，是评委的稳定倾向。",
+      "🔴 implication": "🔴 **单朝向的名次一律不可信**。4 臂时位置效应 5.2 分，比本轮四臂间的总差（3.2 分）还大。⇒ 历史上任何「只跑一个朝向」或「位置逐题轮换」的结论，差距小于 5 分的都该当**未测出**处理，包括 h2hEval_20260828 的 102 vs 98。"
+    },
+    "cost": "cb 15 格（含 3 次重试）+ 火山 9 格 + 14 次判分 + 若干探活",
+    "data": "~/AgentWorkspace/tmp/v41flash-bench-20260910/（run-bench.sh · build_blind.py · build_h2h.py · score.py · validate_cell.py）"
+  },
+  "🔴 cbAccountModelList_20260910": {
+    "_how": "⭐ 派一个**假 model id**，400 报错正文里直接附**服务端权威清单** —— 比 `list_models` / `--help` 都硬。⚠️ 错误信息常比正常输出信息量大。",
+    "models": [
+      "hy4-preview",
+      "hy3",
+      "hy3-x",
+      "glm-5.3",
+      "glm-5.3-flash",
+      "glm-5.2",
+      "glm-5.1",
+      "glm-5v-turbo",
+      "minimax-m3",
+      "minimax-m2.7",
+      "kimi-k3-1",
+      "kimi-k2.7",
+      "kimi-k2.6",
+      "deepseek-v4-pro",
+      "deepseek-v4.1-flash"
+    ],
+    "🔴 confirmsGenerationChange": "🔴 `deepseek-v4-flash` 与 `kimi-k3-2` **都不在清单里** ⇒ 独立确认换代。",
+    "⚠️ notInWhitelist": "⚠️ `glm-5.3`(非 flash) · `minimax-m3` · `minimax-m2.7` · `glm-5v-turbo` · `kimi-k2.7` · `kimi-k2.6` 未定档，⛔ 未进白名单。"
+  },
+  "cbCreditRates_20260910": {
+    "_source": "用户 2026-09-10 提供的 codebuddy `/model` 面板截图（Global scope）。⇒ 与假 id 的 400 权威清单**逐个对上，15 个不多不少**。",
+    "⚠️ idVsLabel": "⚠️ **`hy3` 与 `hy3-x` 的 label 都是「Hy3」** —— 前者 0.00x、后者 **0.05x**。⇒ 🔴 派发认 id ⛔ 不认 label（同形陷阱：`hy4-preview` 0.00x vs `hy4-preview-x` 0.29x）。",
+    "rates": {
+      "hy4-preview": {
+        "label": "Hy4 preview",
+        "credit": 0.0
+      },
+      "hy3": {
+        "label": "Hy3",
+        "credit": 0.0
+      },
+      "hy3-x": {
+        "label": "Hy3",
+        "credit": 0.05
+      },
+      "glm-5.3": {
+        "label": "GLM-5.3",
+        "credit": 0.79
+      },
+      "glm-5.3-flash": {
+        "label": "GLM-5.3-Flash",
+        "credit": 0.06
+      },
+      "glm-5.2": {
+        "label": "GLM-5.2",
+        "credit": 0.79
+      },
+      "glm-5.1": {
+        "label": "GLM-5.1",
+        "credit": 0.79
+      },
+      "glm-5v-turbo": {
+        "label": "GLM-5v-Turbo",
+        "credit": 0.71
+      },
+      "minimax-m3": {
+        "label": "MiniMax-M3",
+        "credit": 0.25
+      },
+      "minimax-m2.7": {
+        "label": "MiniMax-M2.7",
+        "credit": 0.19
+      },
+      "kimi-k3-1": {
+        "label": "Kimi-K3",
+        "credit": 1.62
+      },
+      "kimi-k2.7": {
+        "label": "Kimi-K2.7-Code",
+        "credit": 0.57
+      },
+      "kimi-k2.6": {
+        "label": "Kimi-K2.6",
+        "credit": 0.52
+      },
+      "deepseek-v4-pro": {
+        "label": "Deepseek-V4-Pro",
+        "credit": 0.51
+      },
+      "deepseek-v4.1-flash": {
+        "label": "Deepseek-V4.1-Flash",
+        "credit": 0.06
+      }
+    },
+    "⭐ cheapestPaid": "⭐ 最便宜的付费档并列两个 **0.06x**：`glm-5.3-flash` 与 `deepseek-v4.1-flash`。⇒ 同价 ⇒ 选哪个只由**能力 + 可靠性**决定（见 v41FlashEval_20260910）。",
+    "⚠️ notInWhitelist": "⚠️ 未定档⛔未进白名单：`glm-5.3`(0.79) · `glm-5.2`(0.79) · `glm-5.1`(0.79) · `glm-5v-turbo`(0.71) · `minimax-m3`(0.25) · `minimax-m2.7`(0.19) · `kimi-k2.7`(0.57) · `kimi-k2.6`(0.52)。⚠️ `minimax-m2.7` 只要 0.19x，比 T2 的 `deepseek-v4-flash`(0.17x) 略贵、比 T3 便宜一大截 ⇒ **若测出能力够，它是 T2/T3 之间的空档候选**。⛔ 但没实测就不许进阶梯。"
+  },
+  "🔴 ladderT3Change_20260910": {
+    "change": "T3 `deepseek-v4-pro`(0.51x) → **`qwen3.8-max`** @ `pi/bailian-token-plan`",
+    "why": "用户 2026-09-10 禁用 v4-pro。",
+    "⛔ whyNotStopAtT3": "⛔ 「撞 T3 就停」会把 **T4 的 kimi-k3-1 永久掐断**（i 走不到 3）⇒ 升档链在 T2 之后断掉。",
+    "⛔ whyNotKeepBlocked": "⛔ 留着 v4-pro 当 T3 靠 §6 拦：§5 先 `first_available(pool)` 再 §6 `validate()` ⇒ 会**真的探活五个池**才被拦（0910 异构审 gpt-5.5 抓到）。",
+    "⭐ evidence": "⭐ qwen3.8-max 本就是 T3 的 TIER_PEERS（换位盲评 99.5 vs 102.0 /120，差 2.5 < 同轮 A 位偏好 2.5 ⇒ 同档）⇒ 直接顶上，⛔ 未改档位定义。",
+    "⚠️ rateUnknown": "⚠️ LADDER 里它的费率列写 `None` 是**故意的** —— 百炼是 token 套餐、该 id 的 credits 倍率⛔未测。⛔ 不许填数字凑齐：逻辑只读 `LADDER[i][0]`，费率列纯文档。",
+    "🔴 knownWeakness": "🔴 T3 从四池降为**一池**。撞限额直接升 T4（1.62x），⛔ 无缓冲。"
+  },
+  "_archivedTierPeers": {
+    "deepseek-v4-pro": {
+      "peers": [
+        {
+          "upstream": "bailian-token-plan",
+          "modelId": "qwen3.8-max"
+        }
+      ],
+      "evidence": "2026-09-09 换位盲评：总分 99.5 vs 102.0 /120（差 2.5）；同轮实测 A 位本身 +2.5 分优势 ⇒ ⛔ 该差不构成谁更强，判【同档】。判 gpt-5.5·medium，两臂 thinking 一致、prompt 逐字相同、n=2/格（两朝向）。",
+      "taskSplit": "⚠️ 分项分化明显，⛔ 但【只在这两者之间成立】——未与 glm-5.3-flash / kimi-k3-2 比过：架构题 qwen 37.5 > v4-pro 31.0；代码实现题 v4-pro 33.0 > qwen 25.5；并发诊断基本平。⛔ 不要据此写「架构题走 qwen」——架构类入口档是 T1，不在本层。",
+      "openQuestion": "⛔ 未测 qwen3.8-max 与 deepseek-v4-pro-0813 在百炼的 credits 倍率 ⇒【档内挑便宜】那步还没依据 ⇒ 本表只作兜底，⛔ 不参与折扣排序。",
+      "data": "~/AgentWorkspace/tmp/qwen38max-vs-v4pro/scores.json"
+    },
+    "_why": "🔴 用户 2026-09-10 禁用 deepseek-v4-pro，qwen3.8-max 升为 T3 主落点 ⇒ 本条作废。⛔ 归档条目⛔不得留在 tierPeers 里 —— 历史值与生效值同表会被解析成还在生效。"
+  },
+  "blockedModelsAnyProvider": {
+    "models": [
+      "deepseek-v4-pro"
+    ],
+    "_why": "🔴 **全局禁用型号**，⛔ 与 blockedModels(provider-keyed) 正交。provider-keyed 表天生漏（0910：v4-pro 漏了 EXEMPT 里的 volcengine-chat；且没列过的 provider 结构上拦不住）；且只给 `--model` 不给 provider 时 §1 的 validate() 整段不执行。⇒ 「不允许 agent 自己派发某型号」是**全局**陈述，必须落在全局那一层。",
+    "⚠️ whyTopLevel": "⚠️ ⛔ 不能放在 whitelist 下面 —— whitelist 的**值为 list** 的键会被解析成「某 provider 的允许清单」⇒ 实测报出「provider `blockedModelsAnyProvider` 没有渠道缩写」。这是同一类坑第三次：**说明键混进数据表**。"
   }
 }

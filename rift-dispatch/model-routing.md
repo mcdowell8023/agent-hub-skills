@@ -414,6 +414,32 @@ pi 是文本 agent 用不上 ⇒ 走 `bl image`（`bailian-gen` skill）。
 ⇒ **手动路径**：需用户明确接受现金开销 + 解除 disabled 后，才可显式 `--provider deepseek`。
 ⭐ 自动路径的最后一站是 **`claude/claude-sonnet-5` @ `max`**（LAST_RESORT，§8）。
 
+### ⚠️ 池额度状态（2026-09-10 实测，⛔ 会过期）
+
+| 池 | 状态 |
+|---|---|
+| `volcengine-coding` | 🔴 **额度用尽**，重置 **2026-09-20 23:59:59 +0800** |
+| `volcengine-agent-plan` | ✅ 有量 |
+| `bailian-token-plan` | ✅ 有量 |
+| `codebuddy-code` | ✅ 有量 |
+
+🔴 **判据永远是实际探活，⛔ 不是读这张表** —— 它只为省一次盲探。
+⚠️ 同日一小时前 `volcengine-coding/glm-5.3-flash` 还 OK ⇒ 额度是**刚**耗尽的，
+说明这张表的时效性可能只有小时级。
+
+⭐ **额度耗尽的报错签名**（`first_available` 的判据）：
+
+```
+429 {"code":"AccountQuotaExceeded","message":"You have exceeded the monthly usage quota.
+     It will reset at 2026-09-20 23:59:59 +0800 CST. ..."}
+```
+
+⭐ **报错正文里带重置时间**，⛔ 别只记「429」就丢掉正文。
+
+🔴 **2026-09-10 钱包轮换首次实战生效**：跑 v4.1-flash 定档盲评时 `volcengine-coding` 撞 429，
+换 `volcengine-agent-plan`（同 model id、独立额度池）直接跑通。
+⇒ 昨天把 agent-plan 加进 `WALLET_PREF` 的价值当天兑现。
+
 ### ⭐ 折扣窗口 —— 🔴 **两家的窗口不一样，⛔ 别只记住其中一个**
 
 | 池 | 打折时段 | 折扣 | 适用模型 |

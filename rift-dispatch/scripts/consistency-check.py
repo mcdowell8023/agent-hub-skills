@@ -113,10 +113,15 @@ if m:
     for km in re.finditer(r"'([a-z0-9.\-]+)':\s*\[(.*?)\]", m.group(1), re.S):
         sk_peers[km.group(1)] = re.findall(r"\('([^']+)',\s*'([^']+)'\)", km.group(2))
     cat_tp = d.get('walletPriority', {}).get('tierPeers', {})
+    # ⚠️ ⛔ 别按 `_` 前缀过滤说明键 —— **emoji 开头的键漏得掉**（0909 在 versionlessAliases 上
+    #    踩过一次，0910 又在 tierPeers 的 `🔴 emptied_20260910` 上踩了第二次）。
+    #    ⇒ 判据用**值的形状**：必须是 dict 且含 'peers'。
     cat_peers = {k: [(p['upstream'], p['modelId']) for p in v['peers']]
-                 for k, v in cat_tp.items() if not k.startswith('_')}
+                 for k, v in cat_tp.items() if isinstance(v, dict) and 'peers' in v}
     chk(sk_peers == cat_peers, f"TIER_PEERS SKILL≠catalog: SKILL={sk_peers} catalog={cat_peers}")
-    ladder = set(re.findall(r"\('([a-z0-9.\-]+)',\s*[\d.]+\)",
+    # ⚠️ 费率列允许 `None`（0910：T3 的 qwen3.8-max 倍率未测，⛔ 不许填数字凑齐）
+    #    ⛔ 只写 [\d.]+ 会让该档**整个漏出 ladder 集合**，下面那条断言就空转了。
+    ladder = set(re.findall(r"\('([a-z0-9.\-]+)',\s*(?:[\d.]+|None)\)",
                  re.search(r"LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1)))
     for base, peers in sk_peers.items():
         chk(base in ladder, f"TIER_PEERS 的键 {base} ⛔ 不是阶梯模型")
@@ -217,17 +222,108 @@ for rk in rounds:
             f"⛔ `{m_id}` 在 {rk} 的分 {total} 在 per-model 数值字段里查不到"
             f"（现有 {sorted(x for x in totals if x is not None)}）—— 分不能只躺在轮次记录里")
 
+# ── 3f. 🔴 子会话标题缩写表：每个可派发落点都必须能拼出标题（用户 2026-09-10 要求）──
+#    ⚠️ 标题是派发时才拼的，脚本查不到运行时标题 ⇒ 能查的是【缩写表有没有缺口】。
+#       缺一个缩写，派发时就只能瞎编或漏标，规范当场失效。
+ATC = d.get('agentTitleConvention', {})
+chAbbr, mdAbbr = ATC.get('channelAbbr', {}), ATC.get('modelAbbr', {})
+chk(bool(ATC), "catalog 缺 agentTitleConvention")
+
+# ① 所有可派发 model 都要有缩写
+dispatchable = set()
+for _m, pool in re.findall(r"'([a-z0-9.\-]+)':\s*\[(.*?)\]",
+                           re.search(r"WALLET_PREF\s*=\s*\{(.*?)\n\}", S, re.S).group(1), re.S):
+    dispatchable |= {mid for _u, mid in re.findall(r"\('([^']+)',\s*'([^']+)'\)", pool)}
+dispatchable |= set(re.findall(r"\('([a-z0-9.\-]+)',\s*[\d.]+\)",
+                    re.search(r"LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1), re.S))
+dispatchable |= {mid for _u, mid in re.findall(r"\('([^']+)',\s*'([^']+)'\)",
+                 re.search(r"TIER_PEERS\s*=\s*\{(.*?)\n\}", S, re.S).group(1))}
+for prov in WL_PROVIDERS: dispatchable |= set(d['whitelist'][prov])
+lr = re.search(r"LAST_RESORT = \('([^']+)', '([^']+)'", S)
+if lr: dispatchable.add(lr.group(2))
+dispatchable.add('gpt-5.5')                       # review 默认
+missing = sorted(m for m in dispatchable if m not in mdAbbr)
+chk(not missing, f"⛔ 这些可派发模型没有标题缩写，派发时拼不出标题: {missing}")
+
+# ② 缩写必须带版本号（⛔ 不许 dsp / glm 这种）—— 用户点名的核心要求
+nover = sorted(m for m, a in mdAbbr.items() if not re.search(r'\d', a))
+chk(not nover, f"⛔ 缩写必须含版本号，这些没有: {[(m, mdAbbr[m]) for m in nover]}")
+# ②b 🔴 无版本别名（-latest）⛔ 不许出现在缩写表里 —— 它按定义带不出版本，
+#      给它缩写等于给了一条「可以派无版本落点」的口子。必须先解析成具体型号。
+alias = sorted(m for m in mdAbbr if m.endswith('-latest') or m == 'latest')
+chk(not alias, f"⛔ 无版本别名不该有缩写（应先解析成具体型号再派）: {alias}")
+
+# ③ 渠道缩写覆盖豁免集 + 白名单
+for prov in sorted(set(cat) | set(WL_PROVIDERS)):
+    if prov.startswith('_'): continue
+    chk(prov in chAbbr, f"⛔ provider `{prov}` 没有渠道缩写，标题拼不出前缀")
+
+# ④ 🔴 同一渠道内⛔不许两个模型撞同一个缩写 —— 否则两个 agent 标题一模一样，分不出来
+wp_pairs = []
+for m, pool in re.findall(r"'([a-z0-9.\-]+)':\s*\[(.*?)\]",
+                          re.search(r"WALLET_PREF\s*=\s*\{(.*?)\n\}", S, re.S).group(1), re.S):
+    wp_pairs += re.findall(r"\('([^']+)',\s*'([^']+)'\)", pool)
+byCh = {}
+for up, mid in wp_pairs:
+    byCh.setdefault(up, {}).setdefault(mdAbbr.get(mid, '?'), set()).add(mid)
+for up, m in byCh.items():
+    for abbr, mids in m.items():
+        chk(len(mids) == 1,
+            f"⛔ 渠道 {up} 上 {sorted(mids)} 撞同一缩写 `{abbr}` ⇒ 标题重名。"
+            f"按 agentTitleConvention 的例外规则追加 @快照")
+
 # 🔴 屏蔽名单：SKILL 的 BLOCKED_MODELS 必须与 catalog.whitelist.blockedModels 逐条一致
 m = re.search(r"BLOCKED_MODELS\s*=\s*\{(.*?)\n\}", S, re.S)
 chk(m is not None, "SKILL 里找不到 BLOCKED_MODELS")
 if m:
     sk_blk = {km.group(1): set(re.findall(r"'([A-Za-z0-9._\-]+)'", km.group(2)))
               for km in re.finditer(r"'([a-z0-9.\-]+)':\s*\{(.*?)\}", m.group(1), re.S)}
+    # ⚠️ ⛔ 别按 `_` 前缀过滤非 provider 键 —— 说明键可能以 emoji 开头（我刚踩到：
+    #    `🔴 versionlessAliases` 是 str，被当成 list(str) 拆成了一堆单字）。
+    #    ⇒ 判据用**值的类型**：只有 list 才是 provider 清单。
     cat_blk = {k: set(v) for k, v in d['whitelist'].get('blockedModels', {}).items()
-               if not k.startswith('_')}
+               if isinstance(v, list)}
     chk(sk_blk == cat_blk,
         f"屏蔽名单 SKILL≠catalog: 仅SKILL={ {k: sorted(sk_blk.get(k,set())-cat_blk.get(k,set())) for k in sk_blk} } "
         f"仅catalog={ {k: sorted(cat_blk.get(k,set())-sk_blk.get(k,set())) for k in cat_blk} }")
+    # 🔴 §3i 全局禁用集必须与 catalog 一致（0910 新增那一层）
+    gm = re.search(r"BLOCKED_MODELS_ANY_PROVIDER\s*=\s*\{(.*?)\}", S, re.S)
+    chk(gm is not None, "SKILL 里找不到 BLOCKED_MODELS_ANY_PROVIDER")
+    if gm:
+        sk_any = set(re.findall(r"'([A-Za-z0-9._\-]+)'", gm.group(1)))
+        cat_any = set(d.get('blockedModelsAnyProvider', {}).get('models', []))
+        chk(sk_any == cat_any, f"全局禁用集 SKILL={sorted(sk_any)} ≠ catalog={sorted(cat_any)}")
+        # ⛔ 全局禁用的型号⛔不得同时留在 LADDER / WALLET_PREF / TIER_PEERS 里（否则自动链路会去探活它）
+        for mid in sorted(sk_any):
+            chk(mid not in ladder, f"⛔ `{mid}` 已全局禁用，却仍在 LADDER 里 ⇒ 自动升档会探活它")
+            wp_keys = set(re.findall(r"^\s*'([a-z0-9.\-]+)':\s*\[", wpref, re.M))
+            chk(mid not in wp_keys, f"⛔ `{mid}` 已全局禁用，却仍是 WALLET_PREF 的键 ⇒ 自动链路会探活它")
+            chk(mid not in sk_peers, f"⛔ `{mid}` 已全局禁用，却仍是 TIER_PEERS 的键")
+
+    # 🔴 §3h 屏蔽必须覆盖该型号【在 catalog 里挂过的所有可达 provider】—— ⛔ 不靠人记得写全
+    #    2026-09-10 异构审查（gpt-5.5）抓到：deepseek-v4-pro 漏了 volcengine-chat，
+    #    而它在 EXEMPT_PROVIDERS 里 ⇒ 显式指定就能绕过 P0；SKILL 注释当时还写着「四个 provider 全写」。
+    #    ⇒ 覆盖面必须由 **catalog 的 providers 表**推出来，⛔ 不能人肉列举。
+    wl = re.search(r"WHITELIST\s*=\s*\{(.*?)\n\}", S, re.S)
+    sk_wl = ({km.group(1): set(re.findall(r"'([A-Za-z0-9._\-]+)'", km.group(2)))
+              for km in re.finditer(r"'([a-z0-9.\-]+)':\s*\[(.*?)\]", wl.group(1), re.S)}
+             if wl else {})
+    dm = re.search(r"DISABLED_PROVIDERS\s*=\s*\[(.*?)\]", S, re.S)
+    dis = set(re.findall(r"'([a-z0-9.\-]+)'", dm.group(1))) if dm else set()
+    ARCHIVED = {'jdcloud-joyagent'}          # 配置已归档、不在 pi 里 ⇒ 派不出去
+    for mid in sorted({x for v in cat_blk.values() for x in v}):
+        mdl = d.get('models', {}).get(mid)
+        if not isinstance(mdl, dict):
+            continue                          # 型号不在 models 表里（如 doubao-* / glm-latest）⇒ 无 providers 可推
+        for prov in (k for k in (mdl.get('providers') or {}) if not k.startswith('_')):
+            if prov in dis or prov in ARCHIVED:
+                continue                      # provider 级已停用，屏蔽名单不必重复
+            if prov in sk_wl and mid not in sk_wl[prov]:
+                continue                      # 白名单本身就拦住了（⚠️ 这里是「不必再断言」，⛔ 不是「不许屏蔽」）
+            chk(mid in cat_blk.get(prov, set()),
+                f"⛔ 屏蔽漏口：`{mid}` 在 catalog 里挂着 provider `{prov}`，"
+                f"但 blockedModels['{prov}'] 里没有它 ⇒ 显式 --provider {prov} --model {mid} 可绕过 P0")
+
     # ⛔ 被屏蔽的型号不得同时出现在「可用异族评审」清单里
     # ⚠️ 清单会**折行**（第二行以 `·` 开头）⇒ ⛔ 不能只锚第一行（0909 实测：把被屏蔽型号
     #    插到第二行，守卫全绿）。改成取【整块】：从「可用异族评审」到「已屏蔽」之间。
@@ -240,6 +336,27 @@ if m:
         review_block = ''; chk(False, "§3.2c 找不到「可用异族评审 … 已屏蔽」这一块")
     for mid in sk_blk.get('github-copilot', ()):
         chk(f'`{mid}`' not in review_block, f"⛔ 被屏蔽的 {mid} 仍列在可用异族评审清单里")
+
+# ── 3g. 🔴 pi 配置里的【无版本别名】必须已进 BLOCKED_MODELS（用户 2026-09-10）──
+#    ⚠️ 这条是**结构性**的：⛔ 不靠人记得屏蔽，而是扫 ~/.pi/agent/models.json 里所有
+#       以 -latest / latest 结尾的 id，逐个断言它已被拦。将来新上的别名会自动被抓。
+#    ⚠️ 豁免 provider ⛔ 不能靠「从白名单删掉」来拦（它们本来就不枚举）⇒ 只能靠 BLOCKED_MODELS。
+if pi:
+    import re as _re
+    sk_blk_all = {}
+    _m = _re.search(r"BLOCKED_MODELS\s*=\s*\{(.*?)\n\}", S, _re.S)
+    if _m:
+        for km in _re.finditer(r"'([a-z0-9.\-]+)':\s*\{(.*?)\}", _m.group(1), _re.S):
+            sk_blk_all[km.group(1)] = set(_re.findall(r"'([A-Za-z0-9._\-]+)'", km.group(2)))
+    for pname, pconf in pi.get('providers', {}).items():
+        ms = pconf.get('models')
+        ids = list(ms) if isinstance(ms, dict) else [
+            (x.get('id') if isinstance(x, dict) else x) for x in (ms or [])]
+        for mid in ids:
+            if isinstance(mid, str) and _re.search(r'(^|[-_])latest$', mid):
+                chk(mid in sk_blk_all.get(pname, set()),
+                    f"⛔ `{pname}/{mid}` 是**无版本别名**却没进 BLOCKED_MODELS —— "
+                    f"豁免 provider 只能靠屏蔽名单拦，⛔ 光在文档里写「不许派」拦不住")
 
 # 🔴 顶层 `pi` ⛔ 不得被当成豁免 provider —— 它是【宿主】，豁免它会让
 #    `pi/jdcloud-joyagent/...` 整条绕过 upstream 校验（0909 第 6 轮审查；⚠️ 第一版守卫没覆盖，
