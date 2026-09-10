@@ -327,6 +327,25 @@ DISCOUNT_WINDOWS = {
      'models': set(),
      'when':   lambda dt: not (dt.weekday() < 5 and (9 <= dt.hour < 12 or 14 <= dt.hour < 18))},
 }
+# 🔴 免费档窗口过期后的**唯一复核闸门** —— ⛔ 之前只写了调用、没写定义
+#    （异构审 0911 #1 抓到；这已经是本轮第三次「只加读的一侧」）。定义必须严格：
+RATE_RECHECK_MAX_AGE_DAYS = 7
+def rate_reverified(model_id, dt=now()):
+    """🔴 判据 = catalog 里该型号的 `credit` **带一个足够新的核实日期**。
+       ⛔ 不接受：模型自述（实测它答「不知道」）· `rawUsage`（只有 token 数）
+       · `--help`（只有型号清单）。
+       ⚠️ 费率只在 cb 的 `/model` 面板里 ⇒ **只能由用户核并写进 catalog**。"""
+    rec = catalog_credit_record(model_id)   # {'credit': float, 'verifiedOn': 'YYYY-MM-DD'} 或 None
+    if not rec or rec.get('verifiedOn') is None:
+        return False
+    # 🔴 还要**够新** —— 本次事故就是「08-28~09-10 的记录被 09-11 实测证伪」；
+    #    陈旧的核实记录若算通过，已开始计费的型号会被当免费用
+    #    （异构审 0911 #3 指的「误开方向」）。
+    # ⚠️ 符号约定：`days_between(早, 晚)` 返回**正数天数**（= 晚 − 早）。
+    #    ⛔ 若实现反了，`<= 7` 会恒真、这道闸门形同虚设（异构审 0911 点出的悬置风险）。
+    #    ⇒ 已有用例钉住：verifiedOn=2026-08-11 对 dt=2026-09-10 ⇒ 30 天 ⇒ 判未复核。
+    return days_between(rec['verifiedOn'], dt) <= RATE_RECHECK_MAX_AGE_DAYS
+
 def is_discounted_now(upstream, model_id, dt=now()):
     w = DISCOUNT_WINDOWS.get(upstream)
     return bool(w) and model_id in w['models'] and w['when'](dt)
@@ -396,6 +415,8 @@ cb_accepted_then_silent = any(f.get('upstream') == 'codebuddy-code'
 upstream, model, thinking = explicit_upstream, explicit_model, explicit_thinking
 availability_escalations = []    # ⭐【可用性升档】留痕，⛔ 收尾必须报告（§7）
 provider_affinity = None     # 🔴 非空时，池内排序把该 provider 提到最前（⛔ 只重排，不换档不换模型）
+t0_free_unverified = []      # 🔴 免费窗口已过但**仍探活通过**的型号 ⇒ §7 必须提示「费率待核」
+#   ⛔ 不静默丢掉 —— 若它其实还免费，跳过就是白付 T1 的钱。
 tier_substitutions = []      # ⭐ (原model, 换成, 原因) —— 显式 provider 上没有本档主落点时的同档换落点
 #   ⛔ 与 availability_escalations 分开记：那个是【跨档】向上，这个是【档内】换落点，§7 措辞不同。
 
@@ -453,10 +474,26 @@ elif model is None:
     if t0_provider_ok and (not blockers or
                            (want_free and blockers <= CAPABILITY_BLOCKERS)):
         for m in ('hy4-preview', 'hy3'):            # T0，顺位固定
-            if not promo_active(m):
-                continue                            # ⛔ 免费期没开/赠额已尽 ⇒ 压根没碰 cb
+            # 🔴 **窗口过期 ⛔ 不等于不能用** —— 2026-09-11 实测：记录的免费期是 `08-28~09-10`，
+            #    而 hy4-preview 当天照样 **7s 秒回**（hy3 4s / hy3-x 3s）⇒ 要么延期了（cb 有前例）、
+            #    要么**开始计费了**。⛔ 两头都不能赌：
+            #      · 日期到了就直接跳过 ⇒ 白付 T1 的 0.03x，而 0.00x 可能还在
+            #      · 闭着眼继续用   ⇒ 若已计费，费率未知，可能比 0.03x 还贵
+            #    ⇒ 过期后**要求费率复核**：复核过（catalog 里该型号的 credit 有当期日期）才用，
+            #      否则按 T1 起步，并在 §7 提示「T0 仍可用但费率未核，核实后可能更省」。
+            #    ⚠️ 费率**只在 cb 的 `/model` 面板里**：`--help` 只给型号清单、
+            #      `rawUsage` 只有 token 数、问模型自己答「不知道」⇒ ⛔ 这一项 agent 拿不到。
+            # 🔴 **dead_landings 必须最先判** —— ⛔ 否则未复核分支里的 `probe_ok(m)`
+            #    会对一个「本任务里已反复静默」的落点**再探一次活**，正是 dead_landings
+            #    当初要挡的超时路径；而且此时提示「本可省 0.03x」也不成立（异构审 0911 #2）。
             if ('codebuddy-code', m) in dead_landings:
                 continue                            # 🔴 本任务里它已经反复无响应
+            if not promo_active(m) and not rate_reverified(m):
+                if probe_ok(m):
+                    t0_free_unverified.append(m)    # ⇒ §7 提示，⛔ 不静默丢掉这个机会
+                continue                            # ⛔ 未复核 ⇒ 不当免费档用
+                # ⚠️ `continue` 必须**在未复核这个分支里面** —— 写成无条件 continue
+                #    会让「已复核」也照样跳过（我第一版就是这个错，用例当场抓到）
             if probe_ok(m):                         # ⚠️ 长任务必须探活，怕撞排队
                 upstream, model, thinking = 'codebuddy-code', m, thinking or 'high'
                 break
@@ -1135,7 +1172,12 @@ ssh hub "paseo run --detach \
 ```
 子会话已创建
   Agent:  {short_id} — {title}          # 🔴 title 必须已带 · {渠道}-{模型缩写}（§3.1 标题规范）
-  Model:  {provider}/{model} · thinking: {thinking}{requires_output_validation 时追加 " · 🔴 必须校验产出"}{降档时追加 " → {effective_thinking}（该模型无 {thinking} 档）"}
+  Model:  {provider}/{model} · thinking: {thinking}{requires_output_validation 时追加 " · 🔴 必须校验产出"}
+{t0_free_unverified 非空时，整块加在这里 —— ⛔ 不许省略：
+  ⚠️ 免费档 {列出型号} **窗口已过但仍探活通过** —— 费率未核实（只在 cb `/model` 面板可见）。
+     若它仍是 0.00x，本次派发本可省下 T1 的 0.03x。
+     ⇒ 请核 cb `/model` 面板并把 `{'credit': x, 'verifiedOn': 'YYYY-MM-DD'}` 写进 catalog。
+     ⚠️ 核实记录**超过 7 天即失效**（本次事故就是陈旧记录被实测证伪）。}{降档时追加 " → {effective_thinking}（该模型无 {thinking} 档）"}
 {tier_substitutions 非空时，整块加在这里 —— ⛔ 不许省略：
   ⚠️ 档内换落点: {原model} → {换成} （原因：{原因}）
      ⛔ 这**不是升降档**，价格同档；只是本档主落点在该 provider 上不存在或拿不到。}

@@ -50,6 +50,11 @@ def run_case(c):
         'free_blockers':     lambda tt, a: set(c.get('blockers', ())),
         'CAPABILITY_BLOCKERS': {'algorithm', 'perf', 'architecture'},
         'promo_active':      lambda m: c.get('promo_ok', True),
+        # 🔴 ⛔ 不桩 rate_reverified 本身 —— 它现在在 §2 里有**真定义**，
+        #    桩掉它就等于不测那段逻辑（含「核实记录必须够新」这一条）。
+        #    ⇒ 只桩它的两个外部依赖。
+        'catalog_credit_record': lambda m: c.get('credit_records', {}).get(m),
+        'days_between':      lambda a, b: (b - __import__('datetime').datetime.fromisoformat(a)).days,
         'probe_ok':          lambda m: c.get('probe_ok', True),
         # ⚠️ 桩要能表达「某些落点不可用」，否则 TIER_PEERS 兜底分支永远测不到
         'first_available':   lambda lst: (PROBES.extend(f'{u}/{m}' for u, m in lst) or next(
@@ -90,7 +95,8 @@ def run_case(c):
              " channel=channel, thinking=thinking,"
              " availability_escalations=availability_escalations,"
              " tier_substitutions=tier_substitutions,"
-             " requires_output_validation=requires_output_validation)\n")
+             " requires_output_validation=requires_output_validation,"
+             " t0_free_unverified=t0_free_unverified)\n")
     ns = dict(stub)
     exec(compile(src, '<SKILL.md §2>', 'exec'), ns)     # 🔴 NameError 会在这里炸出来
     return ns['_decide']()
@@ -145,6 +151,29 @@ CASES = [
  dict(n='火山显式放行且带 pi 前缀', provider='volcengine-coding', model='deepseek-v4-flash',
       task_type='core', want=dict(provider='pi/volcengine-coding', model='deepseek-v4-flash', channel='paseo')),
  # 阶梯类
+ # 🔴 免费窗口已过但仍探活通过 ⇒ ⛔ 不当免费档用（费率未核），但**必须提示**
+ #    实测背景：2026-09-11 记录的免费期已过，hy4-preview 仍 7s 秒回 ⇒ 延期或已计费，两头都不能赌。
+ dict(n='免费窗口过期但仍探活通过 ⇒ 落 T1 且提示费率待核', task_type='core', promo_ok=False,
+      want=dict(upstream='codebuddy-code', model='deepseek-v4.1-flash',
+                t0_free_unverified=['hy4-preview', 'hy3'])),
+ # ⭐ 复核过费率（catalog 已更新）⇒ 照常当免费档用
+ dict(n='费率已复核（3 天前）⇒ T0 照常可用', task_type='core', promo_ok=False,
+      credit_records={'hy4-preview': {'credit': 0.0, 'verifiedOn': '2026-09-07'}},
+      when=DT(2026,9,10,15),
+      want=dict(upstream='codebuddy-code', model='hy4-preview', t0_free_unverified=[])),
+ # 🔴 反例：核实记录**太旧**（30 天前）⇒ ⛔ 不算复核 —— 这正是本次事故的形状：
+ #    陈旧记录若算通过，已开始计费的型号会被当免费用（异构审 0911 #3 的「误开方向」）
+ dict(n='核实记录过期（30 天前）⇒ ⛔ 不算复核，落 T1', task_type='core', promo_ok=False,
+      credit_records={'hy4-preview': {'credit': 0.0, 'verifiedOn': '2026-08-11'}},
+      when=DT(2026,9,10,15),
+      want=dict(model='deepseek-v4.1-flash', t0_free_unverified=['hy4-preview', 'hy3'])),
+ # 🔴 反例：有 credit 但**没有 verifiedOn** ⇒ ⛔ 不算复核
+ dict(n='credit 无 verifiedOn ⇒ ⛔ 不算复核', task_type='core', promo_ok=False,
+      credit_records={'hy4-preview': {'credit': 0.0}},
+      want=dict(model='deepseek-v4.1-flash')),
+ # ⭐ 反例：探活也不过 ⇒ ⛔ 不提示（没有「本可省钱」这回事）
+ dict(n='窗口过期且探活不过 ⇒ ⛔ 不提示', task_type='core', promo_ok=False, probe_ok=False,
+      want=dict(model='deepseek-v4.1-flash', t0_free_unverified=[])),
  # 🔴 T0 碰墙（探活不过）⇒ 必须落**同 provider** 的 T1，⛔ 不跨钱包（用户 2026-09-10）
  #    hy4 的形态是「允许你用但派发后静默停」，Paseo 抓不到明确错误 ⇒ 归 availability，
  #    ⛔ 不是「做砸」⇒ ⛔ 不许走质量/成本升档去换模型族。
