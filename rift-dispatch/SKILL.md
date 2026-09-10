@@ -23,7 +23,8 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 |---|---|---|
 | 1 | **便宜优先，逐级升档** | 免费档（`hy4-preview` → `hy3`，0.00x）先试 → 付费从 **`deepseek-v4.1-flash`（0.03x）** 起步 → `deepseek-v4-flash`（0.17x）→ `qwen3.8-max` → `kimi-k3-1`（1.62x）。⛔ **每一级【质量/成本升档】的唯一入口是「上一档已在本任务做砸过一轮」**，理由里要写明哪一轮、砸在哪。写不出来不许升。⚠️ 这条⛔**不管【可用性换档】**——模型在所有 provider 都拿不到时允许向上换档（必须报告），见 §2 第 5 段。⚠️ 例外：`algorithm` / `perf` 两类从 `deepseek-v4-flash` 起步（⚠️ 依据比的是 v4-flash **对 glm**，⛔ 没比过现在的 T1 ⇒ **待补测**）。🔴 并发两类已改回 T1 起步 —— 4 臂拉丁方并发题 v4.1-flash 37.5 > v4-flash 30.5 |
 | 2 | 🔴 **按「要不要看得见」分通道，不是按工具分** | 🔴 **开发实施类 + 大审查 → Paseo；短任务 / 短审查 → `pi -p`**。判据是**规模**不是任务类型——Paseo 能看进度、中途干预、拿结构化状态；`pi -p` 跑完即退不堆 serve。⛔ **开发任务和大审查都不要走 `pi -p`**：它不进 Paseo agent 列表，你看不见也打不断（实测大审查走 `pi -p` 跑满 35 分钟零输出） |
-| 3 | 🔴 **审查的硬约束是「异构」** | ⛔ **评审模型族 ≠ 实施模型族**（全局红线 #8），是**不变量**，不是针对某个模型的禁令。🔴 **含主会话：主会话就是 Claude，我自己写的东西不得派 `claude/*` 去审**。族对照表见 routing §5。⭐ **未显式指定时**默认 **`github-copilot/gpt-5.5`**（⛔ 不是「不可覆盖」；显式换 provider 会报冲突）；⚠️ **通道另按规模定**：大审查走 Paseo `pi/github-copilot/gpt-5.5`，短审查走 `pi -p`（⛔ prompt ≤200 字符） |
+| 3 | 🔴 **先判失败形态，再决定换什么** | **有产出但不合格** = `bad_output` ⇒ 走【质量/成本升档】（可换模型族）。**没产出**（静默停 / 唤不醒 / 探活不过）= `no_response` ⇒ 走【可用性】：**留在同 provider 降到下一档**，⛔ 不算做砸、⛔ 不跨钱包。⚠️ hy4 经常「碰墙」——允许你用但派发后静默停，**Paseo 抓不到明确错误** ⇒ ⛔ 别把它当成模型能力问题 |
+| 4 | 🔴 **审查的硬约束是「异构」** | ⛔ **评审模型族 ≠ 实施模型族**（全局红线 #8），是**不变量**，不是针对某个模型的禁令。🔴 **含主会话：主会话就是 Claude，我自己写的东西不得派 `claude/*` 去审**。族对照表见 routing §5。⭐ **未显式指定时**默认 **`github-copilot/gpt-5.5`**（⛔ 不是「不可覆盖」；显式换 provider 会报冲突）；⚠️ **通道另按规模定**：大审查走 Paseo `pi/github-copilot/gpt-5.5`，短审查走 `pi -p`（⛔ prompt ≤200 字符） |
 
 🔴 **两种换档理由是正交的，⛔ 别混**：**质量/成本换档**只因「本任务做砸过一轮」，⛔ 不得跨档**下调**；
 **可用性换档**（所有 provider 都拿不到）只许**向上**、必须**报告**，到顶仍拿不到 ⇒ `claude/claude-sonnet-5@max`
@@ -215,6 +216,34 @@ ENTRY  = {'algorithm': 1, 'perf': 1}
 CAPABILITY_BLOCKERS = {'algorithm', 'perf', 'architecture'}      # 能力短板，有实测依据
 # ⛔ 物理不可用类（⛔ --free 也不放宽）：'multimodal'（会正常计费，免费不成立）
 #    'quota_exhausted' · 'probe_queued'（探活未秒回）· 'failed_this_task'（绕过会死循环）
+
+# 🔴 **失败形态分类 —— 决定走哪条换档路径，⛔ 别让 agent 自己找叙事**（用户 2026-09-10 反馈）
+#    hy4 经常「碰墙」：允许你用，但**派发后静默停 / 唤不醒**，Paseo 抓不到任何明确错误。
+#    ⚠️ 这一类既不是 quota 报错、也不是探活排队（探活当时是过的）⇒ 原先三类都不沾，
+#       于是 agent 把它当成「做砸了」，走了【质量/成本升档】那条（那条允许换模型族）⇒ **归类错**。
+FAILURE_SHAPES = {
+  # 形态 → 归哪条换档路径
+  'no_response':     'availability',   # 🔴 派发后无明确错误的静默停 / 唤不醒（hy4 的典型形态）
+  'quota_exhausted': 'availability',   # 429 等明确额度报错
+  'probe_queued':    'availability',   # 探活未秒回
+  'bad_output':      'quality',        # ⭐ **有产出但产出不合格** —— 只有这一类才算「做砸」
+}
+# ⚠️ **`failed_this_task` 故意不进本表** —— 它是本次改动之前就存在的旧标记，
+#    注释原话是「绕过会死循环」⇒ 语义**含混**：既可能指「做砸了」也可能指「没产出」。
+#    ⛔ 我无法从这里判定谁在写它、写的是哪种含义 ⇒ ⛔ 不给它假精确的归类。
+#    ⇒ 它落到缺省（`bad_output` → quality），**保持旧行为不变**。
+# 🔴 **已知迁移缺口**：若收割器按旧习惯用 `failed_this_task` 记「静默停」，
+#    它会被算成做砸（顶档换族）**且不进 dead_landings** ⇒ 用户 0910 报的错归类可原样重放。
+#    ⇒ 收割时**必须改用新形态名**（`no_response` / `bad_output`）。
+#    ⚠️ 与「⛔ 没产出 ⇒ 永远是可用性」的张力来自**旧标记本身含混**，⛔ 不是新规则自相矛盾 ——
+#       把它并到 availability 会让旧的真做砸记录停止计数，那是上一轮被抓过的「把升档入口清零」。
+#       ⇒ 两害相权：保旧行为 ＋ 显式标缺口。
+NO_RESPONSE_LIMIT = 2   # 🔴 同一落点连续无响应达到这个次数 ⇒ 该落点视为【不可用】
+#    ⛔ 否则会在死通道上无限重派 —— 「不算做砸」若不配这条，就变成了「永远留在原地重试」。
+#    ⚠️ 这正是旧 'failed_this_task' 存在的理由（注释原话：「绕过会死循环」）。
+# 🔴 判据：**有没有产出**。⛔ 没产出 ⇒ 永远是可用性，⛔ 不是质量问题。
+#    ⇒ `failed_paid_tiers` 只在 'bad_output' 时 +1；'no_response' ⛔ 不计
+#      （否则「没回复」会一路把任务顶到 K3，而根因只是通道没响应）。
 WALLET_PREF = {                                 # (upstream, 该 provider 上的真实 modelId)
   # 🔴 多池【轮换】，⛔ 不是固定优先级（用户 2026-09-09）——火山【两个套餐】/ 百炼 / cb 地位相同。
   #    加百炼正是因为火山与 cb 这个月量不够 ⇒ 用哪个由「哪个还有量」决定，撞限额换下一个。
@@ -341,11 +370,32 @@ task_type = classify(user_input)          # routing §6；⚠️ concurrency 要
 scope     = estimate_scope(user_input, args)   # 文件数 / 预计工具调用数 —— 供 is_large_review
 cwd       = resolve_worktree(args.worktree)
 agent_id  = None                          # 🔴 只有 Paseo 派发才会被赋上，CLI 路径保持 None
-failed_paid_tiers_in_this_task = count_failed_paid_tiers(task_context)
-#   ⛔ 只数【付费阶梯内】做砸的档数：T0 免费档失败⛔不计、同一档重试⛔不计
+# 🔴 只数 **'quality'** 那一类（= 有产出但产出不合格）—— 判据见 FAILURE_SHAPES。
+#    ⛔ 「没回复 / 静默停」是 **availability**，⛔ 不计入 —— 否则通道没响应会把任务一路顶到 K3。
+#    ⚠️ 这条以前只写在注释里，agent 只能自己找叙事 ⇒ 实测被误判成「做砸」（用户 2026-09-10 反馈）。
+# 🔴 **缺省必须是 'bad_output'（质量类）** —— ⛔ 不能是 None、⛔ 不能是可用性类。
+#    理由：`shape` 这个字段是**本次新加的**，历史/外部产生的失败条目**不带它**。
+#    若缺省落到可用性类，计数恒 0 ⇒ 【质量/成本升档唯一入口】被**整条清零**，
+#    真的做砸也升不了档 —— 那是把合法路径堵死（异构审 2026-09-10 #1 抓到）。
+#    ⇒ 缺省取「保留旧行为」的那一侧；**只有显式标成 no_response 的才被排除**。
+failed_paid_tiers_in_this_task = sum(
+    1 for f in past_failures(task_context)
+    if f.get('tier') is not None                              # T0 免费档失败⛔不计
+    and FAILURE_SHAPES.get(f.get('shape', 'bad_output'), 'quality') == 'quality')
+# 🔴 同一落点反复无响应 ⇒ 把它排除掉，⛔ 不许原地无限重派
+dead_landings = {(f['upstream'], f['model']) for f in past_failures(task_context)
+                 if f.get('shape') == 'no_response'
+                 and f.get('count', 1) >= NO_RESPONSE_LIMIT
+                 and f.get('upstream') and f.get('model')}
+# 🔴 provider affinity 的**证据**：cb 接了活然后静默（⛔ 不是「碰过 cb」）
+cb_accepted_then_silent = any(f.get('upstream') == 'codebuddy-code'
+                              and f.get('shape') == 'no_response'
+                              for f in past_failures(task_context))
+#   ⛔ 同一档重试⛔不计 —— past_failures 按【档】去重，⛔ 不按次数
 #   ⚠️ 数不出来（无本任务历史）就是 0，⛔ 不要凭「任务看着难」估一个值
 upstream, model, thinking = explicit_upstream, explicit_model, explicit_thinking
 availability_escalations = []    # ⭐【可用性升档】留痕，⛔ 收尾必须报告（§7）
+provider_affinity = None     # 🔴 非空时，池内排序把该 provider 提到最前（⛔ 只重排，不换档不换模型）
 tier_substitutions = []      # ⭐ (原model, 换成, 原因) —— 显式 provider 上没有本档主落点时的同档换落点
 #   ⛔ 与 availability_escalations 分开记：那个是【跨档】向上，这个是【档内】换落点，§7 措辞不同。
 
@@ -403,7 +453,11 @@ elif model is None:
     if t0_provider_ok and (not blockers or
                            (want_free and blockers <= CAPABILITY_BLOCKERS)):
         for m in ('hy4-preview', 'hy3'):            # T0，顺位固定
-            if promo_active(m) and probe_ok(m):     # ⚠️ 长任务必须探活，怕撞排队
+            if not promo_active(m):
+                continue                            # ⛔ 免费期没开/赠额已尽 ⇒ 压根没碰 cb
+            if ('codebuddy-code', m) in dead_landings:
+                continue                            # 🔴 本任务里它已经反复无响应
+            if probe_ok(m):                         # ⚠️ 长任务必须探活，怕撞排队
                 upstream, model, thinking = 'codebuddy-code', m, thinking or 'high'
                 break
     if model is None and want_free:
@@ -415,6 +469,22 @@ elif model is None:
         if i == 3: warn('🔴 K3 1.62x，派完必须核 git log 有无 commit（0723 空转前科）')
         model = LADDER[i][0]
         thinking = thinking or 'xhigh'
+        # 🔴 **cb 接过活然后静默 ⇒ 落点优先留在 cb**，⛔ 不跨钱包。
+        #    ⚠️ 措辞按代码来：判据是「cb 吞下过请求」，⛔ 不限于 T0 那一档
+        #    （异构审第 4 轮的非阻断观察：原措辞写「T0 失败」比代码窄）。
+        #    用户 2026-09-10 明确：「hy4 失效 → cb 的 deepseek-v4.1-flash」，⛔ 不要换 pi。
+        #    依据：T0 只跑在 cb 上，而 cb 通道**本身是活的**（它刚把 hy4 的请求吞了）
+        #    ⇒ 换钱包是**没有依据**的动作，只是 agent 手边最熟的动作。
+        #    ⚠️ 这只**重排池内顺序**，⛔ 不改档位、⛔ 不改模型 —— 池里没有 cb 时自然回到轮换。
+        #    ⭐ 写成不变量而⛔不是靠巧合：现在 T1 恰好只在 cb，但将来 T1 换人就丢了这个性质。
+        # 🔴 依据必须是「**cb 确实接了活然后静默**」，⛔ 不是「碰过 cb」。
+        #    ⛔ 「进过 T0 分支」太宽（免费期没开压根没发请求）；
+        #    ⛔ 「promo 有效」也太宽（探活全挂时 cb 一个请求都没成功吞过）
+        #       —— 异构审连续两轮都把这两种写法抓成「无证据的偏好」。
+        #    ⭐ 真正的证据形态就是用户报的那个：hy4 被允许使用、派发出去了、**然后静默停**
+        #       ⇒ 本任务失败记录里有 cb 落点的 no_response ⇒ cb 通道是活的。
+        if explicit_upstream is None and cb_accepted_then_silent:
+            provider_affinity = 'codebuddy-code'
 
 # 🔴 显式 provider ＋【自动选出】的 model ⇒ 这一对必须是**已知存在**的组合。
 #    ⚠️ 火山 / 百炼 / copilot 等在 EXEMPT_PROVIDERS 里，`validate()` 对豁免 provider
@@ -458,12 +528,22 @@ if upstream is None:
         #    换成了【低档】的便宜模型，越过了档位边界往下选。
         # ⚠️ ⛔ 别跨钱包比价（火山包月 / cb credits 倍率 / 百炼积分，单位不可通约）——
         #    只比「同一型号的多个池」，那一步才可算（同型号，一边打折一边不打）。
-        pool = sorted(pool, key=lambda x: not is_discounted_now(x[0], x[1]))
+        # 🔴 affinity 优先于折扣 —— ⚠️ 这是个**有意的取舍**：
+        #    「留在已知活着的 provider」压过「省一点钱」。
+        #    依据是用户 2026-09-10 的显式要求；⛔ 不要因为「折扣更便宜」把它翻回来。
+        pool = sorted(pool, key=lambda x: (x[0] != provider_affinity,
+                                           not is_discounted_now(x[0], x[1])))
+        # 🔴 本任务里反复无响应的落点直接排除 —— ⛔ 不许原地无限重派
+        pool = [x for x in pool if x not in dead_landings]
         landed = first_available(pool)
         if landed is None:
             # ⭐ 本档模型所有池都拿不到 ⇒ 先在【同档】里换落点（⛔ 优先于升档：同档能落就别涨价）
             # ⛔ 同档替代⛔不参与上面的折扣排序 —— 它没有价格依据，只是兜底。
-            landed = first_available(TIER_PEERS.get(model, []))
+            # ⚠️ affinity 同样作用于同档替代 —— 「留在已知活着的 provider」这个意图
+            #    ⛔ 不该在换 peer 这一步丢掉（cb 上的 v4.1 拿不到，但 cb 上的 glm 可能可以）。
+            peers = [x for x in TIER_PEERS.get(model, []) if x not in dead_landings]
+            peers = sorted(peers, key=lambda x: x[0] != provider_affinity)
+            landed = first_available(peers)
             # 🔴 落到同档替代**必须留痕** —— ⛔ 否则 §7 只打得出 availability_escalations，
             #    【档内换落点】对用户完全不可见（0910 异构审 gpt→deepseek 抓到：
             #    我在「显式 provider 错配」那条路径加了 append，**这条可用性路径漏了**）。
@@ -1021,6 +1101,13 @@ ssh hub "paseo run --detach \
 
 | 检查 | 为什么 |
 |---|---|
+| 🔴 **记录失败时必须带 `shape`** | ⛔ `FAILURE_SHAPES` 是**读**的一侧，写的一侧是**你**——
+收割时把这次失败记成 `{tier, upstream, model, shape, count}`。⛔ 不带 `shape` 会走缺省 `bad_output`
+（缺省有意偏向旧行为，⛔ 宁可多算一次做砸，也不要把升档入口清零）。
+⚠️ 同一落点连续无响应记 `count`，达到 `NO_RESPONSE_LIMIT`(2) 后该落点被排除 |
+| 🔴 **先判失败形态：有产出吗？** | ⛔ **没产出 = availability**。⚠️ **两种要分开记**：派发后静默停 / 唤不醒 → `no_response`（**会进 `dead_landings`**，同落点 2 次即排除）；派发前探活未秒回 → `probe_queued`（⛔ **不进** `dead_landings` —— 排队会自己散，本任务内永久排除一个可能已恢复的落点是过度反应）。
+⛔ **不算「做砸」、⛔ 不许据此升档换模型族**。正确动作是**留在同 provider 降到下一档**
+（cb 上就是 `deepseek-v4.1-flash`）。⚠️ hy4 的典型形态就是这个：允许你用，但 Paseo 抓不到任何明确错误 |
 | 🔴 **`requires_output_validation` 为真？→ 必须跑产出校验** | ⛔ 该型号有「看着像正常输出」的垃圾形态（实测 3988 字带 `<｜｜DSML｜｜>` 标记）⇒ **只看 exit 0 会收下垃圾**。判据：过短 / 内部标记 / 续接语 / **不足同批中位数 35%**。参考 `validate_cell.py` |
 | **`lastStatus` 已是 idle/completed** | running 时取到的是中间态（§3.1） |
 | `git log` 核对 HEAD **真的有新 commit** | 高频：agent 报"全绿"但改动全躺工作区没提交 |

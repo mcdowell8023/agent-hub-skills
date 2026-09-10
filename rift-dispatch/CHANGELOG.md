@@ -109,6 +109,114 @@ cb 的 400 权威清单里带点版本号，而 pi 给火山配的那个**没有
 
 ---
 
+## v11.6 (2026-09-10) — 失败形态分类 + T0 碰墙留在同 provider
+
+**起因**：用户反馈 hy4 经常「碰墙」—— **允许你用，但派发后静默停 / 唤不醒，
+Paseo 抓不到任何明确错误**。当时 agent 的动作是**换去 `pi/volcengine-agent-plan/glm-5.3-flash`**，
+而用户要的是「基于 cb 换成 `deepseek-v4.1-flash`」。
+
+### ⛔ 这不算特殊场景 —— 缺的是两条通用东西
+
+**① 「无明确错误的无响应」这个失败形态没有被命名。**
+原先只有 `quota_exhausted` / `probe_queued` / `failed_this_task` 三类，hy4 的形态**三者都不沾**
+（探活当时是过的、也没有 quota 报错）⇒ agent 只能自己找叙事，把它当成「做砸了」，
+走了【质量/成本升档】那条 —— 而那条**允许换模型族**，于是就换钱包了。
+
+```python
+FAILURE_SHAPES = {
+  'no_response':     'availability',   # 🔴 派发后静默停 / 唤不醒（hy4 的典型形态）
+  'quota_exhausted': 'availability',
+  'probe_queued':    'availability',
+  'bad_output':      'quality',        # ⭐ 有产出但不合格 —— 只有这一类才算「做砸」
+}
+```
+
+🔴 **判据是「有没有产出」**。没产出 ⇒ 永远是可用性。
+⭐ 并且**落到执行层**：`failed_paid_tiers` 直接按 `FAILURE_SHAPES.get(...) == 'quality'` 过滤，
+⛔ 不是只写在注释里。反向验证把用户报的 bug 原样复现了 ——
+去掉这个过滤后，**两次「没回复」直接把任务顶到 T3 `qwen3.8-max`**。
+
+**② 「留在 cb」原先只是巧合，不是不变量。**
+T0 只跑在 cb 上，而 cb 通道**本身是活的**（它刚把 hy4 的请求吞了）⇒ 换钱包**没有依据**，
+只是 agent 手边最熟的动作。⇒ 新增 `provider_affinity`：T0 试过且失败 ⇒ 池内排序把 cb 提到最前，
+**同档替代（peers）那一步也照样生效** —— cb 的 v4.1 拿不到但 cb 的 glm 可以时，落 cb 的 glm。
+
+⚠️ **affinity 优先于折扣**，这是有意的取舍：「留在已知活着的 provider」压过「省一点钱」。
+⚠️ 它只**重排池内顺序**，⛔ 不改档位、⛔ 不改模型；池里没有 cb 时自然回到轮换（已有反例用例）。
+
+⭐ 写成不变量而⛔不是靠巧合 —— 现在 T1 恰好只在 cb，但**将来 T1 换人就丢了这个性质**，
+而这正是本次要修的东西。⛔ 也没有为 hy4 写任何 `if`。
+
+### ⚠️ 那次误判里，agent 侧也有一半
+
+subagent 自己的复盘写得很准：「**用 skill 的通用阶梯覆盖了你的显式指令**。
+skill 自己就写着 P1 显式优先——你已经给了降级目标，我不需要（也不该）按阶梯自己挑」。
+⇒ 这一半不是 skill 缺规则。但把失败形态归对之后，它连「该升档」这个前提都不成立了。
+
+### 新增
+
+- 硬默认表加第 3 条：**先判失败形态，再决定换什么**
+- §6 收割表加一行硬门控：**先判有没有产出**
+- `consistency-check` §3k：失败形态表必须与 catalog 一致，**且必须被 `failed_paid_tiers` 读取**；
+  `provider_affinity` 必须被池排序读取（两条都做过注入验证）
+
+### 🔴 异构审查连开三轮 FAIL 才收敛 —— 每轮抓的都是**新的**东西
+
+用 `bailian/deepseek-v4-flash-0731` 审 **diff 而不是整个文件**（Copilot 连续 3 次「带 tools 读 1093 行
+SKILL.md」挂死：`gpt-5.5` 7 分钟 / `gpt-5.6-sol` **37 分钟** / deepseek **2h20m** 零输出，
+而极小 prompt 基线 4s 秒回 ⇒ ⛔ 不是通道问题，是输入太大）。
+
+**第 2 轮 FAIL ①：`FAILURE_SHAPES` 只读不写，而缺省会把升档入口清零。**
+`shape` 是本次新加的字段，**历史/外部产生的失败条目不带它** ⇒ 缺省若落到可用性类，
+`failed_paid_tiers` 恒 0 ⇒【质量/成本升档唯一入口】被**整条清零**，真做砸也升不了档。
+⇒ 缺省改成 `'bad_output'`（**保留旧行为的那一侧**），只有显式标 `no_response` 的才排除。
+⚠️ 我的 pipeline 桩产出 `shape`、所以 77 个用例全绿 —— **照自己的设计造 fake**，
+正是 memory 里那条「fake 必须照真命令输出造」。已补用例：**不带 shape 的旧失败照样算做砸**。
+
+**第 2 轮 FAIL ③：「不算做砸」如果不配封顶，就变成「原地无限重派」。**
+⇒ 新增 `NO_RESPONSE_LIMIT = 2` + `dead_landings`：同落点连续无响应 2 次 ⇒ 该落点被排除，
+T0 循环 / 主池 / 同档 peers **三处**都过滤。⚠️ 这正是旧 `failed_this_task` 存在的理由（「绕过会死循环」）。
+
+**第 3 轮 FAIL ①：affinity 的依据我选错了。**
+先写「进过 T0 分支」（太宽：免费期没开压根没发请求），再改「promo 有效」（还是太宽：
+探活全挂时 cb 一个请求都没成功吞过）。⇒ 两版都被判「无证据的偏好」。
+⭐ 真正的证据形态**就是用户报的那个**：hy4 被允许使用、派发出去、**然后静默停**
+⇒ `cb_accepted_then_silent`（本任务失败记录里有 cb 落点的 `no_response`）。
+
+**第 3 轮 FAIL ②：`failed_this_task → quality` 与新不变量打架。**
+它是旧标记，注释原话「绕过会死循环」⇒ 语义含混，⛔ 我无法判定谁在写、写的哪种含义。
+⇒ **故意不进 `FAILURE_SHAPES`**，落到缺省保持旧行为，并把含混性显式标成**已知迁移缺口**。
+（并到 availability 会让旧的真做砸记录停止计数 —— 那正是第 2 轮被抓过的「清零」。）
+
+**第 3 轮 FAIL ③：`probe_queued` 与 `no_response` 定义裂缝。**
+⇒ 钉死：**派发前**探活未秒回 = `probe_queued`（⛔ **不进** `dead_landings`，排队会自己散）；
+**派发后**静默停 / 唤不醒 = `no_response`（**进** `dead_landings`）。
+
+### ⚠️ 我这轮的两个操作失误
+
+**① 补丁脚本中途崩溃 = 全无落盘，但我照着 ✅ 打印以为落了两条。**
+脚本的 `write_text` 在最后，中途 `TypeError` ⇒ 前面的 ✅ 只在内存里。
+后一个脚本又删掉了 `t0_touched` 的赋值与声明、留着使用点 ⇒ NameError 炸出来才发现。
+⇒ ⭐ **每个补丁脚本跑完必须 grep 落盘结果，⛔ 不能只看 ✅**。
+
+**② 守卫硬匹配了一行字面。** §3k 原本断言 `"FAILURE_SHAPES.get(f['shape']) == 'quality'" in S`，
+我把它改成 `f.get('shape', ...)` 之后守卫立刻**假红**。⇒ 改成判「赋值表达式里是否出现 FAILURE_SHAPES」，
+并加了两条新断言（缺省必须是 `bad_output`、必须有 `NO_RESPONSE_LIMIT`/`dead_landings`）。
+
+### 验证
+
+`consistency-check` ✅（+§3k 三条）· `pipeline-test` **83** 用例 ✅ · `coverage-check` §2 **181 行 100%** ✅
+异构审查 **VERDICT: PASS**（第 4 轮，仅剩 2 条非阻断观察，其中措辞不一致那条已改）
+
+⭐ 关键对照用例（一个字段变化就测得出归类对不对）：
+`no_response`×2 **停在 T1** / `bad_output`×2 **升到 T3** / **不带 shape 的旧失败照样算做砸** /
+`no_response` 同落点 2 次 **该落点被排除** / 仅 1 次 **⛔ 不排除** /
+cb 接活后静默 ⇒ 同档替代**留 cb** / 仅探活排队 ⇒ **⛔ 无 affinity**
+
+⭐ 关键对照用例：`no_response`×2 **停在 T1** / `bad_output`×2 **升到 T3** —— 一个数字变化就能测出归类对不对。
+
+---
+
 ## v11.5 (2026-09-10) — T1 换成 `deepseek-v4.1-flash`（0.03x）
 
 **起因是用户的一个观察：「有的 agent 没优先用 4.1 flash，而是优先用了 glm 5.3 flash」。**

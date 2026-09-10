@@ -1,5 +1,5 @@
 {
-  "version": "6.29.1",
+  "version": "6.30.2",
   "lastUpdated": "2026-09-09",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
@@ -2587,5 +2587,32 @@
     "probe_20260910": "🔴 用 `只输出:OK` 极小 prompt 探活 **挂起 >8 分钟无响应**（已 kill）。⚠️ 极小 prompt 也挂 ⇒ 属另一种根因，⛔ 不是 prompt 长度问题。",
     "status": "🔴 **待核实**：是别名、是火山侧就这么命名、还是根本服务不了。⛔ 在此之前**不作为推荐落点**；⛔ 也不直接进 BLOCKED_MODELS —— 没证据就屏蔽会堵死可能合法的路径（见 feedback-plugging-a-gap-blocks-valid-paths）。",
     "foundBy": "2026-09-10 异构审查（bailian/deepseek-v4-flash-0731，234s）指出 §3.2a 表格与 WALLET_PREF 不符时顺带暴露。"
+  },
+  "failureShapes": {
+    "_why": "🔴 用户 2026-09-10 反馈：hy4 经常「碰墙」—— **允许你用，但派发后静默停 / 唤不醒，Paseo 抓不到任何明确错误**。原先只命名了 quota_exhausted / probe_queued / failed_this_task，这一类三者都不沾 ⇒ agent 只能自己找叙事，把它当成「做砸了」，走了【质量/成本升档】那条（那条允许换模型族）⇒ 实测跑去换了 pi 的另一个钱包。",
+    "shapes": {
+      "no_response": "availability",
+      "quota_exhausted": "availability",
+      "probe_queued": "availability",
+      "bad_output": "quality"
+    },
+    "🔴 judgeBy": "🔴 判据是**有没有产出**。⛔ 没产出 ⇒ 永远是可用性，⛔ 不是质量问题。⇒ `failed_paid_tiers` 只在 `bad_output` 时 +1。",
+    "⭐ enforced": "⭐ 已落到执行层：§2 的 `failed_paid_tiers_in_this_task` 直接按 `FAILURE_SHAPES.get(f['shape']) == 'quality'` 过滤，⛔ 不是只写在注释里。对照用例：`no_response`×2 停在 T1 / `bad_output`×2 升到 T3。",
+    "🔴 defaultMustPreserveLegacy": "🔴 `shape` 是 2026-09-10 新加的字段，历史/外部产生的失败条目**不带它** ⇒ 缺省必须取 **'bad_output'（质量类）**，⛔ 不能是 None、⛔ 不能是可用性类。否则计数恒 0 ⇒【质量/成本升档唯一入口】被整条清零，真做砸也升不了档 —— 那是把合法路径堵死（异构审 gpt→deepseek 2026-09-10 #1 抓到）。⇒ **缺省取「保留旧行为」的那一侧**；只有显式标成 `no_response` 的才被排除。",
+    "🔴 whoWritesIt": "🔴 `FAILURE_SHAPES` 是**读**的一侧，写的一侧是**收割时的主会话**：把失败记成 `{tier, upstream, model, shape, count}`。⚠️ 只加读不加写 = 只声明没落地（本轮第一版就是这个毛病）。",
+    "noResponseLimit": "🔴 `NO_RESPONSE_LIMIT = 2` —— 同一落点连续无响应达到 2 次 ⇒ 该落点视为**不可用**（从 pool 和 TIER_PEERS 里排除）。⛔ 「不算做砸」若不配这条，就变成了「永远留在原地重试」—— 这正是旧 `failed_this_task` 存在的理由（注释原话：「绕过会死循环」）。",
+    "⚠️ failedThisTask_legacyGap": "⚠️ **旧标记 `failed_this_task` 故意不进 shapes** —— 它的注释原话是「绕过会死循环」，语义含混（既可能是「做砸」也可能是「没产出」），⛔ 无法判定谁在写、写的哪种含义 ⇒ ⛔ 不给假精确归类。⇒ 落到缺省 `bad_output`→quality，**保持旧行为**。🔴 **已知迁移缺口**：若收割器按旧习惯用它记「静默停」，会被算成做砸且不进 dead_landings ⇒ 0910 的错归类可原样重放 ⇒ 收割必须改用新形态名。（并到 availability 会让旧的真做砸记录停止计数 —— 那是上一轮被抓过的「把升档入口清零」。）",
+    "⚠️ probeQueuedVsNoResponse": "⚠️ 两种「没产出」要分开：**派发后静默停/唤不醒 = `no_response`**（进 `dead_landings`，同落点 2 次即排除）；**派发前探活未秒回 = `probe_queued`**（⛔ 不进 `dead_landings` —— 排队会自己散，本任务内永久排除一个可能已恢复的落点是过度反应）。"
+  },
+  "t0ProviderAffinity": {
+    "rule": "🔴 **T0 试过且失败 ⇒ 落点优先留在同一个 provider（cb）**，⛔ 不跨钱包。",
+    "userWord": "用户 2026-09-10：「我希望 hy4 更换为 cb 的 deepseek v4.1 flash」——实测 agent 当时换去了 `pi/volcengine-agent-plan/glm-5.3-flash`。",
+    "⭐ why": "⭐ T0 只跑在 cb 上，而 cb 通道**本身是活的**（它刚把 hy4 的请求吞了）⇒ 换钱包是**没有依据**的动作，只是 agent 手边最熟的动作。",
+    "scope": "⚠️ 只**重排池内顺序**（含同档替代 peers），⛔ 不改档位、⛔ 不改模型；池里没有 cb 时自然回到轮换。",
+    "🔴 tradeoff": "🔴 **affinity 优先于折扣** —— 有意的取舍：「留在已知活着的 provider」压过「省一点钱」。⛔ 不要因为「折扣更便宜」把它翻回来。",
+    "⭐ invariantNotCoincidence": "⭐ 写成不变量而⛔不是靠巧合 —— 现在 T1 恰好只在 cb，但将来 T1 换人就丢了这个性质（这正是本次要修的东西）。",
+    "⛔ notASpecialCase": "⛔ **这不算特殊场景** —— 缺的是「失败形态分类」这条通用规则，以及「同 provider 优先」这个不变量。⇒ ⛔ 不要为单个模型写 if。",
+    "🔴 judgeByTouched": "🔴 判据是 **t0_touched（真的向 cb 发过请求）**，⛔ 不是「进过 T0 分支」——免费期没开 / 赠额已尽时压根没碰过 cb ⇒「cb 是活的」这个依据不成立，此时做 affinity 是**没有证据的偏好**（异构审 2026-09-10 #2 抓到）。",
+    "🔴 evidenceDriven": "🔴 affinity 的依据必须是「**cb 确实接了活然后静默**」（本任务失败记录里有 cb 落点的 `no_response`），⛔ 不是「碰过 cb」、⛔ 也不是「promo 有效」—— 后两者异构审连续两轮都抓成「无证据的偏好」：免费期没开压根没发请求；探活全挂时 cb 一个请求都没成功吞过。⭐ 而「接了活然后静默」正是用户报的那个形态。"
   }
 }

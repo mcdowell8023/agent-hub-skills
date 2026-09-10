@@ -43,7 +43,10 @@ def run_case(c):
         'classify':          lambda _: c['task_type'],
         'estimate_scope':    lambda *_: c.get('scope', 'small'),
         'resolve_worktree':  lambda _: '/tmp/wt',
-        'count_failed_paid_tiers': lambda _: c.get('failed', 0),
+        # 🔴 按【档 + 形态】给，⛔ 不是给个计数 —— 形态决定它算不算「做砸」
+        'past_failures': lambda _: (
+            [{'tier': i, 'shape': 'bad_output'} for i in range(c.get('failed', 0))]
+            + list(c.get('extra_failures', []))),
         'free_blockers':     lambda tt, a: set(c.get('blockers', ())),
         'CAPABILITY_BLOCKERS': {'algorithm', 'perf', 'architecture'},
         'promo_active':      lambda m: c.get('promo_ok', True),
@@ -142,6 +145,62 @@ CASES = [
  dict(n='火山显式放行且带 pi 前缀', provider='volcengine-coding', model='deepseek-v4-flash',
       task_type='core', want=dict(provider='pi/volcengine-coding', model='deepseek-v4-flash', channel='paseo')),
  # 阶梯类
+ # 🔴 T0 碰墙（探活不过）⇒ 必须落**同 provider** 的 T1，⛔ 不跨钱包（用户 2026-09-10）
+ #    hy4 的形态是「允许你用但派发后静默停」，Paseo 抓不到明确错误 ⇒ 归 availability，
+ #    ⛔ 不是「做砸」⇒ ⛔ 不许走质量/成本升档去换模型族。
+ # 🔴 hy4 自己反复无响应 ⇒ T0 跳过它、试下一个免费档（hy3），⛔ 不是直接掉付费
+ dict(n='hy4 连续无响应 2 次 ⇒ T0 跳到 hy3', task_type='core',
+      extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
+                       'model': 'hy4-preview', 'shape': 'no_response', 'count': 2}],
+      want=dict(upstream='codebuddy-code', model='hy3')),
+ # 🔴🔴 缺省必须偏向【旧行为】：不带 shape 的历史失败**照样算做砸**
+ #    ⛔ 否则「质量/成本升档唯一入口」会被整条清零（异构审 2026-09-10 #1）。
+ dict(n='不带 shape 的旧失败 ⇒ 仍算做砸（缺省 bad_output）', task_type='core', blockers={'algorithm'},
+      extra_failures=[{'tier': 0}, {'tier': 1}],          # ⛔ 故意不给 shape
+      want=dict(model='qwen3.8-max')),                     # 两次做砸 ⇒ T3
+ # 🔴 同一落点反复无响应 ⇒ 该落点被排除，⛔ 不许原地无限重派
+ dict(n='cb/v4.1 连续无响应 2 次 ⇒ 排除该落点，落同档 glm', task_type='core', blockers={'algorithm'},
+      extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
+                       'model': 'deepseek-v4.1-flash', 'shape': 'no_response', 'count': 2}],
+      want=dict(model='glm-5.3-flash')),
+ # ⭐ 反例：只无响应 1 次（未达 NO_RESPONSE_LIMIT）⇒ ⛔ 还不排除，照常落主落点
+ dict(n='无响应仅 1 次 ⇒ ⛔ 不排除，仍落 cb/v4.1', task_type='core', blockers={'algorithm'},
+      extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
+                       'model': 'deepseek-v4.1-flash', 'shape': 'no_response', 'count': 1}],
+      want=dict(upstream='codebuddy-code', model='deepseek-v4.1-flash')),
+ # 🔴 免费期没开 ⇒ 压根没碰过 cb ⇒ ⛔ 不该有 affinity（同档替代回到轮换首位）
+ dict(n='promo 未开 ⇒ 没碰过 cb ⇒ ⛔ 无 affinity', task_type='core', promo_ok=False,
+      unavailable={'codebuddy-code/deepseek-v4.1-flash'},
+      want=dict(upstream='volcengine-coding', model='glm-5.3-flash')),
+ # 🔴 「没回复」⛔ 不算做砸 —— 两次 no_response 也不许把档位顶上去
+ dict(n='no_response ⛔ 不计入做砸（仍停在 T1）', task_type='core', blockers={'algorithm'},
+      extra_failures=[{'tier': 0, 'shape': 'no_response'}, {'tier': 0, 'shape': 'no_response'}],
+      want=dict(model='deepseek-v4.1-flash')),
+ # ⭐ 对照：同样两条但是 bad_output ⇒ 该升到 T3
+ dict(n='bad_output 两条 ⇒ 正常升到 T3', task_type='core', blockers={'algorithm'},
+      extra_failures=[{'tier': 0, 'shape': 'bad_output'}, {'tier': 1, 'shape': 'bad_output'}],
+      want=dict(model='qwen3.8-max')),
+ dict(n='T0 探活不过 → 仍落 T1，而 T1 本就在 cb', task_type='core', probe_ok=False,
+      want=dict(upstream='codebuddy-code', model='deepseek-v4.1-flash')),
+ # ⭐ affinity 必须一直作用到【同档替代】那一步：cb 的 v4.1 拿不到，但 cb 的 glm 可以
+ #    ⇒ 落 cb/glm，⛔ 不是火山的 glm（那是池内轮换的首位）
+ # ⭐ affinity 的证据是「cb **接了活然后静默**」（hy4 被派出去、然后唤不醒）
+ #    ⇒ cb 主落点也拿不到时，同档替代仍优先落 **cb 的 glm**，⛔ 不跳火山
+ dict(n='cb 接活后静默 ⇒ 同档替代仍留 cb（落 cb/glm，⛔ 不跳火山）', task_type='core', blockers={'algorithm'},
+      extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
+                       'model': 'hy4-preview', 'shape': 'no_response'}],   # count=1 ⇒ 未进死点
+      unavailable={'codebuddy-code/deepseek-v4.1-flash'},
+      want=dict(upstream='codebuddy-code', model='glm-5.3-flash')),
+ # 🔴 反例：只是**探活排队**（probe_queued）⇒ cb 一个请求都没成功吞过 ⇒ ⛔ 无 affinity
+ dict(n='仅探活排队 ⇒ ⛔ 无 affinity（回到轮换首位火山）', task_type='core', blockers={'algorithm'},
+      extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
+                       'model': 'hy4-preview', 'shape': 'probe_queued'}],
+      unavailable={'codebuddy-code/deepseek-v4.1-flash'},
+      want=dict(upstream='volcengine-coding', model='glm-5.3-flash')),
+ # 🔴 反例：没试过 T0（能力类跳过 T0）⇒ ⛔ 不该有 affinity，池内回到正常轮换
+ dict(n='未试 T0 ⇒ ⛔ 无 affinity，同档替代回到轮换首位（火山）', task_type='core',
+      blockers={'algorithm'}, unavailable={'codebuddy-code/deepseek-v4.1-flash'},
+      want=dict(upstream='volcengine-coding', model='glm-5.3-flash')),
  dict(n='T0 免费档', task_type='core',
       want=dict(upstream='codebuddy-code', model='hy4-preview', thinking='high')),
  dict(n='T1 起步（免费档被排除）', task_type='core', blockers={'algorithm'},

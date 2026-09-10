@@ -286,6 +286,26 @@ if m:
     chk(sk_blk == cat_blk,
         f"屏蔽名单 SKILL≠catalog: 仅SKILL={ {k: sorted(sk_blk.get(k,set())-cat_blk.get(k,set())) for k in sk_blk} } "
         f"仅catalog={ {k: sorted(cat_blk.get(k,set())-sk_blk.get(k,set())) for k in cat_blk} }")
+    # 🔴 §3k 失败形态表必须与 catalog 一致，且**必须被真正读取**
+    fm = re.search(r"FAILURE_SHAPES\s*=\s*\{(.*?)\n\}", S, re.S)
+    chk(fm is not None, "SKILL 里找不到 FAILURE_SHAPES")
+    if fm:
+        sk_fs = dict(re.findall(r"'([a-z_]+)':\s*'([a-z]+)'", fm.group(1)))
+        cat_fs = d.get('failureShapes', {}).get('shapes', {})
+        chk(sk_fs == cat_fs, f"失败形态表 SKILL={sk_fs} ≠ catalog={cat_fs}")
+        # ⚠️ ⛔ 别硬匹配某一行字面 —— 上一版守卫就是这样，改成 f.get(...) 后它立刻假红。
+        #    判据：`failed_paid_tiers_in_this_task` 的赋值表达式里必须出现 FAILURE_SHAPES。
+        m2 = re.search(r"failed_paid_tiers_in_this_task = (.*?)\n(?=\S)", S, re.S)
+        chk(m2 is not None and 'FAILURE_SHAPES' in m2.group(1),
+            "⛔ FAILURE_SHAPES 没被 failed_paid_tiers 的计算读取 ⇒ 等于只写在散文里")
+        # 🔴 缺省必须偏向【质量类】—— 缺省落到可用性类会把升档入口整条清零
+        chk(m2 is not None and "'bad_output'" in m2.group(1),
+            "⛔ shape 缺省必须是 'bad_output'（保留旧行为）—— 否则不带 shape 的历史失败全被忽略")
+        chk('NO_RESPONSE_LIMIT' in S and 'dead_landings' in S,
+            "⛔ 缺 NO_RESPONSE_LIMIT / dead_landings ⇒ 「不算做砸」会变成「原地无限重派」")
+        chk('provider_affinity' in S and S.count('provider_affinity') >= 4,
+            "⛔ provider_affinity 缺失或未被池排序读取（T0 碰墙必须留在同 provider）")
+
     # 🔴 §3j 产出校验清单必须与 catalog 一致，且**必须在 §2 里被真正读取**
     #    ⛔ 只声明一个集合不算落地 —— 那就是「规则只写在散文里」的变体。
     om = re.search(r"OUTPUT_VALIDATION_REQUIRED\s*=\s*\{(.*?)\n\}", S, re.S)
