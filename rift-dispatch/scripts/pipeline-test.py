@@ -36,7 +36,7 @@ def run_case(c):
         thinking = c.get('thinking'); free = c.get('free', False); worktree = None
     stub = {
         'parse_args':        lambda _: A,
-        'user_input':        'x',
+        'user_input':        c.get('user_input', 'x'),   # 🔴 用例要能传标题（[验收] 反例靠它）
         'task_context':      None,
         'resolve_short_name': lambda m: {'v4-pro': 'deepseek-v4-pro'}.get(m, m),
         # ⚠️ 空串要原样透传 —— 空 --model 的校验靠 args.model 本身，⛔ 不靠 resolve 结果
@@ -54,6 +54,12 @@ def run_case(c):
         #    桩掉它就等于不测那段逻辑（含「核实记录必须够新」这一条）。
         #    ⇒ 只桩它的两个外部依赖。
         'catalog_credit_record': lambda m: c.get('credit_records', {}).get(m),
+        # 🔴 ⛔ 不桩 review_due 本身 —— 「只有 exit 79 才算 due=no」这条 fail-open 规则
+        #    就在它里面，桩掉它等于不测这条规则。⇒ 只桩子进程调用。
+        #    默认 (1, '') = 模拟【已装 2.9.8 不认 --due】⇒ 必须放行。
+        'run_capture':       lambda argv: c.get('due_probe', (1, '')),
+        'parse_kv':          lambda out: dict(
+            l.split('=', 1) for l in out.strip().splitlines() if '=' in l),
         'days_between':      lambda a, b: (b - __import__('datetime').datetime.fromisoformat(a)).days,
         'probe_ok':          lambda m: c.get('probe_ok', True),
         # ⚠️ 桩要能表达「某些落点不可用」，否则 TIER_PEERS 兜底分支永远测不到
@@ -89,6 +95,7 @@ def run_case(c):
         'report_no_landing_and_stop': lambda m=None: (_ for _ in ()).throw(NoLanding()),
         'report_blocked_model_and_stop': lambda *a: (_ for _ in ()).throw(BlockedModel()),
         'report_provider_model_mismatch_and_stop': lambda *a: (_ for _ in ()).throw(Blocked('mismatch')),
+        'report_review_not_due_and_stop': lambda d: (_ for _ in ()).throw(Blocked('not_due')),
     }
     src = ("def _decide():\n" + textwrap.indent(BODY, '    ')
            + "\n    return dict(upstream=upstream, model=model, provider=provider,"
@@ -299,6 +306,27 @@ CASES = [
       unavailable={'codebuddy-code/hy4-preview', 'codebuddy-code/hy3',
                    'codebuddy-code/deepseek-v4.1-flash'},
       no_landing=True),
+ # 🔴 审查时机门控（2026-09-11）—— 契约：exit 79 = 轮不到，其余一律 fail-open
+ #    起因：0910 一条会话每修一小块就派一次全量审查，11 个 agent / ≥7 次全量全白烧
+ #    （审查产物带 REVIEW_HEAD / REVIEW_DIFF_SHA256 锚点，代码一改就作废）。
+ dict(n='审查时机 exit 79 ⇒ ⛔ 不派', task_type='review', scope='small',
+      due_probe=(79, 'due=no\nreason=merge-only\nbranch=feat/x\n'
+                     'review_mode=merge-only\nwhen=test master main\n'),
+      block='not_due'),
+ # 🔴🔴 fail-open 三连：⛔ 「问不出来」绝不能当成 due=no —— 那会把审查派发整体掐死
+ dict(n='命令不存在(127) ⇒ 照派', task_type='review', scope='small',
+      due_probe=(127, ''),
+      want=dict(upstream='github-copilot', model='gpt-5.5')),
+ dict(n='旧版不认 --due(exit 1) ⇒ 照派', task_type='review', scope='small',
+      due_probe=(1, ''),
+      want=dict(upstream='github-copilot', model='gpt-5.5')),
+ dict(n='due=yes(exit 0) ⇒ 照派', task_type='review', scope='small',
+      due_probe=(0, 'due=yes\nbranch=test\n'),
+      want=dict(upstream='github-copilot', model='gpt-5.5')),
+ # ⭐ 反例：CHECK 6 验收⛔不受本门控管（验收本来就该在改完之后跑）
+ dict(n='[验收] 任务 ⇒ ⛔ 不被时机门控拦', task_type='review', scope='small',
+      user_input='[验收] S3 官方 CHECK6 复核', due_probe=(79, 'due=no\n'),
+      want=dict(upstream='github-copilot', model='gpt-5.5')),
  dict(n='短审查走 CLI', task_type='review', scope='small',
       want=dict(upstream='github-copilot', model='gpt-5.5',
                 provider='github-copilot', channel='cli')),

@@ -370,6 +370,48 @@ def t0_still_free(model_id, dt=now()):
         #    ⛔ 若实现反了，这道闸门形同虚设。用例已钉住：08-11 对 09-10 ⇒ 30 天 ⇒ 判未复核。
     return rec.get('credit') == 0.0         # 🔴 核过且够新，但**已计费** ⇒ ⛔ 它不再是免费档
 
+# 🔴 **审查时机门控**（2026-09-11 加）—— 派 CHECK 5 审查前先问 agent-gates 该不该审。
+#    起因：0910 有条会话把任务拆小块并行开发，**每修完一小条就派一个 agent 跑全量审查**
+#    ⇒ 11 个 agent + ≥7 次全量**全部白烧**：审查产物带锚点（REVIEW_HEAD / REVIEW_DIFF_SHA256），
+#    代码一改锚点就作废；其中一份根本没看见后续 637+ 行改动（含它自己要求的修复）。
+#    ⚠️ agent-gates 侧已有时机门控，但它**只拦走 `agent-gates-review` 的审查** ——
+#       那 11 个是会话用 Paseo 直接派的，绕过了那条命令 ⇒ **必须在派发侧再拦一道**。
+
+# ⛔ 它**不在 PATH 上**（`command -v agent-gates-review` 返回空）⇒ 必须走绝对路径，
+#    否则 command not found。
+AGENT_GATES_REVIEW = '${AGENT_GATES_DIR:-$HOME/.agent-gates}/bin/agent-gates-review'
+
+# 🔴 「审查类」只指 **CHECK 5 的交叉 / 门禁 / 复审**（标题如 `[门禁审查A]` `[Review]` `[审]`）。
+#    ⛔ 不含 `[验收]`（那是 CHECK 6 verify，验收本来就该在改完之后跑，拦它是错的）；
+#    ⛔ 不含开发 / 修复任务。
+VERIFY_MARKERS = ('[验收]', '验收', 'CHECK 6', 'check6')
+def is_check5_review(task_type, text):
+    return task_type == 'review' and not any(k in text for k in VERIFY_MARKERS)
+
+def review_due(cwd):
+    """问 agent-gates：现在该不该做交叉审查。
+
+       契约（2026-09-11 实测）：
+         exit 0  ⇒ 该审（due=yes）
+         exit 79 ⇒ 轮不到（due=no）
+         stdout 恒为 key=value 行：due / reason / branch / review_mode / when
+       零成本：不需要 prompt 文件、不调模型、不写产物。
+
+       🔴🔴 **只有 exit 79 才算 due=no** —— 0 / 1 / 127 / 命令不存在 一律**放行**（fail-open）。
+       ⚠️ 已装的 2.9.8 还不认 `--due`，实测 `exit 1` + stderr `unknown arg: -C`。
+          把「问不出来」当成 due=no 会**把审查派发整体掐死** —— 那比不拦还糟。
+    """
+    # ⚠️ 必须传**派发目标的实际 cwd/worktree**，⛔ 别随手传仓库根。
+    #    理由不是「子目录判定会漂」—— 那是 agent-gates 的 bug，本次校验把它抓出来了
+    #    （子目录里 `git rev-parse --git-common-dir` 返回相对路径 `../.git`，项目配置整份丢掉、
+    #    静默回落成 strict），已在 **2.9.9** 修掉并加了回归用例，现在仓根/子目录判定一致。
+    #    真正的理由是：**同一仓库的不同 worktree 可能在不同分支上**，判定按分支走 ⇒
+    #    传错目录就是在问另一个上下文的时机。
+    rc, out = run_capture(['bash', AGENT_GATES_REVIEW, '--due', '-C', cwd])
+    if rc != 79:
+        return None          # ⛔ 放行：问不出来 ⇒ 当作「该审」
+    return parse_kv(out)     # {'due','reason','branch','review_mode','when'}
+
 def is_discounted_now(upstream, model_id, dt=now()):
     w = DISCOUNT_WINDOWS.get(upstream)
     return bool(w) and model_id in w['models'] and w['when'](dt)
@@ -471,6 +513,11 @@ if task_type == 'review':
     # ⛔ 用 args.free 而⛔不是 want_free —— want_free 自带 `and explicit_model is None`，
     #    在这里用它等于把洞 ① 留着。
     if args.free: report_conflict_free_vs_review_and_stop()   # ⛔ 不替用户决定牺牲哪边
+    # 🔴 **派发前问时机** —— ⛔ 只拦 CHECK 5，⛔ 只在 exit 79 时拦（其余一律 fail-open）
+    if is_check5_review(task_type, user_input):
+        _due = review_due(cwd)
+        if _due is not None:
+            report_review_not_due_and_stop(_due)   # 输出须带 when= 与逃生门 --early
     model = 'gpt-5.5' if explicit_model is None else explicit_model
     #                 ↑ ⛔ 用 `is None`，⛔ 不用 `or` —— 见第 1 段那条注释
     # 🔴 ⛔ 不许静默覆盖显式 --provider：本段职责是「未指定时给默认」，⛔ 不是「强行改成 copilot」。
@@ -1153,6 +1200,7 @@ ssh hub "paseo run --detach \
 
 | 检查 | 为什么 |
 |---|---|
+| 🔴 **要派【审查类】？先问时机**：`bash ${AGENT_GATES_DIR:-$HOME/.agent-gates}/bin/agent-gates-review --due -C <目标仓>` | **exit 79 ⇒ 轮不到，⛔ 别派**；其余（0/1/127/命令不存在）**一律照派**。⛔ 命令不在 PATH 上，必须走绝对路径。⚠️ 只管 CHECK 5 交叉/门禁/复审，⛔ 不管 `[验收]`。<br>代价实证（0910）：每修一小块就派一次全量审查 ⇒ **11 个 agent + ≥7 次全量全白烧** —— 审查产物带 `REVIEW_HEAD`/`REVIEW_DIFF_SHA256` 锚点，代码一改就作废；其中一份**根本没看见后续 637+ 行改动**（含它自己要求的修复） |
 | **要派免费档？先探活**（发一条极短 prompt 看是否秒回） | 当日额度耗尽会**进排队**，长任务丢进去会卡住且 Paseo 侧未必立刻可见 |
 | **要派免费档？先过排除清单**（routing §2） | 多模态任务派 Hy 系**照常计费**；algorithm/perf/architecture 有盲评数据支撑 |
 | worktree 是否已建、有无 `node_modules` | 缺依赖时 `npx jest` **零输出**，agent 会把空跑当全绿 |
@@ -1192,6 +1240,7 @@ ssh hub "paseo run --detach \
 | Provider 可用 | `paseo list_providers` | 走降级链（routing §8） |
 | 准备用 opencode？ | 先考虑 `pi -p` | opencode 已排最后（§3.2d） |
 | Agent-gates | `ls {cwd}/.agent-gates/` | 警告但不阻断 |
+| 🔴 **审查时机**（仅 CHECK 5） | `bash ${AGENT_GATES_DIR:-$HOME/.agent-gates}/bin/agent-gates-review --due -C {cwd}` | **exit 79 ⇒ 停止派发**并报告 `when=` 与逃生门 `--early`。<br>🔴 **其余一律 fail-open 照派** —— 已装 2.9.8 还不认 `--due`（实测 `exit 1` + `unknown arg: -C`）；把「问不出来」当成 `due=no` 会**把审查派发整体掐死**，比不拦更糟 |
 | 工作目录 | `--worktree` > 当前 worktree > 主仓 | 主仓时提醒用 worktree |
 
 ---
@@ -1199,6 +1248,21 @@ ssh hub "paseo run --detach \
 ## 7. 输出
 
 ```
+⛔ **审查时机未到时⛔不创建子会话**，改为输出（`report_review_not_due_and_stop`）：
+
+```
+⛔ 本次不派审查 —— agent-gates 判定现在轮不到
+  分支:     {branch}（review_mode={review_mode}）
+  原因:     {reason}
+  该审的时机: {when}          ← 🔴 必须带出来，⛔ 不能只说「现在不该审」
+  逃生门:   确需现在审 → 加 --early
+```
+
+⭐ 为什么必须打 `when=`：只说「不该审」会让人**原地重试**或绕过门控直接派 Paseo ——
+0910 那 11 个白烧的 agent 就是绕过去派的。⇒ 给出「什么时候该审」才是可执行的答复。
+
+---
+
 子会话已创建
   Agent:  {short_id} — {title}          # 🔴 title 必须已带 · {渠道}-{模型缩写}（§3.1 标题规范）
   Model:  {provider}/{model} · thinking: {thinking}{requires_output_validation 时追加 " · 🔴 必须校验产出"}
