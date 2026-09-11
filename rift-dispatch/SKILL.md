@@ -350,23 +350,25 @@ DISCOUNT_WINDOWS = {
      'when':   lambda dt: not (dt.weekday() < 5 and (9 <= dt.hour < 12 or 14 <= dt.hour < 18))},
 }
 # 🔴 免费档窗口过期后的**唯一复核闸门** —— ⛔ 之前只写了调用、没写定义
-#    （异构审 0911 #1 抓到；这已经是本轮第三次「只加读的一侧」）。定义必须严格：
+#    （异构审 0911 #1 抓到）。定义必须严格，⛔ 不许靠模型自述或体感。
+# 🔴🔴 **2026-09-11 改名 + 补条件**：原名 `rate_reverified` 只判「核实过且够新」，
+#    ⛔ **没判「核实结果是不是仍为 0」** ⇒ 用户核出 hy4 已计费 0.5x 并如实写进 catalog 后，
+#    这道闸门会返回 True ⇒ 把一个 **0.5x 的模型当免费档用**（比 T1 的 0.03x 贵 16 倍）。
+#    ⭐ 最坏的是：这个后果由「用户做了正确的事（去核实）」触发。
+#    ⇒ 名字必须说出真正的谓词：**t0_still_free**，⛔ 不是「有没有核过」。
 RATE_RECHECK_MAX_AGE_DAYS = 7
-def rate_reverified(model_id, dt=now()):
-    """🔴 判据 = catalog 里该型号的 `credit` **带一个足够新的核实日期**。
-       ⛔ 不接受：模型自述（实测它答「不知道」）· `rawUsage`（只有 token 数）
-       · `--help`（只有型号清单）。
+def t0_still_free(model_id, dt=now()):
+    """🔴 判据 = catalog 里该型号 `credit` **仍为 0**，且核实日期**足够新**。
+       ⛔ 不接受：模型自述（实测答「不知道」）· `rawUsage`（只有 token 数）· `--help`（只有型号清单）。
        ⚠️ 费率只在 cb 的 `/model` 面板里 ⇒ **只能由用户核并写进 catalog**。"""
     rec = catalog_credit_record(model_id)   # {'credit': float, 'verifiedOn': 'YYYY-MM-DD'} 或 None
     if not rec or rec.get('verifiedOn') is None:
-        return False
-    # 🔴 还要**够新** —— 本次事故就是「08-28~09-10 的记录被 09-11 实测证伪」；
-    #    陈旧的核实记录若算通过，已开始计费的型号会被当免费用
-    #    （异构审 0911 #3 指的「误开方向」）。
-    # ⚠️ 符号约定：`days_between(早, 晚)` 返回**正数天数**（= 晚 − 早）。
-    #    ⛔ 若实现反了，`<= 7` 会恒真、这道闸门形同虚设（异构审 0911 点出的悬置风险）。
-    #    ⇒ 已有用例钉住：verifiedOn=2026-08-11 对 dt=2026-09-10 ⇒ 30 天 ⇒ 判未复核。
-    return days_between(rec['verifiedOn'], dt) <= RATE_RECHECK_MAX_AGE_DAYS
+        return False                        # 没核过
+    if days_between(rec['verifiedOn'], dt) > RATE_RECHECK_MAX_AGE_DAYS:
+        return False                        # 🔴 核实记录过期 —— 本次事故就是陈旧记录被实测证伪
+        # ⚠️ 符号约定：`days_between(早, 晚)` 返回**正数天数**（= 晚 − 早）。
+        #    ⛔ 若实现反了，这道闸门形同虚设。用例已钉住：08-11 对 09-10 ⇒ 30 天 ⇒ 判未复核。
+    return rec.get('credit') == 0.0         # 🔴 核过且够新，但**已计费** ⇒ ⛔ 它不再是免费档
 
 def is_discounted_now(upstream, model_id, dt=now()):
     w = DISCOUNT_WINDOWS.get(upstream)
@@ -437,6 +439,8 @@ cb_accepted_then_silent = any(f.get('upstream') == 'codebuddy-code'
 upstream, model, thinking = explicit_upstream, explicit_model, explicit_thinking
 availability_escalations = []    # ⭐【可用性升档】留痕，⛔ 收尾必须报告（§7）
 provider_affinity = None     # 🔴 非空时，池内排序把该 provider 提到最前（⛔ 只重排，不换档不换模型）
+t0_now_billed = []           # 🔴 (型号, 倍率) —— 核实过、确认**已开始计费** ⇒ T0 对它关闭
+#   ⚠️ 它可能仍比 T1 便宜，但**那是定档问题** ⇒ 走盲评流程，⛔ 不因为「以前是免费档」就继续当 T0 用。
 t0_free_unverified = []      # 🔴 免费窗口已过但**仍探活通过**的型号 ⇒ §7 必须提示「费率待核」
 #   ⛔ 不静默丢掉 —— 若它其实还免费，跳过就是白付 T1 的钱。
 tier_substitutions = []      # ⭐ (原model, 换成, 原因) —— 显式 provider 上没有本档主落点时的同档换落点
@@ -510,8 +514,11 @@ elif model is None:
             #    当初要挡的超时路径；而且此时提示「本可省 0.03x」也不成立（异构审 0911 #2）。
             if ('codebuddy-code', m) in dead_landings:
                 continue                            # 🔴 本任务里它已经反复无响应
-            if not promo_active(m) and not rate_reverified(m):
-                if probe_ok(m):
+            if not promo_active(m) and not t0_still_free(m):
+                rec = catalog_credit_record(m)
+                if rec and rec.get('credit') not in (None, 0.0):
+                    t0_now_billed.append((m, rec['credit']))   # 🔴 核过了，确认已计费
+                elif probe_ok(m):
                     t0_free_unverified.append(m)    # ⇒ §7 提示，⛔ 不静默丢掉这个机会
                 continue                            # ⛔ 未复核 ⇒ 不当免费档用
                 # ⚠️ `continue` 必须**在未复核这个分支里面** —— 写成无条件 continue
@@ -1195,6 +1202,10 @@ ssh hub "paseo run --detach \
 子会话已创建
   Agent:  {short_id} — {title}          # 🔴 title 必须已带 · {渠道}-{模型缩写}（§3.1 标题规范）
   Model:  {provider}/{model} · thinking: {thinking}{requires_output_validation 时追加 " · 🔴 必须校验产出"}
+{t0_now_billed 非空时，整块加在这里 —— ⛔ 不许省略：
+  🔴 免费档 {列出型号与倍率} **已开始计费** ⇒ T0 对它关闭，本次走 T1。
+     ⚠️ 若它的倍率**低于 T1 的 0.03x**，那是【定档】问题 —— 需要同口径盲评，
+        ⛔ 不因为「它以前是免费档」就继续当 T0 用。}
 {t0_free_unverified 非空时，整块加在这里 —— ⛔ 不许省略：
   ⚠️ 免费档 {列出型号} **窗口已过但仍探活通过** —— 费率未核实（只在 cb `/model` 面板可见）。
      若它仍是 0.00x，本次派发本可省下 T1 的 0.03x。

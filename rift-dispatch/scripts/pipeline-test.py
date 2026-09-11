@@ -50,7 +50,7 @@ def run_case(c):
         'free_blockers':     lambda tt, a: set(c.get('blockers', ())),
         'CAPABILITY_BLOCKERS': {'algorithm', 'perf', 'architecture'},
         'promo_active':      lambda m: c.get('promo_ok', True),
-        # 🔴 ⛔ 不桩 rate_reverified 本身 —— 它现在在 §2 里有**真定义**，
+        # 🔴 ⛔ 不桩 t0_still_free 本身 —— 它现在在 §2 里有**真定义**，
         #    桩掉它就等于不测那段逻辑（含「核实记录必须够新」这一条）。
         #    ⇒ 只桩它的两个外部依赖。
         'catalog_credit_record': lambda m: c.get('credit_records', {}).get(m),
@@ -96,7 +96,8 @@ def run_case(c):
              " availability_escalations=availability_escalations,"
              " tier_substitutions=tier_substitutions,"
              " requires_output_validation=requires_output_validation,"
-             " t0_free_unverified=t0_free_unverified)\n")
+             " t0_free_unverified=t0_free_unverified,"
+             " t0_now_billed=t0_now_billed)\n")
     ns = dict(stub)
     exec(compile(src, '<SKILL.md §2>', 'exec'), ns)     # 🔴 NameError 会在这里炸出来
     return ns['_decide']()
@@ -161,6 +162,14 @@ CASES = [
       credit_records={'hy4-preview': {'credit': 0.0, 'verifiedOn': '2026-09-07'}},
       when=DT(2026,9,10,15),
       want=dict(upstream='codebuddy-code', model='hy4-preview', t0_free_unverified=[])),
+ # 🔴🔴 核实结果是「已计费」⇒ T0 **必须关闭** —— ⛔ 这是改名前那版的洞：
+ #    原 rate_reverified 只判「核过且够新」，不判「结果仍为 0」⇒ 用户如实写下 0.5x 之后，
+ #    闸门返回 True，把一个比 T1 贵 16 倍的模型当免费档用。
+ #    ⭐ 最坏的是：这个后果由「用户做了正确的事（去核实）」触发。
+ dict(n='核实结果=已计费 0.5x ⇒ T0 关闭并报告，⛔ 不当免费用', task_type='core', promo_ok=False,
+      credit_records={'hy4-preview': {'credit': 0.5, 'verifiedOn': '2026-09-10'}},
+      when=DT(2026,9,11,15),
+      want=dict(model='deepseek-v4.1-flash', t0_now_billed=[('hy4-preview', 0.5)])),
  # 🔴 反例：核实记录**太旧**（30 天前）⇒ ⛔ 不算复核 —— 这正是本次事故的形状：
  #    陈旧记录若算通过，已开始计费的型号会被当免费用（异构审 0911 #3 的「误开方向」）
  dict(n='核实记录过期（30 天前）⇒ ⛔ 不算复核，落 T1', task_type='core', promo_ok=False,
