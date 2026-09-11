@@ -132,7 +132,16 @@ BLOCKED_MODELS = {
                             'doubao-seed-evolving', 'ark-code-latest', 'glm-latest',
                             'deepseek-v4-pro'},
   'codebuddy-code':       {'deepseek-v4-pro'},
-  'bailian-token-plan':   {'deepseek-v4-pro', 'deepseek-v4-pro-0813'},
+  'bailian-token-plan':   {'deepseek-v4-pro', 'deepseek-v4-pro-0813', 'deepseek-v4-flash'},
+                          # ⛔ `deepseek-v4-flash` 只在**百炼这一家**被屏蔽 —— 实测 403（账号无权限）
+                          #    ⇒ 留着就是一条会被探活的死路径（与 v4-pro 那条同一个理由）。
+                          #    🔴 它在**火山两套餐上照常是 T2 主力**，⛔ 不是全局禁用。
+                          # 🔴 **两个都禁，但理由是「按能力档禁」，⛔ 不是「它俩是同一个模型」**
+                          #    —— 后者已被 2026-09-11 实测证伪（同一句输入 token 数 8 vs 87）。
+                          #    用户口径：v4-pro **这一档整体不要了**（v4.1-flash 同价 0.03x 更强）
+                          #    ⇒ 该档的快照版一并禁用。⚠️ 用户 2026-09-11 明确确认。
+                          # ⛔ `deepseek-v4-flash-0731` **不在此列** —— 它没被点名禁用，
+                          #    只是【尚未定档】⇒ 显式 --model 可派，⛔ 不进任何档位的池。
   'volcengine-chat':      {'deepseek-v4-pro'},   # 🔴 0910 异构审抓到的漏口：
                           #    它在 EXEMPT_PROVIDERS 里 ⇒ 显式 --provider volcengine-chat
                           #    --model deepseek-v4-pro 本来能绕过 P0。
@@ -255,16 +264,29 @@ WALLET_PREF = {                                 # (upstream, 该 provider 上的
                         # ⛔ v4-pro 的四池已整块移除（用户 2026-09-10 禁用）——
                         #    留着它就等于留着一条会被探活的路径。
   'deepseek-v4-flash': [('volcengine-coding',    'deepseek-v4-flash'),
-                        ('volcengine-agent-plan', 'deepseek-v4-flash'),
-                        ('bailian-token-plan',    'deepseek-v4-flash-0731')], # ⚠️ id 带 -0731
-                        # 🔴 **⛔ 三池，不是四池** —— cb 已于 2026-09-10 换代：
-                        #    `deepseek-v4-flash` ⛔ **不在账号权威清单里**（假 id 的 400 正文实测），
+                        ('volcengine-agent-plan', 'deepseek-v4-flash')],
+                        # 🔴 **2026-09-11 百炼被移出本池** —— 用户指出「`-0731` 与 `deepseek-v4-flash`
+                        #    是两种模型」，实测坐实（直连百炼端点，同一句输入 `只输出:OK`）：
+                        #      · `deepseek-v4-flash`      ⛔ **403 Access to model denied**（存在但账号无权限）
+                        #      · `deepseek-v4-flash-0731` ✅ 200，回显 `deepseek-v4-flash-0731`
+                        #      · 假 id                     ❌ 404 Model not exist
+                        #    ⭐ **403 ≠ 404** ⇒ 裸 id 是**另一个真实模型**，⛔ 不是拼错。
+                        #    ⇒ 百炼**根本没有可用的 deepseek-v4-flash** ⇒ ⛔ 它不能当本档的池成员。
+                        #    ⇒ T2 只剩**火山两套餐**（原先写三池是错的）。
+                        # ⚠️ `deepseek-v4-flash-0731` 是**独立模型，尚未定档** —— 见 catalog 同名条目。
+                        # 🔴 **⛔ 现在是【两池】** —— 两次收缩，理由各不相同，⛔ 别混：
+                        #    ① 2026-09-10 去掉 **cb**：cb 换代后 `deepseek-v4-flash`
+                        #    ⛔ **不在账号权威清单里**（假 id 的 400 正文实测），
                         #    但派它仍返回 200 ⇒ 🔴 **实际跑的是哪套权重测不出来**。
                         #    ⚠️ echo 字段（requestModelId / providerData.model）是**请求回显**，
                         #    ⛔ 不是运行值 —— 本例已自证：它回显了服务端清单里没有的 id。
                         #    ⇒ ⛔ 不派旧 id（不确定跑的是谁，就不该派）。
                         #    ⚠️ 要用 cb 的新型号请显式 --model deepseek-v4.1-flash
-                        #    （已定档：⛔ 不进阶梯，首次产出有效率仅 1/3，见 catalog v41FlashEval_20260910）。
+                        #    （已定档：⛔ 不进阶梯，见 catalog v41FlashEval_20260910）。
+                        #    ② 2026-09-11 去掉 **百炼**：它上面的裸 `deepseek-v4-flash` 实测 **403
+                        #    （存在但账号无权限）**，而 `-0731` 是**另一个模型**（见 §BLOCKED / catalog）。
+                        #    ⚠️ 措辞注意：⛔ 不是「原先写三池写错了」—— 删改前**确实是三池**，
+                        #       错的是「把 `-0731` 当成同一模型的池成员」这个判断，⛔ 不是计数。
   'deepseek-v4.1-flash': [('codebuddy-code',    'deepseek-v4.1-flash')],
                         # 🔴 **只有 cb 一家** —— 假 id 的 400 权威清单确认它不在火山/百炼。
                         #    ⇒ 撞 cb 额度时走 TIER_PEERS 落 glm-5.3-flash（同价、三池），
@@ -751,7 +773,7 @@ create_agent({
 
 | 例 | 说明 |
 |---|---|
-| `[Dev] 修 CRM 登录三态 · 百炼-dspF4` | 百炼的 `deepseek-v4-flash-0731` |
+| `[Dev] 修 CRM 登录三态 · 百炼-dspF4@0731` | 百炼的 `deepseek-v4-flash-0731`。🔴 **⛔ 不能简写成 `dspF4`** —— 实测它与火山的 `deepseek-v4-flash` **不是同一个被服务的模型**（同一句输入 token 数差一个量级），共用缩写会让标题说谎 |
 | `[Dev] 拆 transport 插件 · 火山C-dspF4` | 火山 **coding** 套餐的 `deepseek-v4-flash` |
 | `[Dev] 同上但换池 · 火山A-dspF4` | 火山 **agent-plan** 套餐 —— ⛔ 两个套餐是独立额度池，必须能分出来 |
 | `[Review] 审 diff · Cop-gpt5.5` | Copilot 的 `gpt-5.5` |

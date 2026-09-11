@@ -309,8 +309,10 @@ CASES = [
  #    ⛔ 这两条原本断言「非高峰/周末 T2 落 cb」，换代后已被推翻 ⇒ 改成断言新不变量。
  dict(n='非高峰(周三19点) cb 打折也进不了 T2（池里没 cb）', task_type='core', blockers={'algorithm'}, failed=1,
       when=DT(2026,9,9,19), want=dict(upstream='volcengine-coding', model='deepseek-v4-flash')),
- dict(n='深夜(周三23点) 两家都打折→回到轮换序', task_type='core', blockers={'algorithm'}, failed=1,
-      when=DT(2026,9,9,23), want=dict(upstream='bailian-token-plan', model='deepseek-v4-flash-0731')),
+ # 🔴 2026-09-11 百炼移出 T2 池（`-0731` 是另一个模型，且百炼的裸 id 是 403）
+ #    ⇒ T2 只剩火山两套餐，**深夜没有可切的打折池** ⇒ 落点不变。
+ dict(n='深夜(周三23点) T2 只剩火山两池 ⇒ 落点不变', task_type='core', blockers={'algorithm'}, failed=1,
+      when=DT(2026,9,9,23), want=dict(upstream='volcengine-coding', model='deepseek-v4-flash')),
  dict(n='周末白天 cb 全天打折，T2 仍不落 cb', task_type='core', blockers={'algorithm'}, failed=1,
       when=DT(2026,9,12,15), want=dict(upstream='volcengine-coding', model='deepseek-v4-flash')),
  # ⚠️ cb 的折扣集现在是**空的**（唯一成员 deepseek-v4-pro 已禁用）⇒ **cb 折扣对阶梯无作用点**。

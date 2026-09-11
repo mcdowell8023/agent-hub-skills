@@ -286,6 +286,28 @@ if m:
     chk(sk_blk == cat_blk,
         f"屏蔽名单 SKILL≠catalog: 仅SKILL={ {k: sorted(sk_blk.get(k,set())-cat_blk.get(k,set())) for k in sk_blk} } "
         f"仅catalog={ {k: sorted(cat_blk.get(k,set())-sk_blk.get(k,set())) for k in cat_blk} }")
+    # 🔴 §3l 带快照后缀的 id（`X-NNNN`）⛔ 不得被当成基名模型 `X` 的同一物
+    #    2026-09-11 实测：百炼上 `deepseek-v4-pro` 与 `-0813` 同一句输入 token 数 8 vs 87、
+    #    `deepseek-v4-flash` 直接 403（账号无权限）而 `-0731` 200 ⇒ **不是同一个被服务的模型**。
+    #    我原先把 `-0731` 当作「同一模型在百炼上的 id」写进 WALLET_PREF ⇒ 派 T2 会落到另一个模型上。
+    snap = re.compile(r'^(?P<base>.+?)-(?P<snap>\d{4})$')
+    for line in re.findall(r"\('([a-z0-9.\-]+)',\s*'([A-Za-z0-9.\-]+)'\)", wpref):
+        up, mid = line
+        m3 = snap.match(mid)
+        if not m3:
+            continue
+        base = m3.group('base')
+        chk(False,
+            f"⛔ WALLET_PREF 里出现快照后缀 id `{mid}`（基名 `{base}`）—— "
+            f"⛔ 带快照后缀的 id 与基名**不是同一个被服务的模型**（0911 实测：token 数差一个量级 / 裸 id 403）。"
+            f"⇒ 它要么单独定档，要么别进池。")
+    # 缩写也不许共用
+    ab = d.get('agentTitleConvention', {}).get('modelAbbr', {})
+    for mid, abbr in ab.items():
+        m3 = snap.match(mid)
+        if m3 and ab.get(m3.group('base')) == abbr:
+            chk(False, f"⛔ `{mid}` 与基名 `{m3.group('base')}` 共用缩写 `{abbr}` ⇒ 标题分不出是哪个模型")
+
     # 🔴 §3k 失败形态表必须与 catalog 一致，且**必须被真正读取**
     fm = re.search(r"FAILURE_SHAPES\s*=\s*\{(.*?)\n\}", S, re.S)
     chk(fm is not None, "SKILL 里找不到 FAILURE_SHAPES")
@@ -344,7 +366,11 @@ if m:
     dm = re.search(r"DISABLED_PROVIDERS\s*=\s*\[(.*?)\]", S, re.S)
     dis = set(re.findall(r"'([a-z0-9.\-]+)'", dm.group(1))) if dm else set()
     ARCHIVED = {'jdcloud-joyagent'}          # 配置已归档、不在 pi 里 ⇒ 派不出去
-    for mid in sorted({x for v in cat_blk.values() for x in v}):
+    # 🔴 ⛔ 只对**全局禁用**的型号要求「所有 provider 都覆盖」——
+    #    provider-keyed 表里也有**正当的按家屏蔽**（0911：`deepseek-v4-flash` 只在百炼屏蔽，
+    #    因为百炼上它是 403 死路径，而它在火山两套餐上照常是 T2 主力）。
+    #    ⚠️ 原先这里对所有被屏蔽 id 都要求全覆盖 ⇒ 会把这种正当用法判成漏口（假红）。
+    for mid in sorted(cat_any):
         mdl = d.get('models', {}).get(mid)
         if not isinstance(mdl, dict):
             continue                          # 型号不在 models 表里（如 doubao-* / glm-latest）⇒ 无 providers 可推
