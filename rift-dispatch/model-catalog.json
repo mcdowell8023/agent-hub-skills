@@ -1,5 +1,5 @@
 {
-  "version": "6.34.0",
+  "version": "6.36.1",
   "lastUpdated": "2026-09-11",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
@@ -97,12 +97,13 @@
         "glm-latest"
       ],
       "github-copilot": [
+        "gemini-3.5-flash",
+        "gemini-3.6-flash",
         "gpt-5-mini",
         "gpt-5.3-codex",
         "gpt-5.4-mini",
-        "gemini-3.5-flash",
-        "gemini-3.6-flash",
-        "mai-code-1-flash-picker"
+        "mai-code-1-flash-picker",
+        "mai-code-1.1-flash"
       ],
       "_pendingEval": "✅ **2026-09-09 已测**（三题盲评，⭐ 见 blindEval_copilot5_20260909）：grok-4.5 109.5 ≈ grok-4.6 106.0 ≫ gemini-3.7-flash 97.0 ≈ gemini-3.8-flash 93.0 ≫ mai-code-1.1-flash 81.5。⚠️ **与既有 /120 榜不同口径**（本轮 pi -p 无 agent 系统提示），⛔ 只在这 5 个之间可比。⇒ 用户口径是「做个参考」⇒ **⛔ 未改派发阶梯**。",
       "_howEnforced": {
@@ -124,7 +125,8 @@
         "deepseek-v4-pro"
       ],
       "⚠️ providerScopedBlock_20260911": "⚠️ **`deepseek-v4-flash` 只在 `bailian-token-plan` 这一家被屏蔽** —— 2026-09-11 实测它在百炼是 **403（存在但账号无权限）** ⇒ 留着就是一条会被探活的死路径。🔴 它在**火山两套餐上照常是 T2 主力**，⛔ 不是全局禁用 ⇒ ⛔ 不要把它加进 blockedModelsAnyProvider。⭐ 这也是 §3h 收窄的原因：「被屏蔽的型号必须所有 provider 都覆盖」只对**全局禁用集**成立，对正当的按家屏蔽会判成假红。",
-      "⚠️ scopeNote_0813": "⚠️ **`deepseek-v4-pro-0813` 只在 `bailian-token-plan` 存在** —— cb 的 400 权威清单（15 个）里没有它，pi 给火山两套餐配的清单里也没有 ⇒ 只屏蔽百炼一家**已是全覆盖**。🔴 但它⛔**不在** `blockedModelsAnyProvider` 里（它不是 `deepseek-v4-pro`，是另一个模型），⇒ §3h 收窄到全局集之后**不会**再对它做全覆盖强制。⇒ **若将来别家上了这个 id，⛔ 没有任何机制会提醒你补屏蔽** —— 异构审 2026-09-11 #3 点出的洞，此处显式记下，⛔ 不假装它不存在。"
+      "⚠️ scopeNote_0813": "⚠️ **`deepseek-v4-pro-0813` 只在 `bailian-token-plan` 存在** —— cb 的 400 权威清单（15 个）里没有它，pi 给火山两套餐配的清单里也没有 ⇒ 只屏蔽百炼一家**已是全覆盖**。🔴 但它⛔**不在** `blockedModelsAnyProvider` 里（它不是 `deepseek-v4-pro`，是另一个模型），⇒ §3h 收窄到全局集之后**不会**再对它做全覆盖强制。⇒ **若将来别家上了这个 id，⛔ 没有任何机制会提醒你补屏蔽** —— 异构审 2026-09-11 #3 点出的洞，此处显式记下，⛔ 不假装它不存在。",
+      "⚠️ blockIsNotDeclutter_20260915": "⚠️ **屏蔽 ≠ 从 pi 清单里消失。** 用户 2026-09-15 要求把 5 个 copilot 型号从 pi 清单去掉，实测**做不到**：把 `models.json` 与 `models-store.json` **两个都删过**，`pi --list-models` 照样显示 ⇒ copilot 的清单是**运行时从服务端拉的**（`pi update` 帮助里的 \"model catalogs\"）。⭐ 对照：`volcengine-agent-plan/glm-latest` **删得干净**（火山无 store 兜底）⇒ 🔴 **同一个动作在不同 provider 上效果不同**，⛔ 别一概而论。⇒ 能挡的只有 blockedModels（派发侧）；清单杂乱只能接受。"
     },
     "_cbLegacyNote": "🔴 **2026-09-10 换代**：cb 上 deepseek-v4-flash → deepseek-v4.1-flash，kimi-k3-2 → kimi-k3-1。旧 id 请求【不报错】但那是**别名**（服务端静默解析）。权威判据是**假 id 的 400 报错正文**：`400 model [x] service info not found` 后附「Currently supported models for your account」15 个 —— ⭐ 比 list_models 更硬。🔴🔴 **陈旧版本别名比无版本别名更危险**：它带版本号却指向另一个版本 ⇒ 标题会写 cb-dspF4 而实跑 dspF4.1，**标题说谎** ⇒ ⛔ 必须移出白名单，⛔ 不能只加注释。"
   },
@@ -2082,10 +2084,12 @@
       },
       "deepseek-v4.1-flash": {
         "rotation": [
-          "codebuddy-code"
+          "codebuddy-code",
+          "volcengine-agent-plan",
+          "bailian-token-plan"
         ],
-        "🔴 singlePool": "🔴 **T1 只有一个池** —— 假 id 的 400 权威清单确认它不在火山/百炼。⇒ 撞 cb 额度时走 tierPeers 落 `glm-5.3-flash`（同价 0.06x、三池），⛔ 不升 T2(0.17x)。",
-        "discountNote": "⚠️ 单池 ⇒ 折扣排序是恒等变换，改不了落点；且 cb 折扣集当前为空。"
+        "discountNote": "⚠️ 单池 ⇒ 折扣排序是恒等变换，改不了落点；且 cb 折扣集当前为空。",
+        "⭐ threePools_20260915": "⭐ **2026-09-15 由单池变三池，「T1 单池」弱点关闭。** 火山 agent-plan 与百炼当天各自新上。实测：火山 agent-plan 直连 200（回显 `deepseek-v4-1-flash`）；百炼 **429 套餐额度耗尽**（⛔ 不是 403）⇒ 存在且有权限。⚠️ `volcengine-coding` 上**没有**（404）⇒ ⛔ 未写进池。⭐ 百炼这份带**限时夜间 5 折**（22:00–08:00）⇒ 已进 discountWindows。"
       }
     },
     "othersUnchanged": "⚠️ 本表覆盖阶梯四档（glm-5.3-flash / deepseek-v4-flash / deepseek-v4-pro / kimi-k3-2）的 provider 轮换；其它模型按 availabilityEscalation 与 models.*.providers。",
@@ -2345,14 +2349,14 @@
     "🔴 snapshotIdsNeedOwnAbbr": "🔴 **带快照后缀的 id 必须有自己的缩写** —— 2026-09-11 之前 `deepseek-v4-flash-0731` 与 `deepseek-v4-flash` **共用 `dspF4`**，`-0813` 与 `deepseek-v4-pro` 共用 `dspP4`。而实测证明它们**不是同一个被服务的模型** ⇒ 标题 `百炼-dspF4` 会让人以为跟 `火山C-dspF4` 是同一个模型、只是换了钱包 —— **标题说谎**，正是这套规范要防的东西。⇒ 改成 `dspF4@0731` / `dspP4@0813`。"
   },
   "poolQuotaState": {
-    "_note": "⚠️ **运行时状态，⛔ 不是规则** —— 会过期。判据永远是**实际探活**，⛔ 不是读这一段。记在这里只为省一次盲探。",
-    "_measuredAt": "2026-09-10",
-    "volcengine-coding": "🔴 **额度用尽** —— `429 {\"code\":\"AccountQuotaExceeded\"}`，重置时间 **2026-09-20 23:59:59 +0800**。⚠️ 同日一小时前 glm-5.3-flash 还 OK ⇒ 刚耗尽。",
-    "volcengine-agent-plan": "✅ 有量（2026-09-10 探活 OK，deepseek-v4-flash / v4-pro 都通）",
-    "bailian-token-plan": "✅ 有量（deepseek-v4-flash-0731 / v4-pro-0813 都通）",
-    "codebuddy-code": "✅ 有量（deepseek-v4.1-flash / v4-pro 实跑 6 格成功）",
-    "🔴 quotaErrorSignature": "`429` + `{\"code\":\"AccountQuotaExceeded\",\"message\":\"You have exceeded the monthly usage quota. It will reset at <时间>\"}` ⇒ ⭐ **报错正文里带重置时间**，别丢掉。",
-    "⭐ rotationValidated": "🔴 **2026-09-10 轮换首次实战生效**：coding 挂了，换 agent-plan 直接跑通（同 model id、独立额度池）。⇒ 昨天把 agent-plan 加进 WALLET_PREF 的价值当天兑现。"
+    "_note": "⚠️ **运行时状态，⛔ 不是规则** —— 会过期。判据永远是**实际探活**。",
+    "_measuredAt": "2026-09-15",
+    "bailian-token-plan": "🔴 **整套餐本周额度耗尽** —— 5 个模型同一条 `429 Your token-plan 1-week quota has been exhausted`，**09-16 09:32 UTC（北京 17:32）重置**。⇒ 是**套餐级**不是单模型级。",
+    "🔴 t3CurrentlyDown": "🔴 **连带：T3（`qwen3.8-max` 单池在百炼）当下没有落点** ⇒ 升到 T3 会直接跳 T4（1.62x）。这正是 `🔴 ladderT3Change_20260910.knownWeakness` 记的那条单池风险，2026-09-15 真的咬到了。",
+    "⭐ quotaErrorSignature": "⭐ `429` + `token-plan 1-week quota has been exhausted` + **重置时间**；⛔ 与 `403 Access to model denied`（无权限）和 `404 Model not exist`（不存在）是三回事。",
+    "codebuddy-code": "✅ 有量（2026-09-15 hy3 / v4.1-flash 实跑均成功）",
+    "volcengine-agent-plan": "✅ 有量（直连 200）",
+    "volcengine-coding": "⚠️ 09-10 曾 429（月额度，09-20 23:59 重置）⇒ 当前未复测"
   },
   "🔴 codebuddyHarnessBug_20260910": {
     "bug": "🔴 **`codebuddy -p` 的 text 模式只把【最后一条】assistant 写到 stdout** —— 长输出被 cb 内部拆成多条 assistant 消息时，**前面的块全丢**。",
@@ -2595,7 +2599,8 @@
     "⛔ rateNotObtainableByAgent": "⛔ **费率 agent 拿不到**（2026-09-11 试了三条路）：`codebuddy --help` 只给 15 个型号清单、`providerData.rawUsage` 只有 token 计数、问模型自己答「不知道」；`codebuddy models` 不是子命令（会被当成 prompt，还顺手读了当前目录）。⇒ 只在 cb 的 `/model` 面板里 ⇒ **这一项只能问用户**。",
     "⭐ handlingWhenWindowExpired": "⭐ 窗口过期后的处理：**要求费率复核**，⛔ 两头都不赌。① 日期到了就直接跳过 ⇒ 白付 T1 的 0.03x，而 0.00x 可能还在；② 闭着眼继续用 ⇒ 若已计费、费率未知，可能比 0.03x 还贵。⇒ 未复核则按 T1 起步，但把仍探活通过的型号记进 `t0_free_unverified`，**§7 必须提示「本可省下 T1 的钱，请核一下面板」**，⛔ 不静默丢掉这个机会。复核过（catalog 里该型号 credit 带当期日期）⇒ T0 照常可用。",
     "🔴 gateBugFound_20260911": "🔴 **复核闸门原先漏了一个条件** —— 原名 `rate_reverified` 只判「核实过且够新」，⛔ **没判「核实结果是不是仍为 0」**。⇒ 用户核出 hy4 已计费（比如 0.5x）并**如实写进 catalog** 后，闸门返回 True ⇒ 把一个比 T1(0.03x) 贵 **16 倍**的模型当免费档用。⭐ 最坏的是：这个后果由「用户做了正确的事（去核实）」触发。⇒ 改名 **`t0_still_free`** —— 名字必须说出真正的谓词，⛔ 不是「有没有核过」。⇒ 判据 = 核实日期够新 **且** `credit == 0.0`。⚠️ 核实结果为已计费时进 `t0_now_billed`，§7 报告 T0 已关闭；**若它的倍率低于 T1，那是【定档】问题，要走盲评**，⛔ 不因为「它以前是免费档」就继续当 T0 用。",
-    "⏳ awaitingUserRate": "⏳ **等用户给数**：hy4-preview / hy3 / hy3-x 当前在 cb `/model` 面板上的倍率。用户 2026-09-11 反馈「hy4 好像开始收费了」，但这是 agent 拿不到的信息。⇒ 拿到后写成 `{'credit': x, 'verifiedOn': 'YYYY-MM-DD'}`；credit≠0 时 T0 自动关闭。⚠️ 在此之前**决策已经是安全的**：窗口过期 + 未核实 ⇒ 本来就走 T1，⛔ 不会误用。"
+    "⏳ awaitingUserRate": "⏳ **等用户给数**：hy4-preview / hy3 / hy3-x 当前在 cb `/model` 面板上的倍率。用户 2026-09-11 反馈「hy4 好像开始收费了」，但这是 agent 拿不到的信息。⇒ 拿到后写成 `{'credit': x, 'verifiedOn': 'YYYY-MM-DD'}`；credit≠0 时 T0 自动关闭。⚠️ 在此之前**决策已经是安全的**：窗口过期 + 未核实 ⇒ 本来就走 T1，⛔ 不会误用。",
+    "🔴 hy3Extended_20260915": "🔴 **`hy3` 免费延长至 `2026-09-30 23:59`**（用户 2026-09-15 告知）—— 此前记的是「08-31 止」，⇒ 旧数据会让 `promo_active('hy3')` 返回 False、**白白跳过一个还免费的档**、多付 T1 的 0.03x。⚠️ **hy3 与 hy4 是两条独立窗口** —— 本次延长只覆盖 hy3，hy4 的 `08-28~09-10` 仍是过期状态、费率未核 ⇒ 继续走 `t0_still_free` 那条路。✅ 2026-09-15 探活：hy3 9s · hy4-preview 6s · hy3-x 6s，三个都秒回。"
   },
   "⚠️ suspectedAlias_20260910": {
     "id": "volcengine-agent-plan/kimi-k3",
@@ -2644,5 +2649,13 @@
     "🔴 dispatchImpact": "🔴 **百炼根本没有可用的 `deepseek-v4-flash`（403）** ⇒ 它⛔不能当 T2 的池成员。我原先把 `-0731` 当成「同一模型在百炼上的 id」写进 `WALLET_PREF` —— **是错的**。⇒ T2 只剩**火山两套餐**（原先写「三池」是错的）。",
     "⚠️ unplaced": "⚠️ `deepseek-v4-flash-0731` 与 `deepseek-v4-pro-0813` 是**独立模型、尚未定档** ——⛔ 在有同口径盲评之前不得进任何档位的池。",
     "⭐ cheapIdentityProbe": "⭐ 廉价同一性探针：**同一句输入比 `prompt_tokens`**。差一个量级 ⇒ 不是同一套服务（可能是不同 tokenizer，也可能是服务端注入了不同的 system 脚手架）。⛔ 比模型自述可靠得多 —— 实测 `-0731` 自称 `gpt-4.1-2025-04-14`，纯属胡说。"
+  },
+  "⚠️ v4FlashSnapshotIdentity_20260915": {
+    "finding": "⚠️ **火山的 `deepseek-v4-flash` 实际解析到 `deepseek-v4-flash-ga-260731`**（agent-plan 端点直连，响应体 `model` 字段回显），与百炼的 `deepseek-v4-flash-0731` **同一个快照日期（0731）**；同一句输入两边 `prompt_tokens` 都是 **87**。",
+    "🔴 whatItChallenges": "🔴 这**部分动摇了 2026-09-11 把百炼移出 T2 池的依据**。当时的判断是「`-0731` 与 `deepseek-v4-flash` 是两种模型」——在**百炼内部**这条仍然成立（裸 id 是 403 无权限的另一个模型，实测没错）；但**跨 provider 看**，百炼的 `-0731` 很可能就是火山那个 `deepseek-v4-flash` 的同一快照。⇒ 若属实，T2 少了一个本来能用的钱包。",
+    "⛔ notProof": "⛔ **`prompt_tokens` 相同只是强提示，不是证明** —— 它同时受 tokenizer 和服务端注入的 system 脚手架影响，两家恰好都注入等量内容也说得通。",
+    "decision_20260915": "用户 2026-09-15 决定：**先别加回池**，要加得先有同口径盲评或更硬的同一性探针。⇒ 本条只记发现，⛔ 不改 WALLET_PREF、⛔ 不改 §3l 守卫。",
+    "⭐ harderProbeIdeas": "⭐ 更硬的探针候选：① 同一 prompt 取 **logprobs / 首 token 分布**；② 同一 seed 下的**确定性输出比对**；③ 问服务端要 **model card / 版本串**（火山回显已经给了 `-ga-260731`，百炼只回显 `-0731` ⇒ 让百炼也吐出 GA 串就能对齐）。",
+    "⚠️ crossHarnessTokenCountUseless": "⚠️ 顺带记一条方法：**跨 harness 比 `prompt_tokens` 无意义** —— cb 上同一句 `只输出:OK` 的 prompt_tokens 是 **25003**（它注入了巨量 system），火山 34 / 百炼 87。⇒ 这个指纹**只在同一 harness 内部**可比。"
   }
 }

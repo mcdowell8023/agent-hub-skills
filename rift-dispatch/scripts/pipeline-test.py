@@ -160,32 +160,32 @@ CASES = [
       task_type='core', want=dict(provider='pi/volcengine-coding', model='deepseek-v4-flash', channel='paseo')),
  # 阶梯类
  # 🔴 免费窗口已过但仍探活通过 ⇒ ⛔ 不当免费档用（费率未核），但**必须提示**
- #    实测背景：2026-09-11 记录的免费期已过，hy4-preview 仍 7s 秒回 ⇒ 延期或已计费，两头都不能赌。
+ #    实测背景：2026-09-11 记录的免费期已过，hy3 仍秒回 ⇒ 延期或已计费，两头都不能赌。
  dict(n='免费窗口过期但仍探活通过 ⇒ 落 T1 且提示费率待核', task_type='core', promo_ok=False,
       want=dict(upstream='codebuddy-code', model='deepseek-v4.1-flash',
-                t0_free_unverified=['hy4-preview', 'hy3'])),
+                t0_free_unverified=['hy3'])),
  # ⭐ 复核过费率（catalog 已更新）⇒ 照常当免费档用
  dict(n='费率已复核（3 天前）⇒ T0 照常可用', task_type='core', promo_ok=False,
-      credit_records={'hy4-preview': {'credit': 0.0, 'verifiedOn': '2026-09-07'}},
+      credit_records={'hy3': {'credit': 0.0, 'verifiedOn': '2026-09-07'}},
       when=DT(2026,9,10,15),
-      want=dict(upstream='codebuddy-code', model='hy4-preview', t0_free_unverified=[])),
+      want=dict(upstream='codebuddy-code', model='hy3', t0_free_unverified=[])),
  # 🔴🔴 核实结果是「已计费」⇒ T0 **必须关闭** —— ⛔ 这是改名前那版的洞：
  #    原 rate_reverified 只判「核过且够新」，不判「结果仍为 0」⇒ 用户如实写下 0.5x 之后，
  #    闸门返回 True，把一个比 T1 贵 16 倍的模型当免费档用。
  #    ⭐ 最坏的是：这个后果由「用户做了正确的事（去核实）」触发。
  dict(n='核实结果=已计费 0.5x ⇒ T0 关闭并报告，⛔ 不当免费用', task_type='core', promo_ok=False,
-      credit_records={'hy4-preview': {'credit': 0.5, 'verifiedOn': '2026-09-10'}},
+      credit_records={'hy3': {'credit': 0.5, 'verifiedOn': '2026-09-10'}},
       when=DT(2026,9,11,15),
-      want=dict(model='deepseek-v4.1-flash', t0_now_billed=[('hy4-preview', 0.5)])),
+      want=dict(model='deepseek-v4.1-flash', t0_now_billed=[('hy3', 0.5)])),
  # 🔴 反例：核实记录**太旧**（30 天前）⇒ ⛔ 不算复核 —— 这正是本次事故的形状：
  #    陈旧记录若算通过，已开始计费的型号会被当免费用（异构审 0911 #3 的「误开方向」）
  dict(n='核实记录过期（30 天前）⇒ ⛔ 不算复核，落 T1', task_type='core', promo_ok=False,
-      credit_records={'hy4-preview': {'credit': 0.0, 'verifiedOn': '2026-08-11'}},
+      credit_records={'hy3': {'credit': 0.0, 'verifiedOn': '2026-08-11'}},
       when=DT(2026,9,10,15),
-      want=dict(model='deepseek-v4.1-flash', t0_free_unverified=['hy4-preview', 'hy3'])),
+      want=dict(model='deepseek-v4.1-flash', t0_free_unverified=['hy3'])),
  # 🔴 反例：有 credit 但**没有 verifiedOn** ⇒ ⛔ 不算复核
  dict(n='credit 无 verifiedOn ⇒ ⛔ 不算复核', task_type='core', promo_ok=False,
-      credit_records={'hy4-preview': {'credit': 0.0}},
+      credit_records={'hy3': {'credit': 0.0}},
       want=dict(model='deepseek-v4.1-flash')),
  # ⭐ 反例：探活也不过 ⇒ ⛔ 不提示（没有「本可省钱」这回事）
  dict(n='窗口过期且探活不过 ⇒ ⛔ 不提示', task_type='core', promo_ok=False, probe_ok=False,
@@ -193,11 +193,12 @@ CASES = [
  # 🔴 T0 碰墙（探活不过）⇒ 必须落**同 provider** 的 T1，⛔ 不跨钱包（用户 2026-09-10）
  #    hy4 的形态是「允许你用但派发后静默停」，Paseo 抓不到明确错误 ⇒ 归 availability，
  #    ⛔ 不是「做砸」⇒ ⛔ 不许走质量/成本升档去换模型族。
- # 🔴 hy4 自己反复无响应 ⇒ T0 跳过它、试下一个免费档（hy3），⛔ 不是直接掉付费
- dict(n='hy4 连续无响应 2 次 ⇒ T0 跳到 hy3', task_type='core',
+ # 🔴 2026-09-15 T0 只剩 hy3 ⇒ 它自己反复无响应就没有下一个免费档了 ⇒ 落 T1
+ #    ⚠️ 原用例是「hy4 无响应 ⇒ 跳到 hy3」，前提已随 hy4 弃用而消失。
+ dict(n='hy3 连续无响应 2 次 ⇒ T0 落空，转 T1', task_type='core',
       extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
-                       'model': 'hy4-preview', 'shape': 'no_response', 'count': 2}],
-      want=dict(upstream='codebuddy-code', model='hy3')),
+                       'model': 'hy3', 'shape': 'no_response', 'count': 2}],
+      want=dict(upstream='codebuddy-code', model='deepseek-v4.1-flash')),
  # 🔴🔴 缺省必须偏向【旧行为】：不带 shape 的历史失败**照样算做砸**
  #    ⛔ 否则「质量/成本升档唯一入口」会被整条清零（异构审 2026-09-10 #1）。
  dict(n='不带 shape 的旧失败 ⇒ 仍算做砸（缺省 bad_output）', task_type='core', blockers={'algorithm'},
@@ -207,6 +208,8 @@ CASES = [
  dict(n='cb/v4.1 连续无响应 2 次 ⇒ 排除该落点，落同档 glm', task_type='core', blockers={'algorithm'},
       extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
                        'model': 'deepseek-v4.1-flash', 'shape': 'no_response', 'count': 2}],
+      unavailable={'volcengine-agent-plan/deepseek-v4.1-flash',
+                   'bailian-token-plan/deepseek-v4.1-flash'},   # 🔴 0915 T1 变三池，另两池也得堵上
       want=dict(model='glm-5.3-flash')),
  # ⭐ 反例：只无响应 1 次（未达 NO_RESPONSE_LIMIT）⇒ ⛔ 还不排除，照常落主落点
  dict(n='无响应仅 1 次 ⇒ ⛔ 不排除，仍落 cb/v4.1', task_type='core', blockers={'algorithm'},
@@ -215,7 +218,9 @@ CASES = [
       want=dict(upstream='codebuddy-code', model='deepseek-v4.1-flash')),
  # 🔴 免费期没开 ⇒ 压根没碰过 cb ⇒ ⛔ 不该有 affinity（同档替代回到轮换首位）
  dict(n='promo 未开 ⇒ 没碰过 cb ⇒ ⛔ 无 affinity', task_type='core', promo_ok=False,
-      unavailable={'codebuddy-code/deepseek-v4.1-flash'},
+      unavailable={'codebuddy-code/deepseek-v4.1-flash',
+                   'volcengine-agent-plan/deepseek-v4.1-flash',
+                   'bailian-token-plan/deepseek-v4.1-flash'},
       want=dict(upstream='volcengine-coding', model='glm-5.3-flash')),
  # 🔴 「没回复」⛔ 不算做砸 —— 两次 no_response 也不许把档位顶上去
  dict(n='no_response ⛔ 不计入做砸（仍停在 T1）', task_type='core', blockers={'algorithm'},
@@ -233,21 +238,27 @@ CASES = [
  #    ⇒ cb 主落点也拿不到时，同档替代仍优先落 **cb 的 glm**，⛔ 不跳火山
  dict(n='cb 接活后静默 ⇒ 同档替代仍留 cb（落 cb/glm，⛔ 不跳火山）', task_type='core', blockers={'algorithm'},
       extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
-                       'model': 'hy4-preview', 'shape': 'no_response'}],   # count=1 ⇒ 未进死点
-      unavailable={'codebuddy-code/deepseek-v4.1-flash'},
+                       'model': 'hy3', 'shape': 'no_response'}],   # count=1 ⇒ 未进死点
+      unavailable={'codebuddy-code/deepseek-v4.1-flash',
+                   'volcengine-agent-plan/deepseek-v4.1-flash',
+                   'bailian-token-plan/deepseek-v4.1-flash'},
       want=dict(upstream='codebuddy-code', model='glm-5.3-flash')),
  # 🔴 反例：只是**探活排队**（probe_queued）⇒ cb 一个请求都没成功吞过 ⇒ ⛔ 无 affinity
  dict(n='仅探活排队 ⇒ ⛔ 无 affinity（回到轮换首位火山）', task_type='core', blockers={'algorithm'},
       extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
-                       'model': 'hy4-preview', 'shape': 'probe_queued'}],
-      unavailable={'codebuddy-code/deepseek-v4.1-flash'},
+                       'model': 'hy3', 'shape': 'probe_queued'}],
+      unavailable={'codebuddy-code/deepseek-v4.1-flash',
+                   'volcengine-agent-plan/deepseek-v4.1-flash',
+                   'bailian-token-plan/deepseek-v4.1-flash'},
       want=dict(upstream='volcengine-coding', model='glm-5.3-flash')),
  # 🔴 反例：没试过 T0（能力类跳过 T0）⇒ ⛔ 不该有 affinity，池内回到正常轮换
  dict(n='未试 T0 ⇒ ⛔ 无 affinity，同档替代回到轮换首位（火山）', task_type='core',
-      blockers={'algorithm'}, unavailable={'codebuddy-code/deepseek-v4.1-flash'},
+      blockers={'algorithm'}, unavailable={'codebuddy-code/deepseek-v4.1-flash',
+                   'volcengine-agent-plan/deepseek-v4.1-flash',
+                   'bailian-token-plan/deepseek-v4.1-flash'},
       want=dict(upstream='volcengine-coding', model='glm-5.3-flash')),
  dict(n='T0 免费档', task_type='core',
-      want=dict(upstream='codebuddy-code', model='hy4-preview', thinking='high')),
+      want=dict(upstream='codebuddy-code', model='hy3', thinking='max')),
  dict(n='T1 起步（免费档被排除）', task_type='core', blockers={'algorithm'},
       want=dict(upstream='codebuddy-code', model='deepseek-v4.1-flash',
                 provider='codebuddy-code')),   # 🔴 0910 换 T1：v4.1-flash 只在 cb
@@ -303,7 +314,7 @@ CASES = [
  # ⭐ 原用例的意图（补出的默认 model 拿不到 ⇒ 停）保留，但要用**合法**的 provider×model 对
  dict(n='显式 cb 无 model，补出的默认 model 不可用 → 停止',
       provider='codebuddy-code', task_type='core',
-      unavailable={'codebuddy-code/hy4-preview', 'codebuddy-code/hy3',
+      unavailable={'codebuddy-code/hy3',
                    'codebuddy-code/deepseek-v4.1-flash'},
       no_landing=True),
  # 🔴 审查时机门控（2026-09-11）—— 契约：exit 79 = 轮不到，其余一律 fail-open
@@ -363,13 +374,13 @@ CASES = [
  dict(n='深夜 T1 档位不被冲掉', task_type='core', blockers={'algorithm'}, failed=0,
       when=DT(2026,9,9,23), want=dict(model='deepseek-v4.1-flash')),
  dict(n='深夜免费档仍是 T0', task_type='core', when=DT(2026,9,9,23),
-      want=dict(upstream='codebuddy-code', model='hy4-preview')),
+      want=dict(upstream='codebuddy-code', model='hy3')),
  # --free 新语义（0909：不再委派，只影响选档）
  dict(n='--free 无排除 → T0', free=True, task_type='core',
-      want=dict(upstream='codebuddy-code', model='hy4-preview')),
+      want=dict(upstream='codebuddy-code', model='hy3')),
  dict(n='--free 放宽能力类排除 → 仍走 T0', free=True, task_type='core',
       blockers={'algorithm', 'perf'},
-      want=dict(upstream='codebuddy-code', model='hy4-preview')),
+      want=dict(upstream='codebuddy-code', model='hy3')),
  dict(n='--free 遇物理不可用 → 停止', free=True, task_type='core',
       blockers={'quota_exhausted'}, free_unavailable=True),
  dict(n='--free 混合排除(含物理) → 停止', free=True, task_type='core',
@@ -377,7 +388,7 @@ CASES = [
  dict(n='--free + review → 冲突停止', free=True, task_type='review', conflict_free_review=True),
  dict(n='--free --provider codebuddy-code → 不冲突走 T0', free=True,
       provider='codebuddy-code', task_type='core',
-      want=dict(upstream='codebuddy-code', model='hy4-preview')),
+      want=dict(upstream='codebuddy-code', model='hy3')),
  # ⛔ 不带 --free 时能力类排除仍跳 T0（证明放宽只对 --free 生效）
  dict(n='无 --free 时能力类排除照旧跳 T0', task_type='core', blockers={'algorithm'},
       want=dict(model='deepseek-v4.1-flash')),
@@ -400,18 +411,38 @@ CASES = [
  #    🔴 这条专测异构审查抓到的漏：§5 落到 TIER_PEERS 时原先**根本不 append**，
  #       导致【档内换落点】对用户完全不可见。
  dict(n='T1 主池不可用 → 落同档 glm 并留痕', task_type='core', blockers={'algorithm'},
-      unavailable={'codebuddy-code/deepseek-v4.1-flash'},
+      unavailable={'codebuddy-code/deepseek-v4.1-flash',
+                   'volcengine-agent-plan/deepseek-v4.1-flash',
+                   'bailian-token-plan/deepseek-v4.1-flash'},
       want=dict(upstream='volcengine-coding', model='glm-5.3-flash',
                 availability_escalations=[],
                 tier_substitutions=[('deepseek-v4.1-flash', 'glm-5.3-flash', '本档所有池都拿不到')])),
+ # ⭐ 2026-09-15 T1 三池：cb 拿不到就换池，⛔ 不该掉到同档替代
+ dict(n='T1 cb 不可用 → 落火山 agent-plan，⛔ 不掉 peer', task_type='core', blockers={'algorithm'},
+      unavailable={'codebuddy-code/deepseek-v4.1-flash'},
+      want=dict(upstream='volcengine-agent-plan', model='deepseek-v4.1-flash',
+                tier_substitutions=[])),
+ dict(n='T1 cb+火山都不可用 → 落百炼', task_type='core', blockers={'algorithm'},
+      unavailable={'codebuddy-code/deepseek-v4.1-flash',
+                   'volcengine-agent-plan/deepseek-v4.1-flash'},
+      want=dict(upstream='bailian-token-plan', model='deepseek-v4.1-flash')),
+ # ⭐ 百炼这份带「限时夜间 5 折」⇒ 22:00-08:00 折扣排序把它提前
+ dict(n='深夜 T1 百炼打折 ⇒ 排到池首', task_type='core', blockers={'algorithm'},
+      when=DT(2026,9,15,23), want=dict(upstream='bailian-token-plan', model='deepseek-v4.1-flash')),
+ dict(n='白天 T1 无人打折 ⇒ 回轮换首位 cb', task_type='core', blockers={'algorithm'},
+      when=DT(2026,9,15,15), want=dict(upstream='codebuddy-code', model='deepseek-v4.1-flash')),
  dict(n='T1 全不可用 → 向上换档到 T2（⛔ 不是 T3 的 peer）', task_type='core', blockers={'algorithm'},
       unavailable={'codebuddy-code/deepseek-v4.1-flash',
+                   'volcengine-agent-plan/deepseek-v4.1-flash',
+                   'bailian-token-plan/deepseek-v4.1-flash',
                    'volcengine-coding/glm-5.3-flash', 'volcengine-agent-plan/glm-5.3-flash',
                    'codebuddy-code/glm-5.3-flash'},
       want=dict(model='deepseek-v4-flash', upstream='volcengine-coding',
                 availability_escalations=[('deepseek-v4.1-flash','deepseek-v4-flash','unavailable')])),
  dict(n='T1+T2 全不可用 → 一路升到 T3', task_type='core', blockers={'algorithm'},
       unavailable={'codebuddy-code/deepseek-v4.1-flash',
+                   'volcengine-agent-plan/deepseek-v4.1-flash',
+                   'bailian-token-plan/deepseek-v4.1-flash',
                    'volcengine-coding/glm-5.3-flash', 'volcengine-agent-plan/glm-5.3-flash',
                    'codebuddy-code/glm-5.3-flash',
                    'volcengine-coding/deepseek-v4-flash', 'volcengine-agent-plan/deepseek-v4-flash',
@@ -439,6 +470,8 @@ CASES = [
  # 🔴 连 LAST_RESORT 都没有才停止
  dict(n='付费档全不可用 + claude 也不可用 → 停止', task_type='core', blockers={'algorithm'},
       unavailable={'codebuddy-code/deepseek-v4.1-flash',
+                   'volcengine-agent-plan/deepseek-v4.1-flash',
+                   'bailian-token-plan/deepseek-v4.1-flash',
                    'volcengine-coding/glm-5.3-flash', 'volcengine-agent-plan/glm-5.3-flash',
                    'codebuddy-code/glm-5.3-flash',
                    'volcengine-coding/deepseek-v4-flash', 'volcengine-agent-plan/deepseek-v4-flash',
