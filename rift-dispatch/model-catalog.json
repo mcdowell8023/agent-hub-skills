@@ -1,5 +1,5 @@
 {
-  "version": "6.36.1",
+  "version": "6.37.0",
   "lastUpdated": "2026-09-11",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
@@ -2350,11 +2350,10 @@
   },
   "poolQuotaState": {
     "_note": "⚠️ **运行时状态，⛔ 不是规则** —— 会过期。判据永远是**实际探活**。",
-    "_measuredAt": "2026-09-15",
-    "bailian-token-plan": "🔴 **整套餐本周额度耗尽** —— 5 个模型同一条 `429 Your token-plan 1-week quota has been exhausted`，**09-16 09:32 UTC（北京 17:32）重置**。⇒ 是**套餐级**不是单模型级。",
-    "🔴 t3CurrentlyDown": "🔴 **连带：T3（`qwen3.8-max` 单池在百炼）当下没有落点** ⇒ 升到 T3 会直接跳 T4（1.62x）。这正是 `🔴 ladderT3Change_20260910.knownWeakness` 记的那条单池风险，2026-09-15 真的咬到了。",
+    "_measuredAt": "2026-09-17",
+    "bailian-token-plan": "✅ **额度已恢复**（2026-09-17 直连 200）—— 09-16 09:32 UTC 那次重置已过。⚠️ 是**一周**配额，⛔ 不是月配额 ⇒ 会再次耗尽。",
     "⭐ quotaErrorSignature": "⭐ `429` + `token-plan 1-week quota has been exhausted` + **重置时间**；⛔ 与 `403 Access to model denied`（无权限）和 `404 Model not exist`（不存在）是三回事。",
-    "codebuddy-code": "✅ 有量（2026-09-15 hy3 / v4.1-flash 实跑均成功）",
+    "codebuddy-code": "⚠️ **`hy3` 撞 429**：`您的使用量已超出频率限制，将在 2026-09-17 18:43:13 UTC+8 重置`。⭐ 同 provider 的 `deepseek-v4.1-flash` **照常可用** ⇒ 🔴 **单模型限流 ⛔ 不等于通道故障**。",
     "volcengine-agent-plan": "✅ 有量（直连 200）",
     "volcengine-coding": "⚠️ 09-10 曾 429（月额度，09-20 23:59 重置）⇒ 当前未复测"
   },
@@ -2657,5 +2656,16 @@
     "decision_20260915": "用户 2026-09-15 决定：**先别加回池**，要加得先有同口径盲评或更硬的同一性探针。⇒ 本条只记发现，⛔ 不改 WALLET_PREF、⛔ 不改 §3l 守卫。",
     "⭐ harderProbeIdeas": "⭐ 更硬的探针候选：① 同一 prompt 取 **logprobs / 首 token 分布**；② 同一 seed 下的**确定性输出比对**；③ 问服务端要 **model card / 版本串**（火山回显已经给了 `-ga-260731`，百炼只回显 `-0731` ⇒ 让百炼也吐出 GA 串就能对齐）。",
     "⚠️ crossHarnessTokenCountUseless": "⚠️ 顺带记一条方法：**跨 harness 比 `prompt_tokens` 无意义** —— cb 上同一句 `只输出:OK` 的 prompt_tokens 是 **25003**（它注入了巨量 system），火山 34 / 百炼 87。⇒ 这个指纹**只在同一 harness 内部**可比。"
+  },
+  "probeTool": {
+    "path": "rift-dispatch/scripts/probe-models.sh（`cb-probe.sh` 为兼容 shim）",
+    "🔴 why": "🔴 **Paseo 不透传 HTTP 状态码** —— 模型被 429 限流时，Paseo 侧只表现为「新会话零产出(updateCount==1)」或「turn 到头唤不醒(activeTurn:null)」，**形态与 provider 稳定性故障一模一样**，而两者处置**方向相反**。",
+    "⭐ exitCodes": {
+      "0": "全部可用",
+      "1": "部分不可用 ⇒ ⚠️ 正常，换模型/换池",
+      "2": "全部不可用**且样本≥2** ⇒ 才怀疑通道"
+    },
+    "⭐ sampleGate": "⭐ exit 2 带**样本量门槛**：只探 1 个就失败 ⇒ 降级为 1。n=1 时「全部失败」就是「这一个失败」，⛔ 推不出通道问题。",
+    "⚠️ bashPitfall": "⚠️ 写它时又踩了「**中文紧跟变量必须 `${VAR}`**」——全角字符会被并进变量名，`set -u` 下直接炸 unbound variable。memory 里记着这条，还是犯了。"
   }
 }

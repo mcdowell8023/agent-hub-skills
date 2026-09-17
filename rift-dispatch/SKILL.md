@@ -32,6 +32,49 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 
 ⚠️ **派发认 model id，⛔ 不认 label**：`hy4-preview`(0.00x) 与 `hy4-preview-x`(**0.29x**) 的 label 完全相同。
 
+🔴 **`probe_ok(m)` 的可执行实现 —— ⛔ 不是抽象概念，是一条命令**（2026-09-17 补）：
+
+```bash
+S=~/.claude/skills/rift-dispatch/scripts
+bash $S/probe-models.sh                              # 探当前阶梯默认落点（跨 provider）
+bash $S/probe-models.sh codebuddy-code/hy3 …         # 指定 provider/model
+bash $S/probe-models.sh --all                        # 全部已知落点
+bash $S/cb-probe.sh hy3                              # 兼容 shim：只探 cb
+```
+
+⭐ **分流 —— 不同 provider 拿得到的证据强度不同，⛔ 别一套办法打天下**：
+
+| provider | 手段 | 能拿到什么 |
+|---|---|---|
+| `codebuddy-code` | cb CLI | ⚠️ **也不给状态码**，只能判 stdout 是不是 JSON；但 429 正文**带重置时间** |
+| `volcengine-*` / `bailian-*` | **直连端点** | ⭐ **真实 HTTP 状态码** ⇒ `429`(额度) / `403`(无权限) / `404`(不存在) **三态分得开** |
+| `github-copilot` | pi | 没有可直连的 key ⇒ 只能判正文 |
+
+🔴 **退出码是三档，⛔ 不是二值**：
+
+| exit | 含义 | 该做什么 |
+|---|---|---|
+| `0` | 全部可用 | 照常派 |
+| `1` | **部分**不可用 | ⚠️ **这是正常状态** —— 换个模型/换个池即可，⛔ 别据此怀疑通道 |
+| `2` | **全部**不可用（**且样本 ≥2**） | 才该怀疑通道 / 凭据 / 网络 |
+
+⭐ **`2` 带样本量门槛**：只探了 1 个就失败 ⇒ 降级成 `1` 并明说「不足以判断通道」——
+n=1 时「全部失败」就是「这一个失败」，⛔ 推不出通道有问题。
+📌 与下方那条判据同源：**断言「X 类不可用」前必须测过该类里多个实例**。
+
+🔴🔴 **为什么必须走 CLI 探活：Paseo 的 codebuddy provider ⛔ 不透传 HTTP 状态码。**
+模型被 429 限流时，Paseo 侧只表现为 **「新会话零产出（`updateCount == 1`）」** 或
+**「turn 到头唤不醒（`activeTurn: null`）」** —— 形态与 provider 稳定性故障**完全一样**，
+而两者的处置**方向相反**：稳定性问题要换 provider，配额问题只要换模型或等重置。
+
+⚠️ 实测代价（2026-09-17）：我把这两种形态误诊成「codebuddy 新会话建不起来」，
+据此 kill 了两个**有产出**的 agent，换来两个零产出的。真因是 hy3 撞 429，
+一条 `codebuddy -p --model hy3` 就能看见 —— 报错正文里**连重置时间都给了**（`18:43:13 UTC+8`）。
+
+⇒ **固化**：派 codebuddy 前先探活；agent 出现「零产出 / 唤不醒」时，
+**第一件事是探活那个模型，⛔ 不是直接归因到 provider 或重派**。
+📌 同族判据在 MEMORY：「断言「X 类不可用」前必须测过该类里多个实例」。
+
 ⚠️ **免费档时间线**（🔴 **两条独立的窗口，⛔ 别混成一条**）：
 
 | 型号 | 免费期 | 当前状态 |
