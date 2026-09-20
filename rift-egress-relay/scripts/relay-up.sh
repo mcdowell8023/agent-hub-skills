@@ -46,8 +46,13 @@ for _ in $(seq 1 30); do
 done
 
 if [ -z "$(port_pid "$SOCKS_PORT")" ]; then
-  echo "[relay-up] 🔴 SOCKS did not come up; check $RUN_DIR/socks.log" >&2
-  echo "           常见原因：中继机关机/休眠，或 RELAY_HOST 写错" >&2
+  echo "[relay-up] 🔴 SOCKS 未起来。日志: $RUN_DIR/socks.log" >&2
+  echo "           分诊（⛔ 不要盲目重试，按顺序判断）:" >&2
+  echo "           1) 中继机在网络层可见吗？看不见 ⇒ 关机/休眠，需要人去开机" >&2
+  echo "           2) 可见但 22 不通 ⇒ 机器活着但 sshd 没跑。SSH 若是唯一入口，" >&2
+  echo "              agent 自己进不去，必须请人走带外通道（见你的基础设施清单/恢复预案）" >&2
+  echo "           3) 22 通但认证失败 ⇒ 公钥问题，见 SKILL.md §4" >&2
+  echo "           4) RELAY_HOST 是否写错: ${RELAY_HOST:-<未设置>}" >&2
   exit 1
 fi
 
