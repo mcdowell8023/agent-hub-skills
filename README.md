@@ -18,6 +18,7 @@ Personal Agent Hub 的核心 skill 集合。提供跨设备 Agent 交接、浏�
 | [rift-dispatch](rift-dispatch/) | 智能任务派发：任务分类 → 选模型 → 选通道（Paseo 子会话 / `pi -p` CLI）<br>⚠️ 原 `smart-dispatch`，2026-08-27 更名，git 历史保留 |
 | [rift-reap](rift-reap/) | 归档自己派出去的子会话（`rift-dispatch` 的反向）<br>⛔ 硬边界：只动 `parent-agent-id == 自己` 的，顶层会话与别人的子会话一律不碰 |
 | [rift-integration-qa](rift-integration-qa/) | QA 统一入口：TDD · 三层一致(DB↔API↔FE) · 契约验证 · 假绿检测 · 真机回归 · 部署后验证 · 视觉验证<br>⚠️ 原 `integration-qa`，2026-08-27 更名 |
+| [rift-egress-relay](rift-egress-relay/) | 本机到某个端点被网络层拦截时，借道另一台联网机器做 egress 中继<br>⭐ 既有工具链**不改代码**，导出 `HTTPS_PROXY` 即恢复；凭据与私钥不离开本机 |
 
 
 ## 安装 —— 🔴 软链到本仓库，不要 cp
@@ -31,7 +32,7 @@ git clone https://github.com/mcdowell8023/agent-hub-skills.git \
 
 REPO=~/AgentWorkspace/projects/skills/agent-hub-skills
 for s in hub-handoff hub-comm browser-preflight db-connect \
-         rift-dispatch rift-reap rift-integration-qa; do
+         rift-dispatch rift-reap rift-integration-qa rift-egress-relay; do
   for d in ~/.claude/skills ~/.agents/skills ~/.config/opencode/skills ~/.codebuddy/skills; do
     [ -d "$d" ] || continue
     rm -rf "$d/$s"
