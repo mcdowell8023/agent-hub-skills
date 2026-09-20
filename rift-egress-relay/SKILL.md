@@ -67,14 +67,18 @@ botocore 只认 **HTTP CONNECT** 代理。
 本机工具 --HTTPS_PROXY--> CONNECT代理:18888 --> SOCKS:1080 --ssh--> 中继机 --> 目标端点
 ```
 
-### 启动（两个常驻进程）
+### 启动 / 关闭（幂等，可反复开关）
 
 ```bash
 export RELAY_HOST='<user>@<relay-host>'      # ⛔ 不写死在脚本里
 
-bash   scripts/keep_socks.sh                 # SOCKS 隧道 + 自动重连（后台跑）
-python3 scripts/connect_via_socks.py 1080 18888   # CONNECT 垫片（后台跑）
+bash scripts/relay-up.sh      # 起：SOCKS 隧道（自动重连）+ CONNECT 垫片
+bash scripts/relay-down.sh    # 关：按正确顺序停掉，并验证端口确实释放
 ```
+
+`relay-up.sh` **幂等**：已经起着时不重复启动，只打印现有 pid——所以怀疑掉线时直接重跑即可。
+两个进程用 `nohup` 脱离当前 shell，调用结束后继续存活；pid 文件与日志在
+`${TMPDIR}/rift-egress-relay/`（可用 `RIFT_RELAY_RUN_DIR` 覆盖）。
 
 ### 使用
 
@@ -144,15 +148,30 @@ ssh <user>@<newhost> 'curl -sS -o /dev/null -w "%{http_code}\n" --max-time 12 ht
 | ⚠️ `cmd` 不认 `;` 分隔符 | `hostname; whoami` 报 hostname 参数错误 | 用 `powershell -Command` 或 `-EncodedCommand` |
 | ⛔ `nc -z` 验隧道必假阳性 | 本地 listener 无条件 accept，远端不通也显示成功 | 用协议级探针或真实 API 调用验通 |
 
-## 6. 收尾（⚠️ 网络恢复后必须做）
+## 6. 关闭（⚠️ 网络恢复后必须做）
 
 ```bash
-lsof -nP -iTCP:1080  -sTCP:LISTEN    # SOCKS 守护
-lsof -nP -iTCP:18888 -sTCP:LISTEN    # CONNECT 垫片
+bash scripts/relay-down.sh
+unset HTTPS_PROXY          # ⚠️ 脚本管不到你当前 shell 里的变量
 ```
 
-kill 对应 PID。`keep_socks.sh` 是循环脚本，需连同其 shell 一起结束，否则会不断重连。
-⚠️ 不关掉的话，所有走 `HTTPS_PROXY` 的流量会继续绕远路。
+### 🔴 为什么不能随手 kill
+
+- **顺序**：必须**先杀守护循环，再杀 ssh 隧道**。反过来做，守护会在 2 秒后把隧道重新拉起来，
+  表现成「怎么都关不掉」。
+- **定位方式**：⛔ 不要用 `pkill -f` 这类全局模式——它按命令行匹配，可能误杀无关进程。
+  `relay-down.sh` 优先用 pid 文件，退化时才按脚本名定位，且**每个 PID 在发信号前都会打印出来**。
+- **判据**：以「两个端口都已释放」作为成功判据并据此设退出码。
+  端口没释放 ⇒ 下次 `relay-up.sh` 会因 `EADDRINUSE` 起不来。
+
+### 关掉之后还能再起来吗
+
+能，且已实测：`relay-down` → 两端口释放 → `relay-up` → 端到端调用恢复，来回两轮均通过。
+
+- `relay-up.sh` **不依赖上次的残留状态**：靠「端口是否在监听」判断死活，不信任可能过期的 pid 文件
+- `relay-down.sh` 退出前清掉 pid 文件，不留污染
+- ⚠️ 唯一的外部前提是**中继机得开着**。它关机/休眠时 `relay-up.sh` 会等待后超时退出、
+  提示去看 `socks.log`，⛔ 不会静默假装成功
 
 ## 相关
 
