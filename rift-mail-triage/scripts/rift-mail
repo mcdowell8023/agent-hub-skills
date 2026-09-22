@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# rift-mail — macOS 入口：凭据存/取走 Keychain，业务逻辑交给同目录的 Python 脚本。
+#
+# 这是本 skill 与原始 Windows 版本(set_credential.ps1 + DPAPI)的唯一实质差异：
+# DPAPI 换成了 macOS 钥匙串(security 命令)，其余脚本(mail_lib.py 等)未改逻辑。
+#
+# 用法:
+#   rift-mail setup [mailbox]        交互式录入邮箱 + 客户端授权码，存入钥匙串并验证登录
+#   rift-mail selfcheck              连通性自检（不改任何邮件状态）
+#   rift-mail fetch --days 7 --out state/inbox.json
+#   rift-mail draft --json drafts/xxx.json
+#   rift-mail dedupe [--apply]
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SERVICE="rift-mail-triage"
+CONFIG_FILE="$SCRIPT_DIR/config.json"
+
+_mailbox_default() {
+  [ -f "$CONFIG_FILE" ] || return 0
+  python3 -c "
+import json
+try:
+    print(json.load(open('$CONFIG_FILE')).get('mailbox_default',''))
+except Exception:
+    pass
+" 2>/dev/null || true
+}
+
+cmd_setup() {
+  local mailbox="${1:-}"
+  [ -z "$mailbox" ] && mailbox="$(_mailbox_default)"
+  if [ -z "$mailbox" ]; then
+    read -r -p "Mailbox address (e.g. you@example.com): " mailbox
+  fi
+  if [[ ! "$mailbox" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; then
+    echo "ERROR: '$mailbox' 不是合法邮箱地址，未保存任何内容。" >&2
+    exit 1
+  fi
+
+  echo
+  echo "=== rift-mail 凭据设置 ==="
+  echo
+  echo "邮箱: $mailbox"
+  echo "  （可用 'rift-mail setup other@x.com' 覆盖，或在 config.json 设 mailbox_default）"
+  echo
+  echo "现在粘贴该邮箱的【客户端授权码】——不是登录密码。"
+  echo "  163/126/企业邮：登录 qiye.163.com（或对应网页版）-> 设置 -> 客户端设置/IMAP"
+  echo "  -> 开启 IMAP -> 生成授权码。"
+  echo "  Outlook/Gmail 等：账号安全设置里的「应用专用密码」。"
+  echo "  输入不回显，属正常。"
+  echo
+  read -r -s -p "客户端授权码: " apppass
+  echo
+  if [ -z "$apppass" ]; then
+    echo "输入为空，已中止，未保存任何内容。" >&2
+    exit 1
+  fi
+  if [[ "$apppass" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; then
+    echo "ERROR: 这看起来是邮箱地址，不是授权码。已中止，未保存。" >&2
+    exit 1
+  fi
+
+  # -U：已存在同 account+service 的项就地更新，避免重复项导致后续 find 出错
+  security add-generic-password -a "$mailbox" -s "$SERVICE" -w "$apppass" -U
+  unset apppass
+
+  echo
+  echo "已存入 macOS 钥匙串（service=$SERVICE, account=$mailbox）。"
+  echo "验证登录中..."
+  echo
+  MAIL_USER="$mailbox" \
+    MAIL_PASS="$(security find-generic-password -a "$mailbox" -s "$SERVICE" -w)" \
+    python3 "$SCRIPT_DIR/selfcheck.py"
+}
+
+_load_creds() {
+  local mailbox="${MAIL_USER:-}"
+  [ -z "$mailbox" ] && mailbox="$(_mailbox_default)"
+  if [ -z "$mailbox" ]; then
+    echo "ERROR: 未指定邮箱。先跑 'rift-mail setup <mailbox>'，或在 config.json 设 mailbox_default。" >&2
+    exit 1
+  fi
+  local pass
+  if ! pass="$(security find-generic-password -a "$mailbox" -s "$SERVICE" -w 2>/dev/null)"; then
+    echo "ERROR: 钥匙串里找不到 $mailbox 的凭据。先跑 'rift-mail setup $mailbox'。" >&2
+    exit 1
+  fi
+  export MAIL_USER="$mailbox"
+  export MAIL_PASS="$pass"
+}
+
+case "${1:-}" in
+  setup)
+    shift
+    cmd_setup "${1:-}"
+    ;;
+  selfcheck)
+    shift
+    _load_creds
+    python3 "$SCRIPT_DIR/selfcheck.py" "$@"
+    ;;
+  fetch)
+    shift
+    _load_creds
+    python3 "$SCRIPT_DIR/fetch_mail.py" "$@"
+    ;;
+  draft)
+    shift
+    _load_creds
+    python3 "$SCRIPT_DIR/save_draft.py" "$@"
+    ;;
+  dedupe)
+    shift
+    _load_creds
+    python3 "$SCRIPT_DIR/dedupe_drafts.py" "$@"
+    ;;
+  *)
+    cat <<'USAGE'
+用法: rift-mail <setup|selfcheck|fetch|draft|dedupe> [参数...]
+
+  setup [mailbox]   交互式录入邮箱 + 客户端授权码到 macOS 钥匙串（首次必做）
+  selfcheck         连通性自检：登录、定位草稿箱、数一下近 7 天邮件量
+  fetch --days 7 --out state/inbox.json [--body-limit N] [--max-messages N]
+  draft --json drafts/xxx.json
+  dedupe [--apply] [--include-foreign]
+
+详细说明见同目录 SKILL.md。
+USAGE
+    exit 1
+    ;;
+esac

@@ -1,0 +1,11 @@
+# 真实配置与凭据 —— 绝不提交
+scripts/config.json
+
+# 运行产物 —— 含真实邮件内容/收件人，绝不提交
+scripts/state/
+scripts/drafts/
+scripts/logs/
+*.output.json
+
+__pycache__/
+*.pyc

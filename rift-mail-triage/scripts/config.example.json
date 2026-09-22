@@ -1,0 +1,18 @@
+{
+  "_comment": "复制本文件为 config.json 后按需修改。config.json 不提交/不分发，只留在你本机。",
+
+  "imap_host": "imap.qiye.163.com",
+  "imap_port": 993,
+  "smtp_host": "smtp.qiye.163.com",
+  "smtp_port": 465,
+
+  "_comment_provider": "上面两组默认值对应网易企业邮(163/126同源)。换成 Outlook/Gmail/其他企业邮时改这四项；部分服务商(如163/126)登录后必须额外发送 IMAP ID 命令才能 SELECT，脚本已内置该兼容逻辑，其余服务商一般不需要、留着也无害。",
+
+  "client_id_contact": "you@example.com",
+
+  "mailbox_default": "",
+  "_comment_mailbox": "rift-mail 的默认邮箱地址，留空则每次手动传参或交互填写。",
+
+  "output_root": "~/mail-triage-output",
+  "_comment_output": "建议的落盘根目录（fetch/draft 的 --out/--json 参数按此约定组织子目录），仅作文档参考，脚本不会读取这个字段。"
+}
