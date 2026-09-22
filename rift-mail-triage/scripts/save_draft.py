@@ -12,6 +12,7 @@
   "subject":     "Re: ...",
   "body":        "纯文本正文（实际发送的内容）",
   "body_html":   "<html>...</html>",     // 可选，给了就发多部分(text/plain + text/html)
+  "from_name":   "张三",                  // 可选，发件人显示名；地址恒为登录账号，不可伪造
   "body_zh":     "中文版正文",            // body 是英文时必填，仅供本地查看
   "in_reply_to": "<原邮件 Message-ID>",   // 可选，挂线程用
   "references":  "<...> <...>"           // 可选
@@ -107,7 +108,9 @@ def export_chinese(json_path, d):
 
 def build_message(d, sender):
     msg = EmailMessage()
-    msg["From"] = sender
+    # from_name 只改显示名，地址恒为已认证账号 —— 不给伪造发件人留口子
+    from_name = (d.get("from_name") or "").strip()
+    msg["From"] = f"{from_name} <{sender}>" if from_name else sender
     msg["To"] = d["to"]
     if d.get("cc"):
         msg["Cc"] = d["cc"]
@@ -168,9 +171,14 @@ def main():
     with open(args.json, "r", encoding="utf-8") as f:
         d = json.load(f)
 
-    for k in ("to", "subject", "body"):
+    for k in ("subject", "body"):
         if not d.get(k):
             raise SystemExit(f"[draft] 缺字段: {k}")
+    # to 允许为空：新起草（非回复）的邮件常常还没定收件人，草稿本就可以不完整。
+    # 但要显著告警，避免人以为收件人已填好就直接点发送。
+    if not d.get("to"):
+        print("[draft] !! 收件人为空，草稿将以「无收件人」写入，发送前必须手动补全")
+        d["to"] = ""
 
     sender, _ = get_credentials()
     msg = build_message(d, sender)
