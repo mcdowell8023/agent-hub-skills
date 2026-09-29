@@ -21,8 +21,8 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 
 | # | 规则 | 落点 |
 |---|---|---|
-| 1 | **便宜优先，逐级升档** | 免费档（**只有 `hy3`**，0.00x，思考档取 `max`）先试 → 付费从 **`deepseek-v4.1-flash`（0.03x）** 起步 → `deepseek-v4-flash`（0.17x）→ `qwen3.8-max` → `kimi-k3-1`（1.62x）。⛔ **每一级【质量/成本升档】的唯一入口是「上一档已在本任务做砸过一轮」**，理由里要写明哪一轮、砸在哪。写不出来不许升。⚠️ 这条⛔**不管【可用性换档】**——模型在所有 provider 都拿不到时允许向上换档（必须报告），见 §2 第 5 段。⚠️ 例外：`algorithm` / `perf` 两类从 `deepseek-v4-flash` 起步（⚠️ 依据比的是 v4-flash **对 glm**，⛔ 没比过现在的 T1 ⇒ **待补测**）。🔴 并发两类已改回 T1 起步 —— 4 臂拉丁方并发题 v4.1-flash 37.5 > v4-flash 30.5 |
-| 2 | 🔴 **按「要不要看得见」分通道，不是按工具分** | 🔴 **开发实施类 + 大审查 → Paseo；短任务 / 短审查 → `pi -p`**。判据是**规模**不是任务类型——Paseo 能看进度、中途干预、拿结构化状态；`pi -p` 跑完即退不堆 serve。⛔ **开发任务和大审查都不要走 `pi -p`**：它不进 Paseo agent 列表，你看不见也打不断（实测大审查走 `pi -p` 跑满 35 分钟零输出） |
+| 1 | **便宜优先，逐级升档** | 免费档（**只有 `hy3`**，0.00x，思考档取 `max`）先试 → 付费从 **`deepseek-v4.1-flash`**（火山两套餐 + 百炼；🔴 **cb 上改用同档 `glm-5.3-flash` 0.06x** —— 09-24 cb 的 v4.1 涨到 0.11x）起步 → `deepseek-v4-flash`（0.17x）→ `qwen3.8-max` → `kimi-k3-1`（1.62x）。⛔ **每一级【质量/成本升档】的唯一入口是「上一档已在本任务做砸过一轮」**，理由里要写明哪一轮、砸在哪。写不出来不许升。⚠️ 这条⛔**不管【可用性换档】**——模型在所有 provider 都拿不到时允许向上换档（必须报告），见 §2 第 5 段。⚠️ 例外：`algorithm` / `perf` 两类从 `deepseek-v4-flash` 起步（⚠️ 依据比的是 v4-flash **对 glm**，⛔ 没比过现在的 T1 ⇒ **待补测**）。🔴 并发两类已改回 T1 起步 —— 4 臂拉丁方并发题 v4.1-flash 37.5 > v4-flash 30.5 |
+| 2 | 🔴 **按「要不要看得见」分通道，不是按工具分** | 🔴 **开发实施类 + 大审查 → Paseo；短任务 / 短审查 → `pi -p`**。判据是**规模**不是任务类型——Paseo 能看进度、中途干预、拿结构化状态；`pi -p` 跑完即退不堆 serve。⛔ **开发任务和大审查都不要走 `pi -p`**：它不进 Paseo agent 列表，你看不见也打不断（实测大审查走 `pi -p` 跑满 35 分钟零输出 ⚠️ 09-24 起**疑似 stdin 挂死**而非规模问题，见 §3.2b —— 当时未查 stdin，未复测） |
 | 3 | 🔴 **先判失败形态，再决定换什么** | **有产出但不合格** = `bad_output` ⇒ 走【质量/成本升档】（可换模型族）。**没产出**（静默停 / 唤不醒 / 探活不过）= `no_response` ⇒ 走【可用性】：**留在同 provider 降到下一档**，⛔ 不算做砸、⛔ 不跨钱包。⚠️ hy4 经常「碰墙」——允许你用但派发后静默停，**Paseo 抓不到明确错误** ⇒ ⛔ 别把它当成模型能力问题 |
 | 4 | 🔴 **审查的硬约束是「异构」** | ⛔ **评审模型族 ≠ 实施模型族**（全局红线 #8），是**不变量**，不是针对某个模型的禁令。🔴 **含主会话：主会话就是 Claude，我自己写的东西不得派 `claude/*` 去审**。族对照表见 routing §5。⭐ **未显式指定时**默认 **`github-copilot/gpt-5.5`**（⛔ 不是「不可覆盖」；显式换 provider 会报冲突）；⚠️ **通道另按规模定**：大审查走 Paseo `pi/github-copilot/gpt-5.5`，短审查走 `pi -p`（⛔ prompt ≤200 字符） |
 
@@ -30,7 +30,7 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 **可用性换档**（所有 provider 都拿不到）只许**向上**、必须**报告**，到顶仍拿不到 ⇒ `claude/claude-sonnet-5@max`
 （🔴 **LAST_RESORT**：整套钱包体系就是为了省 Claude 额度，走到这里必须显著告知）。
 
-⚠️ **派发认 model id，⛔ 不认 label**：`hy4-preview`(0.00x) 与 `hy4-preview-x`(**0.29x**) 的 label 完全相同。
+⚠️ **派发认 model id，⛔ 不认 label**：`hy3`(0.00x) 与 `hy3-x`(**0.05x**) 的 label 都是「Hy3」（09-24 面板）。
 
 🔴 **`probe_ok(m)` 的可执行实现 —— ⛔ 不是抽象概念，是一条命令**（2026-09-17 补）：
 
@@ -81,7 +81,7 @@ n=1 时「全部失败」就是「这一个失败」，⛔ 推不出通道有问
 |---|---|---|
 | `hy3` | 🔴 **延长至 `2026-09-30 23:59`**（用户 2026-09-15 告知；此前记的是「08-31 止」） | ✅ 2026-09-15 探活 9s 秒回 |
 | ~~`hy4-preview`~~ | `08-28 ~ 09-10` 已过期 | 🔴 **2026-09-15 用户弃用：不稳定** ⇒ ⛔ 已移出 T0，不再考虑 |
-| ~~`hy3-x`~~ | ⛔ 本来就不是免费档（**0.05x**，比 T1 的 0.03x 还贵） | 🔴 **无派发角色** ⇒ ⛔ 不考虑 |
+| ~~`hy3-x`~~ | ⛔ 本来就不是免费档（**0.05x**）。⚠️ 09-24 起它比 cb 上的 T1 落点 glm-5.3-flash(0.06x) 还便宜一点，但⛔**不同档**（同轮 08-21 盲评 hy3 84 < glm 91，差距远大于位置偏好 2.5）⇒ 先选档位再挑便宜，轮不到它 | 🔴 **无派发角色** ⇒ ⛔ 不考虑 |
 
 ⚠️ 都是**每日赠额**⛔非连续免费期 —— **不回复 = 当日赠额已用完**，须主动换。
 🔴 **判据永远是探活 + `promo_active`，⛔ 不是面板上的 `x0.00`** —— 那是价格；
@@ -150,7 +150,9 @@ want_free = False          # 第 2 段按 args.free/explicit_model 定值，⛔ 
 
 WHITELIST = {                                   # P0，routing §1
   'codebuddy-code':   ['hy4-preview', 'hy3', 'hy3-x', 'glm-5.3-flash',
-                       'deepseek-v4.1-flash',    # ⭐ T1 主落点，**0.03x**（⚠️ 同日从 0.06x 降下来）
+                       'deepseek-v4.1-flash',    # ⚠️ 2026-09-24 起⛔不再是 cb 的 T1 自动落点——
+                       # 涨到 **0.11x**（0.06x→0.03x→0.11x，用户截图实测），反超 glm-5.3-flash(0.06x)。
+                       # 仍在白名单内⇒可显式 --model 派发，只是不再自动选中（见 WALLET_PREF 同名条目）。
                        'kimi-k3-1'],
   # 🔴 2026-09-10 用户停用 `deepseek-v4-pro`：⛔ agent 不得自行派发（见 BLOCKED_MODELS）。
   # 🔴 **2026-09-10 换代**：cb 上 `deepseek-v4-flash` → `deepseek-v4.1-flash`，
@@ -249,13 +251,19 @@ PI_HOSTED = ('volcengine-coding', 'volcengine-agent-plan', 'volcengine-chat',
              'bailian-token-plan', 'github-copilot')   # ⛔ 京东已停用
 LADDER = [('deepseek-v4.1-flash', 0.03), ('deepseek-v4-flash', 0.17),
           ('qwen3.8-max', None),     ('kimi-k3-1', 1.62)]      # T1..T4
+# 🔴 2026-09-24 cb 上 v4.1-flash 涨到 **0.11x**（上面 0.03 是 09-10 定档时的 cb 价，⛔ 已过时）。
+#    ⚠️ 这列**纯文档**（逻辑只读 LADDER[i][0]），⛔ 不驱动任何选择 —— 与 T2 的 0.17 同一处境
+#    （T2 早已不落 cb，这个数也还留着作量级参照）。T1 本身不变：火山两套餐 + 百炼三池照常，
+#    ⇒ 改的是【cb 这一池还要不要】，⛔ 不是档位。见 WALLET_PREF['deepseek-v4.1-flash']。
+# 📜 **09-10 定档时的历史依据**（⚠️ 下面两条已失效，别当现行依据读：价格那条 09-24 失效——cb 涨到 0.11x；
+#    「只在 cb」那条 09-15 起失效——现为火山两套餐 + 百炼三池。**档位决定本身仍成立**：能力依据未变。）
 # 🔴 2026-09-10 T1 由 `glm-5.3-flash` 换成 `deepseek-v4.1-flash`（用户决定）。
-#    ⭐ 依据：**0.03x —— glm 的一半价**（⚠️ 同日从 0.06x 降下来的，cb 倍率有时效）；
+#    ⭐ 依据：**0.03x —— glm 的一半价**〔⛔ 09-24 失效〕（⚠️ 同日从 0.06x 降下来的，cb 倍率有时效）；
 #       同渠道两臂拉丁方 34.2 vs 32.3，LRU 与并发两题 **4 个朝向全胜**。
 #       ⇒ 折算 83% 有效率后等效 **0.036x**，仍比 glm 单发便宜约 40% ⇒ 价格上就已成立。
 #    ⚠️ 我先前写的「首次产出有效率 1/3」是 **n=3 的坏运气**，⛔ 已作废 ——
 #       实测 12 次 **10/12 = 83%**（并发 4/4 · Kafka 3/4 · LRU 3/4）⇒ 等效倍率 **0.072x**。
-#    🔴 **代价一：T1 从三池变一池** —— v4.1-flash **只在 cb**。
+#    🔴 **代价一：T1 从三池变一池** —— v4.1-flash **只在 cb**〔⛔ 09-15 起失效〕。
 #       ⇒ 用 TIER_PEERS 兜：glm-5.3-flash（三池）降为本档【同档替代】，
 #         glm 那三池正好补上可用性，⛔ 不必为撞额度就升到 T2(0.17x)。
 #    🔴 **代价二：那 17% 的失败不是报错，是「看着像正常输出」的垃圾**
@@ -324,6 +332,8 @@ WALLET_PREF = {                                 # (upstream, 该 provider 上的
                         #    v4-pro 当年有四池轮换，qwen3.8-max 只在百炼。撞限额直接进
                         #    【可用性升档】到 T4（1.62x），⛔ 中间没有缓冲。
                         #    ⇒ 待办：测 qwen3.8-flash 或 minimax-m2.7(cb 0.19x) 能否补 T3 第二池。
+                        #    ⭐ 2026-09-24：qwen3.8-flash 这条**补不了**——与 max 同在百炼一个钱包，撞额度一起没（火山也没有 Qwen）。
+                        #       剩 minimax-m2.7 待测。见 catalog qwen38flashEval_20260924。
                         # ⛔ v4-pro 的四池已整块移除（用户 2026-09-10 禁用）——
                         #    留着它就等于留着一条会被探活的路径。
   'deepseek-v4-flash': [('volcengine-coding',    'deepseek-v4-flash'),
@@ -350,9 +360,33 @@ WALLET_PREF = {                                 # (upstream, 该 provider 上的
                         #    （存在但账号无权限）**，而 `-0731` 是**另一个模型**（见 §BLOCKED / catalog）。
                         #    ⚠️ 措辞注意：⛔ 不是「原先写三池写错了」—— 删改前**确实是三池**，
                         #       错的是「把 `-0731` 当成同一模型的池成员」这个判断，⛔ 不是计数。
-  'deepseek-v4.1-flash': [('codebuddy-code',        'deepseek-v4.1-flash'),
+  'deepseek-v4.1-flash': [('volcengine-coding',     'deepseek-v4.1-flash'),
                           ('volcengine-agent-plan', 'deepseek-v4.1-flash'),
                           ('bailian-token-plan',    'deepseek-v4.1-flash')],
+                        # 🔴 **2026-09-24 cb 移出本池 ⇒ 三池**（用户：cb 费率更新，v4.1-flash 涨价，cb 优先 glm-5.3-flash）。
+                        #    cb 面板实测 v4.1-flash **0.11x** vs glm-5.3-flash **0.06x** ⇒ 同钱包里贵了 1.8 倍。
+                        #    ⭐ 这是【同一钱包内】比价（都是 cb credits 倍率）⇒ 单位可通约，比较成立；
+                        #       ⛔ 与「跨钱包比价算不出」不冲突（那条说的是火山包月 vs cb 倍率）。
+                        #    ⭐ 两者**同档**（TIER_PEERS 的换位盲评依据）⇒ 同档里挑便宜的是正当的，
+                        #       ⛔ 不是跨档下调（先选档位再挑便宜，见 MEMORY feedback-discount-picks-vendor-not-model）。
+                        #    ⇒ 实现：cb 退出 v4.1-flash 的池，**glm-5.3-flash 经 TIER_PEERS 成为 cb 上的 T1 落点**：
+                        #      · 自动派发（不指定 provider）⇒ 只在火山两套餐 + 百炼之间轮换，⛔ 不再落 cb
+                        #      · 显式 `--provider codebuddy-code` ⇒ §4 的「同档换落点」分支把它换成 cb/glm 并留痕
+                        #        （⭐ 该分支 09-23 起被标 unreachable-by-config，本次**重新可达**，豁免已按 §3m 撤掉）
+                        #      · 显式 `--provider codebuddy-code --model deepseek-v4.1-flash` ⇒ 照派（白名单仍在，用户自负价差）
+                        #    ⚠️ 价格历程 0.06x（09-10 早）→ 0.03x（09-10 晚）→ **0.11x（09-24）**—— cb 倍率有时效，
+                        #       再降回来时把 cb 加回本池即可。⚠️ 届时 pipeline-test 的「显式 cb ⇒ 同档换落点 glm」
+                        #       用例会红、coverage 那三行会掉 —— 那是**预期信号**：分支又不可达了，按 §3m 的办法重新标豁免。
+                        # ⭐ 2026-09-23 **四池**（coding 套餐当天才上，09-15 时还是 404）。
+                        # ⚠️ **回显格式因套餐而异，⛔ 不能只凭回显判同一性**：
+                        #    coding 回显 `deepseek-v4-1-flash`（裸）、agent-plan 回显
+                        #    `deepseek-v4-1-flash-260910`（带快照）—— 看着像两个模型。
+                        # ✅ 判定同一模型的**两条硬依据**：
+                        #    ① 同句输入 `prompt_tokens` 两家都是 **46**（v4-flash 两家都是 99，同样成对）
+                        #    ② 显式点名 `deepseek-v4-1-flash-260910`，**两家都 200**，
+                        #       coding 还把它**归一化回裸名** ⇒ 是同一 id 的两种写法
+                        # ⛔ 与 `-0731` 那次**性质不同**：那次百炼裸 id 是 **403 无权限**（真的是另一个模型）。
+                        #    ⇒ 判据是 **403/404 vs 200 + 指纹**，⛔ 不是「id 字符串长得像不像」。
                         # ⭐ **2026-09-15：三池了** —— 「T1 单池」那条已知弱点**关闭**。
                         #    两家都是当天新上的，各自实测（⛔ 不靠转述）：
                         #      · 火山 agent-plan：直连 200，回显 `deepseek-v4-1-flash`（点变横杠）
@@ -378,7 +412,11 @@ WALLET_PREF = {                                 # (upstream, 该 provider 上的
 #    ⛔ 只在本档模型的所有池都拿不到时才用（**可用性**理由）；主落点可用时⛔不许插队。
 #    ⚠️ 这跟【质量/成本升档】（做砸才升）是两条路，⛔ 别混。
 TIER_PEERS = {
-  # ⭐ T1：v4.1-flash 单池（cb）⇒ glm-5.3-flash 作同档替代，把三池的可用性补回来。
+  # ⭐ T1：glm-5.3-flash 是 v4.1-flash 的同档替代，两个用途：
+  #    ① 可用性：v4.1-flash 三池（火山两套餐 + 百炼）全拿不到时顶上
+  #    ② 🔴 2026-09-24 起兼任 **cb 上的 T1 落点** —— cb 已移出 v4.1-flash 的池（涨到 0.11x > glm 0.06x），
+  #       显式 `--provider codebuddy-code` 经 §4「同档换落点」落到本表的 cb/glm。
+  #    ⚠️ 本表历史上写过「v4.1-flash 单池（cb）」—— 09-15 起就不是单池了，那句早已过时。
   #    依据：同渠道两臂 A/B 对调拉丁方 34.2 vs 32.3 —— **不弱于**即满足同档要求
   #    （v4.1 胜 LRU/并发两题各 2 朝向，glm 胜 Kafka）。⛔ 主落点可用时不许插队。
   'deepseek-v4.1-flash': [('volcengine-coding',     'glm-5.3-flash'),
@@ -409,7 +447,7 @@ DISCOUNT_WINDOWS = {
   'bailian-token-plan': {                      # 每天 22:00 – 次日 08:00
      # ⭐ 2026-09-15 加 deepseek-v4.1-flash —— 控制台标「限时夜间5折」（用户截图确认）
      'models': {'deepseek-v4-pro-0813', 'deepseek-v4-flash-0731', 'qwen3.8-max',
-                'deepseek-v4.1-flash'},
+                'deepseek-v4.1-flash', 'qwen3.8-flash'},   # 09-29 控制台：qwen3.8 两个都是「限时夜间4折」
      'when':   lambda dt: dt.hour >= 22 or dt.hour < 8},
   'codebuddy-code': {                          # ⛔【工作日 09-12 / 14-18】之外都打折
      # 🔴 2026-09-10 换代连带后果：cb 上**已无** deepseek-v4-flash ⇒ 从折扣集移除。
@@ -622,21 +660,22 @@ elif model is None:
         # 🔴 **2026-09-15 T0 只留 `hy3`** —— 用户决定：
         #    · `hy4-preview` **不稳定，不用了**（它就是「碰墙」那个形态的来源：允许你用、
         #      派发后静默停、Paseo 抓不到明确错误 ⇒ 见硬默认 #3 与 FAILURE_SHAPES）
-        #    · `hy3-x` ⛔ 本来就不是免费档（**0.05x**，比 T1 的 0.03x 还贵）⇒ 无派发角色
+        #    · `hy3-x` ⛔ 本来就不是免费档（**0.05x**）⇒ 无派发角色
+        #      ⚠️ 09-24 起比 cb 的 T1 落点 glm(0.06x) 略便宜，但⛔不同档（hy3 同轮盲评 84 < glm 91）
         #    ⇒ **T0 存在的唯一理由就是薅 hy3 的免费额度**，⛔ 不再是「免费档序列」。
         for m in ('hy3',):                          # T0，只此一个
             # 🔴 **窗口过期 ⛔ 不等于不能用** —— 2026-09-11 实测：记录的免费期是 `08-28~09-10`，
             #    而 hy4-preview 当天照样 **7s 秒回**（hy3 4s / hy3-x 3s）⇒ 要么延期了（cb 有前例）、
             #    要么**开始计费了**。⛔ 两头都不能赌：
-            #      · 日期到了就直接跳过 ⇒ 白付 T1 的 0.03x，而 0.00x 可能还在
-            #      · 闭着眼继续用   ⇒ 若已计费，费率未知，可能比 0.03x 还贵
+            #      · 日期到了就直接跳过 ⇒ 白付 T1 的钱，而 0.00x 可能还在
+            #      · 闭着眼继续用   ⇒ 若已计费，费率未知，可能比 T1 还贵
             #    ⇒ 过期后**要求费率复核**：复核过（catalog 里该型号的 credit 有当期日期）才用，
             #      否则按 T1 起步，并在 §7 提示「T0 仍可用但费率未核，核实后可能更省」。
             #    ⚠️ 费率**只在 cb 的 `/model` 面板里**：`--help` 只给型号清单、
             #      `rawUsage` 只有 token 数、问模型自己答「不知道」⇒ ⛔ 这一项 agent 拿不到。
             # 🔴 **dead_landings 必须最先判** —— ⛔ 否则未复核分支里的 `probe_ok(m)`
             #    会对一个「本任务里已反复静默」的落点**再探一次活**，正是 dead_landings
-            #    当初要挡的超时路径；而且此时提示「本可省 0.03x」也不成立（异构审 0911 #2）。
+            #    当初要挡的超时路径；而且此时提示「本可省下 T1 的费用」也不成立（异构审 0911 #2）。
             if ('codebuddy-code', m) in dead_landings:
                 continue                            # 🔴 本任务里它已经反复无响应
             if not promo_active(m) and not t0_still_free(m):
@@ -674,6 +713,13 @@ elif model is None:
         #    ⇒ 换钱包是**没有依据**的动作，只是 agent 手边最熟的动作。
         #    ⚠️ 这只**重排池内顺序**，⛔ 不改档位、⛔ 不改模型 —— 池里没有 cb 时自然回到轮换。
         #    ⭐ 写成不变量而⛔不是靠巧合：现在 T1 恰好只在 cb，但将来 T1 换人就丢了这个性质。
+        # 🔴 **2026-09-24 上面那句预言兑现了**：cb 移出 v4.1-flash 的池（涨价）⇒ affinity=cb 在 T1 主池
+        #    **无作用点** ⇒ 按本段不变量「回到轮换」落火山 coding（pi）。
+        #    ⚠️ 这与 09-10 那句「⛔ 不要换 pi」字面冲突 —— 当时留在 cb 恰好就能拿到最强的 T1，
+        #       两个诉求重合；现在分叉成「留 cb 用 glm（弱一点、0.06x）」vs「换火山用 v4.1（强、包月）」。
+        #    ⏳ **待用户裁定**。未裁定前按本段既有不变量执行（⛔ affinity 不改模型），
+        #       ⛔ 不擅自把 affinity 扩成「顺带换同档 peer」。
+        #    ⭐ 注意：v4.1 三池全挂时，§5 的同档替代那步 affinity **仍然生效** ⇒ 落 cb/glm（用例已覆盖）。
         # 🔴 依据必须是「**cb 确实接了活然后静默**」，⛔ 不是「碰过 cb」。
         #    ⛔ 「进过 T0 分支」太宽（免费期没开压根没发请求）；
         #    ⛔ 「promo 有效」也太宽（探活全挂时 cb 一个请求都没成功吞过）
@@ -699,6 +745,11 @@ if explicit_upstream is not None and explicit_model is None:
         #       的情况（explicit_model is not None，在 P1 就 validate 掉了）。
         _alt = next(((u, m) for u, m in TIER_PEERS.get(model, [])
                      if u == explicit_upstream), None)
+        # ⭐ **2026-09-24 本分支重新可达**：cb 移出 v4.1-flash 的池（涨价），而 cb 仍是 TIER_PEERS 成员
+        #    ⇒ `--provider codebuddy-code`（不给 model）在这里被换成 cb/glm-5.3-flash 并留痕。
+        #    📜 09-23 ~ 09-24 它曾被标 `pragma: unreachable-by-config`（T1 四池时所有 peer 都在池里，构造不出来）。
+        #       当时⛔没删代码、而是配了 consistency §3m 失效条件 —— 这次价格一变它就用上了，
+        #       ⇒ 要是当时删了，cb 这条路径就会直接报错停，而不是换到同档的 glm。
         if _alt is not None:
             tier_substitutions.append((model, _alt[1], f'{explicit_upstream} 上没有 {model}'))
             model = _alt[1]
@@ -851,7 +902,7 @@ print_summary()                                      # §7
 | **兜底** | `opencode` 🔻 | 无常规用途，仅前面都不可用时 |
 
 ⚠️ **本表 2026-09-08 修正**：原先把「审查类」整类钉给 `pi -p`，理由写的是「审查不需要盯」。
-本轮实测推翻该前提——`pi -p` + gpt-5.5 跑满 **35 分钟零输出**，全程不可见、只能盲杀；
+本轮实测推翻该前提——`pi -p` + gpt-5.5 跑满 **35 分钟零输出**，全程不可见、只能盲杀（⚠️ 09-24 起**疑似其实是 stdin 挂死**，见 §3.2b，未复测）；
 而同期 Paseo 派的两个审查 agent 都能看到它们各自在第 13 / 22 步撞 429。
 ⇒ **判据回归硬默认 #2 的「要不要看得见」，⛔ 不按任务类型一刀切。**
 
@@ -873,8 +924,10 @@ print_summary()                                      # §7
 | `--provider github-copilot --model gpt-5.5` | ✅ 放行（豁免集） |
 | `--provider deepseek --model deepseek-v4-pro` | ⛔ **拦住**（DISABLED_PROVIDERS） |
 | 默认任务，**免费档可用** | → `codebuddy-code` + **`hy3`** @ `max`（T0，⛔ 还没进付费阶梯） |
-| 默认任务，免费档被排除/探活失败，0 次付费档做砸 | → `codebuddy-code` + `deepseek-v4.1-flash`（T1，⛔ 只此一池）🔴 **必须校验产出** |
-| T1 那一池拿不到 | → 同档替代 `glm-5.3-flash`（火山两套餐 / cb 三池），⛔ 不升 T2 |
+| 默认任务，免费档被排除/探活失败，0 次付费档做砸 | → `pi/volcengine-coding` + `deepseek-v4.1-flash`（T1 三池轮换首位：火山 coding → agent-plan → 百炼）🔴 **必须校验产出** |
+| T1 三池都拿不到 | → 同档替代 `glm-5.3-flash`（火山两套餐 / cb 三池），⛔ 不升 T2 |
+| 🔴 显式 `--provider codebuddy-code`，不给 model，落到 T1 | → `codebuddy-code` + **`glm-5.3-flash`**（同档换落点，`tier_substitutions` 留痕）—— 09-24 cb 的 v4.1 涨到 0.11x，已移出其池 |
+| 显式 `--provider codebuddy-code --model deepseek-v4.1-flash` | ✅ 照派（仍在白名单）—— 用户点名就尊重，价差用户自负 |
 | 默认任务，免费档已跳过，**2 次付费档**做砸（T1、T2 均失败） | → T3 `qwen3.8-max` @ `pi/bailian-token-plan`（⚠️ 只此一池） |
 | T3 那**一个池拿不到** | → **可用性升档**到 T4 `kimi-k3-1`（⛔ 只许向上），并在 §7 报告。⛔ 本档已无同档替代 |
 | ⛔ 显式 `--model deepseek-v4-pro` | → **停止并报告**（`report_blocked_model_and_stop`）—— 用户 2026-09-10 禁用，⛔ agent 不得自行派发 |
@@ -885,7 +938,7 @@ print_summary()                                      # §7
 | 只给 `--provider volcengine-coding` 不给 model | ✅ P1 仍校验该 provider，再按默认档位补 model |
 | 只给 `--model v4-pro` 不给 provider | ✅ 先按 WALLET_PREF 定 provider，再回 P0 校验 |
 | 大审查（多文件 / 20+ 工具调用） | → Paseo `pi/github-copilot/gpt-5.5`，⛔ 不走 `pi -p` |
-| 短审查（单文件） | → `pi -p --provider github-copilot --model gpt-5.5`，prompt ≤200 字符 |
+| 短审查（单文件） | → `pi -p --provider github-copilot --model gpt-5.5 … < /dev/null`，prompt ≤200 字符 |
 
 ### 3.1 Paseo 创建
 
@@ -955,8 +1008,11 @@ def build_settings(full_provider, model, thinking):
     if root == 'pi':
         return s                              # 🔴 pi provider 的 availableModes 为空，
                                               #    传 modeId 直接报 Invalid mode
-    if root in ('codebuddy-code', 'qoderclicn'):
+    if root == 'codebuddy-code':
         s['modeId'] = 'bypassPermissions'
+    elif root == 'qoderclicn':
+        s['modeId'] = 'yolo'    # 🔴 09-29 起 Paseo 改用原生 1.1.62 ACP，模式 id 变为 default/acceptEdits/auto/dontAsk/yolo
+                                #    ⛔ 旧 'bypassPermissions' 报 Invalid mode；`yolo` = Bypass Permissions（dontAsk 是「拒绝」⛔ 别选）
     elif root in ('claude', 'codex'):
         s['modeId'] = 'auto'
     else:
@@ -988,7 +1044,7 @@ mcp__paseo__get_agent_status({ agentId })
 ```
 
 ⛔ **不要用 `list_agents` 的 `model` 字段验** —— 模式 2 下它是请求值不是运行值。
-🔴 白名单里 `kimi-k3-2` 与 `qmodel_38max` 都**没实测过 runtimeInfo**，派完务必核一次。
+🔴 白名单里 `kimi-k3-1` 与 `qmodel_38max` 都**没实测过 runtimeInfo**，派完务必核一次。
 
 #### ⛔ 收割前先确认 `lastStatus`
 
@@ -1023,14 +1079,15 @@ lastStatus == running           ⛔ 此时取到的是【中间态】，不是�
 ⚠️ **具体数量以 `pi --list-models` 为准，⛔ 不要在文档里写死**（会过期）：
 
 ```
-create_agent({ provider: "codebuddy-code/deepseek-v4.1-flash",
+create_agent({ provider: "pi/volcengine-coding/deepseek-v4.1-flash",
                settings: { thinkingOptionId: "xhigh" }, … })
 ```
 
 | 用途 | provider 串 |
 |---|---|
-| ⭐ 默认（T1） | `codebuddy-code/deepseek-v4.1-flash`（0.03x）🔴 **必须校验产出** |
-| T1 同档替代（cb 撞额度时） | `pi/volcengine-coding/glm-5.3-flash` 或 `pi/volcengine-agent-plan/glm-5.3-flash` |
+| ⭐ 默认（T1） | `pi/volcengine-coding/deepseek-v4.1-flash`（三池轮换：→ `pi/volcengine-agent-plan/…` → `pi/bailian-token-plan/…`）🔴 **必须校验产出** |
+| T1 在 cb 上 | `codebuddy-code/glm-5.3-flash`（0.06x）—— 🔴 09-24 起 cb 的 v4.1 是 **0.11x**，⛔ 不再自动选它 |
+| T1 同档替代（三池都撞额度时） | `pi/volcengine-coding/glm-5.3-flash` · `pi/volcengine-agent-plan/glm-5.3-flash` · `codebuddy-code/glm-5.3-flash` |
 | 升档 T2（上一档做砸过一轮） | `pi/volcengine-coding/deepseek-v4-flash` |
 | 升档 T3 | `pi/bailian-token-plan/qwen3.8-max` —— ⛔ **不是 `deepseek-v4-pro`**（已全局禁用，照写必撞 stop） |
 | 升档 T4 | `codebuddy-code/kimi-k3-1` —— ⚠️ id 是 `kimi-k3-1`，⛔ 不是 `kimi-k3` / `kimi-k3-2` |
@@ -1047,8 +1104,14 @@ create_agent({ provider: "codebuddy-code/deepseek-v4.1-flash",
 #### 3.2b 只读 / 短 / 分析类 → `pi -p` 直跑
 
 ```bash
-pi -p --provider volcengine-coding --model deepseek-v4-flash "{prompt}"
+pi -p --provider volcengine-coding --model deepseek-v4-flash "{prompt}" < /dev/null
 ```
+
+🔴 **`< /dev/null` 必须带**（2026-09-24 A/B 实证）：`pi -p` 碰到**非 TTY 的 stdin** 会去读它，
+继承来的管道若永不给 EOF ⇒ **永久阻塞、CPU≈0、零网络连接、零输出**。同模型同 prompt 两轮 A/B：
+继承 stdin 两次都挂（>45s，CPU 0.00s），`< /dev/null` 两次都 3s 返回。
+⚠️ 它**看起来像模型/通道挂了**（当天 grok-4.6 / grok-4.5 / gemini-3.8-flash / deepseek-v4-flash 全被误当成「挂了」），
+判据是 **`ps -o time=` 累计 CPU 不涨 + 无 ESTABLISHED 连接** ⇒ 先查 stdin，⛔ 别先换模型。
 
 ⚠️ 配置注意（`~/.pi/agent/models.json`）：必须有 `compat.supportsDeveloperRole: false`
 （火山不认 OpenAI 的 `developer` role，不加则 reasoning 模型全部 400）；
@@ -1057,13 +1120,14 @@ pi -p --provider volcengine-coding --model deepseek-v4-flash "{prompt}"
 #### 3.2c 审查通道 —— ⭐ pi + Copilot（⛔ 仅审查，不做开发）
 
 ```bash
-pi -p --provider github-copilot --model gpt-5.5 "{≤200 字符的 review_prompt}"
+pi -p --provider github-copilot --model gpt-5.5 "{≤200 字符的 review_prompt}" < /dev/null
 ```
 
 | 约束 | 说明 |
 |---|---|
-| 🔴 **prompt ≤200 字符** | 背景让它自己读文件。实测 800 字让 GPT-5.5 挂 22 分钟，短 prompt 秒回 |
-| ⛔ **撞超时不要收窄 prompt 重试** | 极小 prompt 也超时属另一种根因，换通道 |
+| 🔴 **必须 `< /dev/null`** | 否则继承的管道 stdin 可能让它**永久阻塞**（见 §3.2b，09-24 A/B 2/2 复现）|
+| 🔴 **prompt ≤200 字符** | 背景让它自己读文件。实测 800 字让 GPT-5.5 挂 22 分钟，短 prompt 秒回 ⚠️ **疑似其实是上一行的 stdin 挂死**（当时没查 stdin，未复测） |
+| ⛔ **撞超时不要收窄 prompt 重试** | 极小 prompt 也超时属另一种根因 —— ⚠️ **最可疑的就是 stdin**：先按上一行判据查，再考虑换通道 |
 | ⛔ **仅审查不做开发** | 用户 2026-08-20 明确。开发走 §3.2a 火山通道 |
 | ✅ **`claude-*` 已整族移除** | 2026-09-08 从 pi 的 Copilot 通道删掉——主会话就是 Claude，留着容易误用成自审 |
 
@@ -1307,7 +1371,7 @@ ssh hub "paseo run --detach \
 ⚠️ 同一落点连续无响应记 `count`，达到 `NO_RESPONSE_LIMIT`(2) 后该落点被排除 |
 | 🔴 **先判失败形态：有产出吗？** | ⛔ **没产出 = availability**。⚠️ **两种要分开记**：派发后静默停 / 唤不醒 → `no_response`（**会进 `dead_landings`**，同落点 2 次即排除）；派发前探活未秒回 → `probe_queued`（⛔ **不进** `dead_landings` —— 排队会自己散，本任务内永久排除一个可能已恢复的落点是过度反应）。
 ⛔ **不算「做砸」、⛔ 不许据此升档换模型族**。正确动作是**留在同 provider 降到下一档**
-（cb 上就是 `deepseek-v4.1-flash`）。⚠️ hy4 的典型形态就是这个：允许你用，但 Paseo 抓不到任何明确错误 |
+（⚠️ 09-24 起 cb 已不在 v4.1-flash 的池里 ⇒ 按现行不变量回到轮换落火山；是否改为「留 cb 用 glm」⏳ 待用户裁定，见 §2 affinity 注释）。⚠️ hy4 的典型形态就是这个：允许你用，但 Paseo 抓不到任何明确错误 |
 | 🔴 **`requires_output_validation` 为真？→ 必须跑产出校验** | ⛔ 该型号有「看着像正常输出」的垃圾形态（实测 3988 字带 `<｜｜DSML｜｜>` 标记）⇒ **只看 exit 0 会收下垃圾**。判据：过短 / 内部标记 / 续接语 / **不足同批中位数 35%**。参考 `validate_cell.py` |
 | **`lastStatus` 已是 idle/completed** | running 时取到的是中间态（§3.1） |
 | `git log` 核对 HEAD **真的有新 commit** | 高频：agent 报"全绿"但改动全躺工作区没提交 |
@@ -1354,11 +1418,11 @@ ssh hub "paseo run --detach \
   Model:  {provider}/{model} · thinking: {thinking}{requires_output_validation 时追加 " · 🔴 必须校验产出"}
 {t0_now_billed 非空时，整块加在这里 —— ⛔ 不许省略：
   🔴 免费档 {列出型号与倍率} **已开始计费** ⇒ T0 对它关闭，本次走 T1。
-     ⚠️ 若它的倍率**低于 T1 的 0.03x**，那是【定档】问题 —— 需要同口径盲评，
+     ⚠️ 若它的倍率**低于 cb 上 T1 落点的倍率**（当前 glm-5.3-flash，见 catalog 最新一期 cbCreditRates），那是【定档】问题 —— 需要同口径盲评，
         ⛔ 不因为「它以前是免费档」就继续当 T0 用。}
 {t0_free_unverified 非空时，整块加在这里 —— ⛔ 不许省略：
   ⚠️ 免费档 {列出型号} **窗口已过但仍探活通过** —— 费率未核实（只在 cb `/model` 面板可见）。
-     若它仍是 0.00x，本次派发本可省下 T1 的 0.03x。
+     若它仍是 0.00x，本次派发本可省下这一次 T1 的费用。
      ⇒ 请核 cb `/model` 面板并把 `{'credit': x, 'verifiedOn': 'YYYY-MM-DD'}` 写进 catalog。
      ⚠️ 核实记录**超过 7 天即失效**（本次事故就是陈旧记录被实测证伪）。}{降档时追加 " → {effective_thinking}（该模型无 {thinking} 档）"}
 {tier_substitutions 非空时，整块加在这里 —— ⛔ 不许省略：
@@ -1407,7 +1471,7 @@ ssh hub "paseo run --detach \
 子会话完成后，按 `agent-review-protocol` 做交叉审查：
 
 - 代码 / 文档变更 → **未显式指定时**默认 `github-copilot/gpt-5.5`（⛔ 换族，见 routing §5；显式换 provider 会报 review 冲突），
-  **通道**按规模分流：**大审查** → Paseo `pi/github-copilot/gpt-5.5`；**短审查** → `pi -p --provider github-copilot --model gpt-5.5`（§3 通道判据总表）
+  **通道**按规模分流：**大审查** → Paseo `pi/github-copilot/gpt-5.5`；**短审查** → `pi -p --provider github-copilot --model gpt-5.5 … < /dev/null`（§3 通道判据总表）
 - 审查发现按 ❌/⚠️/💡 分级，❌ 必须修复
 
 ⛔ 真正的约束是 **评审族 ≠ 实施族**（routing §5）。实施是 DeepSeek 时评审才排除 DeepSeek 族；

@@ -20,23 +20,28 @@
 # 退出码（⭐ 三档，⛔ 不是二值）：
 #   0 = 全部可用
 #   1 = **部分**不可用 ⇒ ⚠️ 这是**正常状态**，换个模型/换个池即可，⛔ 别据此怀疑通道
-#   2 = **全部**不可用 ⇒ 才该怀疑通道 / 凭据 / 网络
+#   2 = **通道级**失败 ≥2 且无一可用 ⇒ 才该怀疑通道 / 凭据 / 网络
+#       🔴 HTTP 400/403/404/429（及 cb 的限流/不存在正文）是【模型级】失败 —— 通道能规范地返回错误
+#          就说明它是通的 ⇒ ⛔ 不计入通道判据（2026-09-24：同一模型两种写法×两套餐全 404，旧逻辑误报「怀疑通道」）
 #   ⭐ 这个区分就是为了防「某个模型失败 ⇒ 判定整条通道坏了」这类误诊。
 
 set -uo pipefail
 PI_CFG="${PI_CONFIG:-$HOME/.pi/agent/models.json}"
 PROBE_DIR="${TMPDIR:-/tmp}/rift-probe"; mkdir -p "$PROBE_DIR"
 
+# 🔴 2026-09-24 同步：cb 已移出 T1 池（cb 上 T1 改落 glm）；火山 coding 09-23 已进池（此前漏写）
 DEFAULT=(codebuddy-code/hy3
-         codebuddy-code/deepseek-v4.1-flash
+         volcengine-coding/deepseek-v4.1-flash
          volcengine-agent-plan/deepseek-v4.1-flash
-         bailian-token-plan/deepseek-v4.1-flash)
+         bailian-token-plan/deepseek-v4.1-flash
+         codebuddy-code/glm-5.3-flash)
 ALL=("${DEFAULT[@]}"
+     codebuddy-code/deepseek-v4.1-flash
+     volcengine-coding/glm-5.3-flash
      volcengine-coding/deepseek-v4-flash
      volcengine-agent-plan/deepseek-v4-flash
      bailian-token-plan/qwen3.8-max
-     codebuddy-code/glm-5.3-flash
-     codebuddy-code/kimi-k3-1)
+     codebuddy-code/kimi-k3-1)   # ⚠️ cb/glm 已在 DEFAULT 里，别重复
 
 case "${1:-}" in
   --all) TARGETS=("${ALL[@]}") ;;
@@ -51,6 +56,8 @@ probe_cb() {   # $1=model ；cb CLI 不给状态码 ⇒ 只能判正文
   case "$out" in
     \[*|\{*) echo "OK|返回 JSON" ;;
     '')      echo "FAIL|EMPTY（超时/静默失败）" ;;
+    *429*|*频率限制*|*使用量已超出*|*"service info not found"*|*"not found"*)
+             echo "FAILM|$(printf '%s' "$out" | tr -d '\n' | head -c 170)" ;;   # 模型级：通道是通的
     *)       echo "FAIL|$(printf '%s' "$out" | tr -d '\n' | head -c 170)" ;;
   esac
 }
@@ -74,8 +81,9 @@ try:
 except urllib.error.HTTPError as e:
     try:    m = str((json.loads(e.read().decode(errors='replace')).get('error') or {}).get('message', ''))[:150]
     except Exception: m = ''
-    kind = {429: '额度耗尽', 403: '无权限', 404: '模型不存在'}.get(e.code, '')
-    print(f"FAIL|HTTP {e.code} {kind} {m}".rstrip())
+    kind = {429: '额度耗尽', 403: '无权限', 404: '模型不存在', 400: '请求被拒（多为配置/参数问题，如缺 compat.supportsDeveloperRole —— 查配置，⛔ 不是额度）'}.get(e.code, '')
+    tag = 'FAILM' if e.code in (400, 403, 404, 429) else 'FAIL'    # 模型级 vs 通道级
+    print(f"{tag}|HTTP {e.code} {kind} {m}".rstrip())
 except Exception as e:
     print(f"FAIL|{type(e).__name__}")
 PY
@@ -83,7 +91,8 @@ PY
 
 probe_pi() {   # $1=provider $2=model
   local out
-  out=$(pi -p --provider "$1" --model "$2" -nt -ns -nc 'reply with exactly: PROBE_OK' 2>&1 | head -c 300)
+  # 🔴 必须 < /dev/null：继承的管道 stdin 会让 pi -p 永久阻塞（2026-09-24 A/B 实证）
+  out=$(pi -p --provider "$1" --model "$2" -nt -ns -nc 'reply with exactly: PROBE_OK' < /dev/null 2>&1 | head -c 300)
   case "$out" in
     *PROBE_OK*) echo "OK|pi 返回正常" ;;
     '')         echo "FAIL|EMPTY（pi 无输出）" ;;
@@ -93,7 +102,7 @@ probe_pi() {   # $1=provider $2=model
 
 # ⚠️ 下面凡是中文紧跟变量的地方**必须写 ${VAR}** —— 全角字符会被当成变量名的一部分，
 #    在 `set -u` 下直接炸「unbound variable」。2026-09-17 实测踩到（memory 里记着这条，又犯了）。
-ok=0; bad=0
+ok=0; bad=0; bad_model=0
 printf '%-26s %-24s %s\n' PROVIDER MODEL 结果
 for t in "${TARGETS[@]}"; do
   prov="${t%%/*}"; model="${t#*/}"
@@ -104,8 +113,14 @@ for t in "${TARGETS[@]}"; do
   esac
   status="${r%%|*}"; detail="${r#*|}"
   case "$status" in
-    OK)   printf '✅ %-24s %-24s %s\n' "$prov" "$model" "$detail"; ok=$((ok+1)) ;;
+    OK)   printf '✅ %-24s %-24s %s\n' "$prov" "$model" "$detail"; ok=$((ok+1))
+          # 🔴 火山两套餐是【账号级 5 小时滚动额度】：16 token 的探活能 200，长上下文会话照样 429
+          #    （09-15 记过、09-28 又踩：探活 200 后唤醒 X14 立刻 429）⇒ 结构性提示，⛔ 靠记性
+          case "$prov" in volcengine-*)
+            echo "   ⚠️ 仅证明【小请求】可过；账号级 5 小时额度下长会话仍可能 429 ⇒ 若今天该账号报过 429 且未过重置时刻，按不可用处理" ;;
+          esac ;;
     SKIP) printf '⚠️  %-24s %-24s %s\n' "$prov" "$model" "$detail" ;;
+    FAILM) printf '❌ %-24s %-24s %s  〔模型级〕\n' "$prov" "$model" "$detail"; bad=$((bad+1)); bad_model=$((bad_model+1)) ;;
     *)    printf '❌ %-24s %-24s %s\n' "$prov" "$model" "$detail"; bad=$((bad+1)) ;;
   esac
 done
@@ -117,14 +132,19 @@ elif [ "$ok" -gt 0 ];  then
   echo "部分不可用：可用 ${ok} / 不可用 ${bad}"
   echo "⚠️ 这是**正常状态** —— 换个模型或换个池即可，⛔ 别据此判定通道坏了。"
   exit 1
-elif [ "${bad}" -lt 2 ]; then
-  # 🔴 **只探了 1 个就失败 ⛔ 推不出通道有问题** —— n=1 时「全部失败」就是「这一个失败」。
-  #    这正是 SKILL.md 里那条判据：**断言「X 类不可用」前必须测过该类里多个实例**。
-  #    ⇒ 降级成「部分不可用」，并明说样本不够。
-  echo "单个模型不可用（样本 ${ok_plus_bad} 个）"
-  echo "⚠️ ⛔ 只探了 1 个 ⇒ **不足以判断通道**。要怀疑通道请再探同 provider 的其它模型。"
+elif [ "$((bad - bad_model))" -lt 2 ]; then
+  # 🔴 **通道级失败不足 2 个 ⛔ 推不出通道有问题**：
+  #    · n=1 时「全部失败」就是「这一个失败」（断言「X 类不可用」前必须测过该类里多个实例）
+  #    · 模型级失败（4xx 规范错误）说明通道**正常应答** —— 数再多也⛔不是通道问题
+  if [ "$bad_model" -eq "$bad" ]; then
+    echo "全部失败，但都是【模型级】（${bad_model} 个 HTTP 400/403/404/429 或 cb 限流/不存在）"
+    echo "⭐ 通道能规范返回错误 ⇒ **通道是通的**，⛔ 别怀疑通道 —— 查模型 id / 套餐是否包含 / 额度；全是 400 则多为请求参数或 compat 配置问题。"
+  else
+    echo "通道级失败只有 $((bad - bad_model)) 个（另有模型级 ${bad_model} 个）"
+    echo "⚠️ ⛔ **不足以判断通道**。要怀疑通道请再探同 provider 的其它模型。"
+  fi
   exit 1
 else
-  echo "🔴 全部不可用（${bad} 个，样本 ≥2）—— 这才该怀疑通道 / 凭据 / 网络。"
+  echo "🔴 通道级失败 $((bad - bad_model)) 个、无一可用（样本 ≥2）—— 这才该怀疑通道 / 凭据 / 网络。"
   exit 2
 fi

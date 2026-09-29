@@ -29,7 +29,13 @@ def emittable_lines(body: str) -> set:
         stack += [k for k in c.co_consts if hasattr(k, 'co_lines')]
     return out
 
-want = {i for i in emittable_lines(BODY) if 1 <= i <= len(L)}
+# 🔴 豁免标记 `# pragma: unreachable-by-config` —— ⛔ 不是「懒得写用例」的后门：
+#    它**必须**配一条 consistency-check 断言，说明「为什么当前构造不出来」；
+#    那条断言一旦不成立（分支重新可达），守卫会报警要求删掉本豁免。
+#    ⇒ 豁免自带失效条件，⛔ 不会静默腐烂。
+PRAGMA = '# pragma: unreachable-by-config'
+exempt = {i for i, line in enumerate(L, 1) if PRAGMA in line}
+want = {i for i in emittable_lines(BODY) if 1 <= i <= len(L)} - exempt
 hit = set()
 def tracer(fr, ev, arg):
     if fr.f_code.co_filename == '<SKILL.md §2>' and ev == 'line': hit.add(fr.f_lineno - 1)
@@ -46,7 +52,8 @@ finally: sys.settrace(None)
 missed = sorted(want - hit)
 pct = (len(want) - len(missed)) / len(want) * 100
 print("=== §2 决策树覆盖率 ===")
-print(f"应覆盖 {len(want)} 行 · 未覆盖 {len(missed)} 行 · {pct:.1f}%")
+print(f"应覆盖 {len(want)} 行 · 未覆盖 {len(missed)} 行 · {pct:.1f}%"
+      + (f" · 豁免 {len(exempt)} 行(unreachable-by-config)" if exempt else ""))
 if missed:
     print("\n❌ 以下分支【没有任何用例走到】—— 要么补用例，要么它是死代码该删：")
     for n in missed: print(f"  §2:{n:<4} | {L[n-1].strip()[:100]}")

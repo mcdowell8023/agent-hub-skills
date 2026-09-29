@@ -3,8 +3,8 @@
 
 🔴 **覆盖面如实说明**：本脚本比对的是 `SKILL.md` 与 `model-catalog.json` 的**结构化数据**
 （豁免集 / 白名单 / 钱包顺序与 modelId / providers map / pi 侧配置）。
-⛔ `model-routing.md` 只被用来**搜旧语残留**，⛔ 不做表格级比对 —— 别把注释里的
-「三处一致」理解成三份都做了结构比对。
+⚠️ `model-routing.md` 主要用来**搜旧语残留**；🔴 唯一的结构比对是 §3n（§0 派发链 ⇔ LADDER/T0，
+2026-09-24 加）—— 其余表格⛔仍不比对，别把「三处一致」理解成三份都做了结构比对。
 
 🔴 **§2 伪代码的行为正确性⛔不在本脚本** —— 那由 `scripts/pipeline-test.py` 负责：
    它直接【执行】markdown 里的伪代码并跑 17 条用例断言落点。两个都要跑。
@@ -156,6 +156,10 @@ DESCRIPTIVE = re.compile(r'is_night|那个 bug|旧写法|越过档位边界|换�
                         # ⚠️ **否定语境**也不是在立规则：「⛔ 不参与『做砸就升档』那条路径」
                         #    是在说 LAST_RESORT【不走】质量路径 —— 它本身就已经限定清楚了。
                         r'|不参与|⛔ ?不走|不受此约束|不是阶梯的|⛔ ?不是 ?T5')
+# 🔴 由 SKILL 实际执行的 LADDER + TIER_PEERS 推出「哪些档有同档替代」，供下面的反残留守卫用
+_LADDER_IDS = re.findall(r"\('([a-z0-9._\-]+)',", re.search(r"LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
+_PEER_TIERS = sorted(f'T{_LADDER_IDS.index(k) + 1}' for k in (sk_peers if m else {}) if k in _LADDER_IDS)
+_PEER_QUALIFIERS = tuple(f'仅 {t}' for t in _PEER_TIERS) or ('（无同档替代）',)
 RESIDUE = [
   # (主题正则, 必须【同时出现】的限定语, 说明)
   # ⚠️ 第 7 轮又漏了一批同义写法（做砸才用 / 做砸后接手 / 做砸就升 / 做砸过一轮时进入…）。
@@ -164,8 +168,10 @@ RESIDUE = [
    '「升档需做砸」⛔ 必须限定为【质量/成本升档】——可用性换档不受此约束'),
   (re.compile(r'模型固定|固定 ?`?github-copilot/gpt-5\.5|不受 P0 约束'), ('默认', '旧说法'),
    'review 的模型是**默认值**⛔不是「固定/不可覆盖」；选出的组合照样过 validate()，⛔ 不是「不受 P0 约束」'),
-  (re.compile(r'四池 ?\+ ?同档替代|四池轮换 ?\+'), ('仅 T3',),
-   '⛔ 别把「四池 + 同档替代」当通则：T2 四池【无】同档替代 · T1 三池 · T4 只有 cb · TIER_PEERS 仅 T3'),
+  # 🔴 限定语**由 SKILL 的 TIER_PEERS 推出**，⛔ 不写死 —— 09-29 实测：写死的「仅 T3」在 T3 清空、T1 有 peer 之后
+  #    反过来拦截正确写法（守卫把当时的事实编成了常量，事实一变守卫就站到错的一边）。
+  (re.compile(r'四池 ?\+ ?同档替代|四池轮换 ?\+'), _PEER_QUALIFIERS,
+   f'⛔ 别把「四池 + 同档替代」当通则：同档替代目前只在 {"/".join(_PEER_TIERS) or "（无）"}（由 SKILL 的 TIER_PEERS 推出）'),
   (re.compile(r'官方 ?API|deepseek/\*'), ('手动', '已不是自动兜底', '不在自动降级链'),
    '`deepseek/*` ⛔ 已不是自动兜底，⛔ 不许再写「永远兜底/前面拿不到才用」'),
 ]
@@ -307,6 +313,61 @@ if m:
         m3 = snap.match(mid)
         if m3 and ab.get(m3.group('base')) == abbr:
             chk(False, f"⛔ `{mid}` 与基名 `{m3.group('base')}` 共用缩写 `{abbr}` ⇒ 标题分不出是哪个模型")
+
+    # 🔴 §3m 「同档换落点」分支的**豁免失效条件**
+    #    SKILL 里那三行打了 `# pragma: unreachable-by-config`，理由是：
+    #    每个 TIER_PEERS 的 provider **都已在该模型的 WALLET_PREF 池里** ⇒ 分支构造不出来。
+    #    这条一旦不成立（= 分支重新可达），必须**删掉豁免并补用例**，⛔ 不许让豁免静默留着。
+    # ⚠️ 只认**挂在代码行上**的标记（行首第一个非空字符不是 `#`）⛔ 不认散文里的提及。
+    #    2026-09-24 实测：豁免撤掉后，注释里一句「它曾被标 `pragma: …`」的历史说明
+    #    就让本守卫误报「必须删掉 pragma」—— 判字面不判性质（与同会话 MEMORY 索引子串误判同形）。
+    #    ⭐ 与 coverage-check 的口径在「可发射行」上一致：纯注释行本来就不参与覆盖率。
+    _BODY = re.search(r"## 2\. 决策流程.*?```python\n(.*?)\n```", S, re.S).group(1)
+    if re.search(r'^[ \t]*[^#\s][^\n]*#\s*pragma: unreachable-by-config', _BODY, re.M):
+        _wp = re.search(r"WALLET_PREF = \{(.*?)\n\}", S, re.S).group(1)
+        def _pairs(block):
+            out = {}
+            for mm in re.finditer(r"'([a-z0-9.\-]+)':\s*\[(.*?)\]", block, re.S):
+                out[mm.group(1)] = re.findall(r"\('([^']+)',\s*'([^']+)'\)", mm.group(2))
+            return out
+        for _model, _peers in sk_peers.items():
+            _pool_provs = {u2 for u2, _ in _pairs(_wp).get(_model, [])}
+            _extra = sorted({u2 for u2, _ in _peers} - _pool_provs)
+            chk(not _extra,
+                f"⛔ `{_model}` 的 peer provider {_extra} 不在它的 WALLET_PREF 池里 ⇒ "
+                f"「同档换落点」分支**重新可达** ⇒ 必须删掉 SKILL 里的 "
+                f"`# pragma: unreachable-by-config` 并补用例")
+
+    # 🔴 §3n routing §0「派发链唯一真源」必须与 SKILL 实际执行的 LADDER / T0 一致
+    #    起因（2026-09-24 异构审 gpt-5.5 FAIL）：routing §0 停在 09-10 前整两周 —— T0 仍是 hy4-preview、
+    #    T3 仍是已全局禁用的 deepseek-v4-pro、T4 仍是别名 kimi-k3-2，而 SKILL 开头写着「以 routing 为准」。
+    #    ⇒ 本脚本原先对 routing 只搜旧语、⛔ 不比结构，于是漂了没人知道。
+    # ⚠️ 只抽「带 @thinking 的型号行」：§0 里每个落点都写成 `model @档位`；没有 @ 的续行（说明、箭头）⛔ 不是落点，故意不抽
+    def routing_chain(text):
+        blk = re.search(r"## 0\. 派发链.*?```\n(.*?)\n```", text, re.S)
+        if not blk: return None
+        out, tier = {}, None
+        for line in blk.group(1).splitlines():
+            mt = re.match(r'(T[0-4])\s', line)
+            if mt: tier = mt.group(1)
+            elif line[:1].strip(): tier = None          # 顶格非 T* 行（如「兜底」）⇒ 离开阶梯
+            if tier is None: continue
+            for mm in re.finditer(r'(?:[a-z][a-z\-]*/)?([a-z0-9][a-z0-9._\-]*)\s+@(?:minimal|low|medium|high|xhigh|max)\b', line):
+                out.setdefault(tier, []).append(mm.group(1))
+        return out
+    _rc = routing_chain(R)
+    chk(_rc is not None, "routing 找不到 §0 派发链代码块")
+    if _rc:
+        _ladder = re.findall(r"\('([a-z0-9._\-]+)',", re.search(r"LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
+        _t0 = re.search(r"for m in \(((?:'[^']+',?\s*)+)\):\s*#\s*T0", S)
+        _t0 = re.findall(r"'([^']+)'", _t0.group(1)) if _t0 else None
+        chk(_t0 is not None, "SKILL 里找不到 T0 循环（for m in (...):  # T0）")
+        if _t0 is not None:
+            chk(sorted(_rc.get('T0', [])) == sorted(_t0),
+                f"⛔ routing §0 的 T0 {_rc.get('T0')} ≠ SKILL 实际执行的 {_t0}")
+        for i, m in enumerate(_ladder):
+            got = _rc.get(f'T{i+1}', [])
+            chk(got == [m], f"⛔ routing §0 的 T{i+1} {got} ≠ SKILL LADDER 的 {m!r}")
 
     # 🔴 §3k 失败形态表必须与 catalog 一致，且**必须被真正读取**
     fm = re.search(r"FAILURE_SHAPES\s*=\s*\{(.*?)\n\}", S, re.S)

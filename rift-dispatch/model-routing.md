@@ -16,21 +16,22 @@
 ## 0. 派发链（唯一真源，其它地方出现的链条都以此为准）
 
 ```
-T0  免费档   cb/hy4-preview @high     0.00x   ⭐ 第一顺位（免费至 **09-10**，⚠️ 每日赠送额度）
-             cb/hy3         @high     0.00x   次位（免费至 08-31）
-              ↓ 命中 §2 排除清单，或免费期已过
-T1  低价档   deepseek-v4.1-flash  @xhigh  0.03x   付费档起步（⛔ 只在 cb；同档替代 glm-5.3-flash 三池）
-             ⭐ provider 由 §3.5 的 WALLET_PREF【轮换】+ 折扣窗口决定，⛔ 不是固定首选
-             ⚠️ 2026-09-08 才发现火山也有它，此前只配了 cb
+T0  免费档   cb/hy3         @max      0.00x   唯一成员（免费至 **09-30 23:59**，⚠️ 每日赠额，耗尽即排队/不回复）
+              ↓ 命中 §2 排除清单，或免费期已过 / 当日赠额耗尽
+T1  低价档   deepseek-v4.1-flash  @xhigh          付费档起步 —— 🔴 三池轮换：火山 coding · 火山 agent-plan · 百炼
+             🔴 cb 上改用同档 glm-5.3-flash（0.06x）—— 2026-09-24 cb 的 v4.1 涨到 0.11x，已移出其池
+             ⭐ 三池全拿不到 → 同档替代 glm-5.3-flash（火山两套餐 / cb）；🔴 必须校验产出
               ↓ 上一档在【本任务】做砸过一轮
-T2  主力档   deepseek-v4-flash    @xhigh          DeepSeek 族首选
-             ⭐ provider 由 §3.5 的 WALLET_PREF【轮换】+ 折扣窗口决定，⛔ 不是固定首选
+T2  主力档   deepseek-v4-flash    @xhigh          DeepSeek 族首选 —— 火山两套餐（⛔ cb 那份是陈旧别名、百炼 403）
               ↓ 上一档在【本任务】做砸过一轮
-T3  升档     deepseek-v4-pro      @xhigh          ⛔ selectableByDefault=false
-             ⭐ provider 同上轮换（⛔ 京东已停用）；四池全拿不到时 → 同档替代 qwen3.8-max（§9.1）
+T3  升档     qwen3.8-max          @xhigh          ⚠️ 只此一池：百炼 ⇒ 拿不到直接【可用性升档】到 T4，⛔ 无同档替代
+             ⛔ deepseek-v4-pro 已全局禁用（用户 2026-09-10），⛔ 不再是 T3
               ↓ 上一档在【本任务】做砸过一轮
-T4  极致档   cb/kimi-k3-2         @xhigh  1.62x   🔴 红线，见 §3.3
+T4  极致档   cb/kimi-k3-1         @xhigh  1.62x   🔴 红线，见 §3.3（⚠️ 权威 id 是 -1，-2 是别名）
+              ↓ 阶梯到顶仍拿不到（仅【可用性】理由）
+兜底         claude/claude-sonnet-5 @max          🔴 LAST_RESORT，⛔ 不是 T5；必须显著报告在烧 Claude 额度
 ```
+⭐ 各档 provider 由 §3.5 的 WALLET_PREF【轮换】+ 折扣窗口决定，⛔ 不是固定首选。
 
 **每一级【质量/成本升档】的唯一入口都是「上一档已在本任务做砸过一轮」。**
 ⚠️ 这条⛔**不管【可用性换档】**——模型在所有 provider 都拿不到时允许向上换档，但**必须报告**（§8）。
@@ -43,22 +44,24 @@ T4  极致档   cb/kimi-k3-2         @xhigh  1.62x   🔴 红线，见 §3.3
 ### 免费档时间线
 
 ```
-08-31  hy3 免费止   → hy4 顶上（本就是第一顺位）
-09-10  hy4 免费止   → 免费档清零，默认落点变成 T1 的 deepseek-v4.1-flash
-       🔴 2026-09-09 用户更正：原记「09-12」是**错的**，实际 08-28 ~ **09-10**
+hy3          免费期延长至 2026-09-30 23:59（用户 2026-09-15 告知）⇒ T0 唯一成员
+hy4-preview  08-28 ~ 09-10 免费期已过；🔴 2026-09-15 用户弃用（不稳定，「碰墙」形态的来源）
+             2026-09-24 面板显示 0.29x
+hy3-x        ⛔ 从来不是免费档（0.05x），无派发角色
 ```
 
-⚠️ **09-10 后不要自动落回 `hy4-preview-x`**：它是 0.29x，比 T2 的 v4-flash 还贵。
+⚠️ **hy3 免费期到期后若不再延长 ⇒ T0 清零**，默认落点变成 T1。
+⛔ 不要自动落到 `hy3-x`(0.05x) 或 `hy4-preview`(0.29x)：前者与 T1 不同档，后者已弃用。
 
 ### ⚠️ `-x` 后缀：同 label、两个 id、一免费一收费
 
 | id | 费率 | |
 |---|---|---|
-| `hy4-preview` | **0.00x** | 免费至 **09-10**（每日赠额） |
-| `hy4-preview-x` | **0.29x** | ⚠️ 同名收费版 |
-| `hy3` / `hy3-x` | 0.00x / 0.05x | 同一模式 |
+| `hy3` | **0.00x** | T0 唯一成员（免费至 09-30，每日赠额） |
+| `hy3-x` | **0.05x** | ⚠️ 同名收费版 —— label 同样叫「Hy3」 |
+| `hy4-preview` | 0.29x（09-24 面板） | 免费期已过，09-15 起弃用；旧记的 `hy4-preview-x` 09-24 面板已不出现 |
 
-🔴 **派发认 id，⛔ 不认 label** —— 两个 id 的 label 都是「Hy4 preview」，按 label 匹配会选错。
+🔴 **派发认 id，⛔ 不认 label** —— `hy3` 与 `hy3-x` 的 label 都是「Hy3」，按 label 匹配会选错。
 
 ---
 
@@ -73,13 +76,15 @@ T4  极致档   cb/kimi-k3-2         @xhigh  1.62x   🔴 红线，见 §3.3
 
 | Provider | model id | 费率 | 角色 |
 |---|---|---|---|
-| `codebuddy-code` | **`hy4-preview`** | **0.00x** | ⭐ T0 第一顺位（至 **09-10**） |
-| `codebuddy-code` | `hy3` | 0.00x | T0 次位（至 08-31） |
-| `codebuddy-code` | **`deepseek-v4.1-flash`** | **0.03x** | 🔴 T1 主落点（2026-09-10 起）·⛔ 只此一池·必须校验产出 |
-| `codebuddy-code` / 火山两套餐 | `glm-5.3-flash` | 0.06x | T1 **同档替代**（三池，可用性来源） |
-| `codebuddy-code` | `deepseek-v4-flash` | **0.17x** | T2 主力档，DeepSeek 族首选 |
-| `codebuddy-code` | `deepseek-v4-pro` | **0.51x** | T3 升档，⛔ 非任何类型的默认落点 |
-| `codebuddy-code` | `kimi-k3-2` | **🔴 1.62x** | T4 极致档，⛔ 见 §3.3 红线 |
+| `codebuddy-code` | **`hy3`** | **0.00x** | ⭐ T0 唯一成员（免费至 09-30） |
+| `codebuddy-code` | `hy4-preview` | 0.29x | ⚠️ 仍在白名单，但 09-15 起⛔不自动派（不稳定） |
+| 火山两套餐 · 百炼 | **`deepseek-v4.1-flash`** | 包月 | 🔴 T1 主落点·三池轮换·必须校验产出 |
+| `codebuddy-code` | `deepseek-v4.1-flash` | **0.11x** | ⚠️ 仍在白名单（可显式点名），2026-09-24 起⛔不自动选 —— 贵过同档 glm |
+| `codebuddy-code` / 火山两套餐 | `glm-5.3-flash` | 0.06x | T1 **同档替代**；🔴 **cb 上的 T1 落点** |
+| 火山两套餐 | `deepseek-v4-flash` | 包月 | T2 主力档，DeepSeek 族首选（⛔ cb 那份是陈旧别名，已移出白名单） |
+| `bailian-token-plan` | `qwen3.8-max` | 包月 | T3 升档（⚠️ 只此一池） |
+| `codebuddy-code` | `kimi-k3-1` | **🔴 1.62x** | T4 极致档，⛔ 见 §3.3 红线 |
+| ~~五家~~ | ~~`deepseek-v4-pro`~~ | — | ⛔ **全局禁用**（用户 2026-09-10，`BLOCKED_MODELS_ANY_PROVIDER`） |
 | `qoderclicn` | `qmodel_38max` | 0.50x | cb 整体断供时的降级落点，不主动选 |
 | ~~`jdcloud-joyagent`~~ | ~~两个 DeepSeek~~ | — | ⛔ **2026-09-09 停用**（额度用尽），配置已归档，见 §3.4 |
 
@@ -247,7 +252,7 @@ sameRoundEval    v4-pro  96  >  v4-flash 89     ← agent 抓这个当理由 ⚠
 用户 2026-08-16 明确：**很贵很贵，不要随意使用**。
 
 ```
-cb/kimi-k3-2 = 1.62x  ← 白名单内唯一 1.0x 以上
+cb/kimi-k3-1 = 1.62x  ← 白名单内唯一 1.0x 以上（⚠️ -2 是别名）
   vs deepseek-v4-flash 0.17x  → 贵 9.5 倍
   vs glm-5.3-flash     0.06x  → 贵 27 倍
 ```
@@ -366,14 +371,15 @@ cb/kimi-k3-2 = 1.62x  ← 白名单内唯一 1.0x 以上
 🔴 **endpoint ⛔ 不是通用的 `dashscope.aliyuncs.com`** —— Token Plan 有自己的域名，
 由 `bl auth status --output json` 的 `base_url` 得到。照通用文档配会连不上。
 
-**⛔ 只用这 4 个文本模型**（用户 2026-09-09 指定）：
+**⛔ 只用这 5 个文本模型**（用户 2026-09-09 指定 4 个，09-15 加 v4.1-flash）：
 
-| model id | ctx | maxOut | 夜间 5 折 | 派发中的位置 |
+| model id | ctx | maxOut | 夜间折扣（22–08） | 派发中的位置 |
 |---|---|---|---|---|
-| `deepseek-v4-pro-0813` | 1,000,000 | 393,216 | ⭐ 是 | T3（钱包轮换的一个落点） |
-| `deepseek-v4-flash-0731` | 1,000,000 | 393,216 | ⭐ 是 | T2（同上） |
-| `qwen3.8-max` | 1,000,000 | 131,072 | ⭐ 是 | **T3 同档替代**（见 §9.1 换位盲评） |
-| `qwen3.8-flash` | 1,000,000 | 131,072 | ⛔ 否 | ⛔ 未定档（无实测，显式 `--model` 才用得到） |
+| `deepseek-v4.1-flash` | 1,000,000 | 393,216 | 5 折 | **T1 池之一**（三池轮换：火山两套餐 + 百炼） |
+| `qwen3.8-max` | 1,000,000 | 131,072 | **4 折**（09-29 控制台） | **T3 主落点**（唯一池） |
+| `qwen3.8-flash` | 1,000,000 | 131,072 | **4 折**（09-29 控制台） | ≈T1 同档（09-24 评测）但⛔不进阶梯，见 catalog `qwen38flashEval_20260924` |
+| `deepseek-v4-flash-0731` | 1,000,000 | 393,216 | 5 折 | ⚠️ 未定档 —— 与 `deepseek-v4-flash` **不是同一模型**（09-11 实测），⛔ 不进 T2 池 |
+| ~~`deepseek-v4-pro-0813`~~ | 1,000,000 | 393,216 | 5 折 | ⛔ **禁用**（v4-pro 这一档整体停用，用户 09-11） |
 
 ⚠️ **`deepseek-v4-pro-0813` 不在 `/models` 目录里，但可用**（2026-09-09 实测）
 ⇒ ⛔ 又一次印证：**目录里没有 ≠ 不能用**，判断可用性只能直接发请求。
@@ -445,8 +451,8 @@ pi 是文本 agent 用不上 ⇒ 走 `bl image`（`bailian-gen` skill）。
 
 | 池 | 打折时段 | 折扣 | 适用模型 |
 |---|---|---|---|
-| **codebuddy** | ⛔ **工作日 09:00-12:00 / 14:00-18:00 是原价**，**其余全部**（含整个周末）5 折 | 积分 5 折 | `deepseek-v4-flash` · `deepseek-v4-pro` |
-| **百炼** | 每天 **22:00 – 次日 08:00** | credits 5 折 | `deepseek-v4-pro-0813` · `deepseek-v4-flash-0731` · `qwen3.8-max`（⛔ 不含 `qwen3.8-flash`） |
+| **codebuddy** | ⛔ **工作日 09:00-12:00 / 14:00-18:00 是原价**，**其余全部**（含整个周末）5 折 | 积分 5 折 | 🔴 **当前对阶梯无作用点**：原成员 v4-flash（换代成别名）、v4-pro（全局禁用）都已出局；v4.1-flash 是否继承⛔未确认，且 09-24 起已不在 cb 的 T1 池 |
+| **百炼** | 每天 **22:00 – 次日 08:00** | **qwen3.8 系 4 折**、DeepSeek 系 5 折（09-29 控制台） | `qwen3.8-max`（4 折）· `qwen3.8-flash`（4 折）· `deepseek-v4.1-flash`（5 折）· `deepseek-v4-flash-0731`（5 折）· ~~`deepseek-v4-pro-0813`~~（禁用） |
 
 ⚠️ **codebuddy 的覆盖面远大于百炼** —— 一周 168 小时里只有 **20 小时**是原价。
 ⇒ ⛔ **别把规则记成「夜间优先百炼」**，多数时段其实是 codebuddy 在打折。
@@ -495,7 +501,7 @@ pi 是文本 agent 用不上 ⇒ 走 `bl image`（`bailian-gen` skill）。
 
 | 模型 | 档位 | 依据 |
 |---|---|---|
-| `hy4-preview` / `hy3` | **`high`** | max 已被两轮盲评证伪（91.5 → 85.5）；xhigh 从未在 Hy 系上测过 |
+| `hy3` | **`max`** | 🔴 **用户 2026-09-15 决定**「能用最高就用最高」。⚠️ **反证未消解**：07-20 两轮盲评 max 均分 85.5 < high 91.5，LRU 两次都因过度设计并发原语引入 bug；09-15 同题实测 max 的 reasoning_tokens 反而最少（非单调）⇒ ⏳ 待用户复核 |
 | 其余付费档 | **`xhigh`** | 2026-08-02 用户决策（原为 high） |
 
 | thinking | 适用 |
@@ -536,12 +542,12 @@ Kafka 架构题上 max 两次都高于 high（36、35 vs 33）——**架构/方
 | 本次实施用了 | 评审可以用（任选异族） | 评审不能用 |
 |---|---|---|
 | 🔴 **主会话自己动手（Claude）** | GPT / DeepSeek / GLM / Gemini / Kimi / Hy … | **Claude 全族** |
-| `cb/hy4-preview` · `cb/hy3` | GPT / Claude / DeepSeek / GLM … | Hy 全族 |
+| `cb/hy3` | GPT / Claude / DeepSeek / GLM … | Hy 全族 |
 | `cb/glm-5.3-flash` | GPT / Claude / DeepSeek / Kimi … | **GLM 全族** |
-| `cb/deepseek-v4-flash` · `-pro` | GPT / Claude / GLM / Kimi … | **DeepSeek 全族** |
+| `deepseek-v4.1-flash` · `deepseek-v4-flash`（任何钱包） | GPT / Claude / GLM / Kimi … | **DeepSeek 全族** |
 | ~~`jdcloud-joyagent/DeepSeek-V4-*`~~ | ⛔ 已停用（2026-09-09） | ⚠️ 规律仍成立：**换钱包 ≠ 换族** |
-| `cb/kimi-k3-2` | GPT / Claude / DeepSeek / GLM … | Kimi 全族 |
-| `qcn/qmodel_38max` | GPT / Claude / DeepSeek / GLM … | Qwen 全族 |
+| `cb/kimi-k3-1` | GPT / Claude / DeepSeek / GLM … | Kimi 全族 |
+| `百炼/qwen3.8-max` · `qcn/qmodel_38max` | GPT / Claude / DeepSeek / GLM … | Qwen 全族 |
 | `claude/*`（Paseo 派 Claude 子会话） | GPT / DeepSeek / GLM … | **Claude 全族** |
 
 🔴 **第一行最容易被忽略却最常发生**：主会话就是 Claude，凡是**我自己写的代码/文档/配置**，
@@ -561,10 +567,10 @@ Kafka 架构题上 max 两次都高于 high（36、35 vs 33）——**架构/方
 create_agent(provider="pi/github-copilot/gpt-5.5", settings={"thinkingOptionId": "xhigh"})
 
 # 短审查（单文件 / 明确问题）—— 走 CLI，跑完即退
-pi -p --provider github-copilot --model gpt-5.5 "<≤200 字符的 prompt>"
+pi -p --provider github-copilot --model gpt-5.5 "<≤200 字符的 prompt>" < /dev/null   # 🔴 必须 </dev/null，否则可能永久阻塞
 ```
 
-⚠️ 实测：大审查走 `pi -p` 曾跑满 **35 分钟零输出、全程不可见只能盲杀**；
+⚠️ 实测：大审查走 `pi -p` 曾跑满 **35 分钟零输出、全程不可见只能盲杀**（⚠️ 09-24 起疑似 stdin 挂死，未复测）；
 同期 Paseo 派的审查 agent 能看到它们各自在第 13 / 22 步撞 429。
 
 | 约束 | 说明 |
@@ -656,7 +662,7 @@ Copilot 侧可用的异族评审（2026-09-08 实测 **17 个**，以 `~/.pi/age
 ⛔ 别把「审查类 → pi -p + gpt-5.5」写成一个原子——那会让「大审查」被迫走不可见通道。
 
 ⚠️ **2026-09-08 修正**：原表把「审查类」整类钉给 `pi -p`，理由是「审查不需要盯」。
-实测推翻：`pi -p` + gpt-5.5 跑满 **35 分钟零输出**、全程不可见只能盲杀；
+实测推翻：`pi -p` + gpt-5.5 跑满 **35 分钟零输出**、全程不可见只能盲杀（⚠️ 09-24 起疑似 stdin 挂死，未复测）；
 同期 Paseo 派的两个审查 agent 都能看到各自在第 13 / 22 步撞 429。
 
 🔴 **分通道的维度是「要不要看得见」，不是「用哪个工具」。**
@@ -727,7 +733,7 @@ review 已迁到 Copilot：开发实施类 + 大审查 → Paseo；短任务 / �
 | Provider | 调用方式 | Permission mode |
 |---|---|---|
 | `codebuddy-code` | Paseo `create_agent` | bypassPermissions |
-| `qoderclicn` | Paseo `create_agent` | bypassPermissions |
+| `qoderclicn` | Paseo `create_agent` | **`yolo`**（09-29 起原生 1.1.62 ACP 的模式名；⛔ 旧 `bypassPermissions` 报 Invalid mode） |
 | `pi/<火山 provider>/<model>` | Paseo `create_agent` | ⚠️ **无 mode**：pi provider 在 Paseo 里 `availableModes` 为空，⛔ 传 `modeId` 会报 `Invalid mode` |
 | `pi -p --provider volcengine-coding` | CLI one-shot | — |
 | `pi/github-copilot/gpt-5.5` | Paseo `create_agent` | ⭐ **大审查**主通道（可见可中止） |
@@ -755,12 +761,13 @@ review 已迁到 Copilot：开发实施类 + 大审查 → Paseo；短任务 / �
 
   当前档模型
     ├─ ① 该模型的 `WALLET_PREF` 池轮换 ⚠️ **各档池子不一样**：
-    │     T2/T3 四池（火山×2 + 百炼 + cb）· T1 **三池**（百炼无 glm-5.3-flash）· T4 **只有 cb**
+    │     T1 **三池**（火山×2 + 百炼；cb 09-24 移出）· T2 **两池**（火山×2）· T3 **一池**（百炼）· T4 **只有 cb**
     │     ⭐ 池内顺序 = 轮换序，当前正在打折的排前（§3.5 折扣窗口）
-    ├─ ② 同档替代 `TIER_PEERS` ⚠️ **目前仅 T3 有**（→ bailian/qwen3.8-max），其余档⛔没有 ⇒ 直接进 ③
+    ├─ ② 同档替代 `TIER_PEERS` ⚠️ **目前仅 T1 有**（v4.1-flash → glm-5.3-flash，火山两套餐 / cb）；
+    │     T3 那条 2026-09-10 已清空（qwen3.8-max 升为 T3 主落点）⇒ 其余档直接进 ③
     │     ⭐ 优先于升档 —— 同档能落就⛔别涨价
     ├─ ③ 【可用性升档】tier + 1，回到 ①  ⚠️ 每升一档都要记进 availability_escalations
-    └─ ④ 阶梯到顶（T4 kimi-k3-2）仍拿不到
+    └─ ④ 阶梯到顶（T4 kimi-k3-1）仍拿不到
           → 🔴 **LAST_RESORT `claude/claude-sonnet-5` @ `max`**（mode=auto）
 
 🔴 **LAST_RESORT 的定位**（用户 2026-09-09）：
@@ -934,7 +941,7 @@ P2  审查硬例外（§5）                 模型**默认** github-copilot/gpt
      ⚠️ 通道按【规模】分：大审查 → Paseo pi/github-copilot/gpt-5.5；短审查 → pi -p
 P3  ⚠️ Claude 模型可派不推荐         消耗订阅额度，建议留给主会话
 P4  运行环境约束                     --hub 时确认 provider 在 Hub 可用
-P5  免费档（§0 T0 + §2 排除清单）    hy4-preview → hy3
+P5  免费档（§0 T0 + §2 排除清单）    hy3（唯一成员，免费至 09-30）
 P6  任务类型 → 落点（§6）
 P7  成本优化                         同模型多 provider 时选最便宜的
 P8  Provider 降级（§8）
