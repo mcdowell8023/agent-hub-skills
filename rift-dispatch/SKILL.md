@@ -21,7 +21,7 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 
 | # | 规则 | 落点 |
 |---|---|---|
-| 1 | **便宜优先，逐级升档** | 免费档（**只有 `hy3`**，0.00x，思考档取 `max`）先试 → 付费从 **`deepseek-v4.1-flash`**（火山两套餐 + 百炼；🔴 **cb 上改用同档 `glm-5.3-flash` 0.06x** —— 09-24 cb 的 v4.1 涨到 0.11x）起步 → `deepseek-v4-flash`（0.17x）→ `qwen3.8-max` → `kimi-k3-1`（1.62x）。⛔ **每一级【质量/成本升档】的唯一入口是「上一档已在本任务做砸过一轮」**，理由里要写明哪一轮、砸在哪。写不出来不许升。⚠️ 这条⛔**不管【可用性换档】**——模型在所有 provider 都拿不到时允许向上换档（必须报告），见 §2 第 5 段。⚠️ 例外：`algorithm` / `perf` 两类从 `deepseek-v4-flash` 起步（⚠️ 依据比的是 v4-flash **对 glm**，⛔ 没比过现在的 T1 ⇒ **待补测**）。🔴 并发两类已改回 T1 起步 —— 4 臂拉丁方并发题 v4.1-flash 37.5 > v4-flash 30.5 |
+| 1 | **便宜优先，逐级升档** | 免费池（**`FREE_POOL` 登记表**：Space Bunny@high → hy3@max → qfmodel，逐条按条目判，09-29 起）先试 → 付费从 **`deepseek-v4.1-flash`**（火山两套餐 + 百炼；🔴 **cb 上改用同档 `glm-5.3-flash` 0.06x** —— 09-24 cb 的 v4.1 涨到 0.11x）起步 → `deepseek-v4-flash`（0.17x）→ `qwen3.8-max` → `kimi-k3-1`（1.62x）。⛔ **每一级【质量/成本升档】的唯一入口是「上一档已在本任务做砸过一轮」**，理由里要写明哪一轮、砸在哪。写不出来不许升。⚠️ 这条⛔**不管【可用性换档】**——模型在所有 provider 都拿不到时允许向上换档（必须报告），见 §2 第 5 段。⚠️ 例外：`algorithm` / `perf` 两类从 `deepseek-v4-flash` 起步（⚠️ 依据比的是 v4-flash **对 glm**，⛔ 没比过现在的 T1 ⇒ **待补测**）。🔴 并发两类已改回 T1 起步 —— 4 臂拉丁方并发题 v4.1-flash 37.5 > v4-flash 30.5 |
 | 2 | 🔴 **按「要不要看得见」分通道，不是按工具分** | 🔴 **开发实施类 + 大审查 → Paseo；短任务 / 短审查 → `pi -p`**。判据是**规模**不是任务类型——Paseo 能看进度、中途干预、拿结构化状态；`pi -p` 跑完即退不堆 serve。⛔ **开发任务和大审查都不要走 `pi -p`**：它不进 Paseo agent 列表，你看不见也打不断（实测大审查走 `pi -p` 跑满 35 分钟零输出 ⚠️ 09-24 起**疑似 stdin 挂死**而非规模问题，见 §3.2b —— 当时未查 stdin，未复测） |
 | 3 | 🔴 **先判失败形态，再决定换什么** | **有产出但不合格** = `bad_output` ⇒ 走【质量/成本升档】（可换模型族）。**没产出**（静默停 / 唤不醒 / 探活不过）= `no_response` ⇒ 走【可用性】：**留在同 provider 降到下一档**，⛔ 不算做砸、⛔ 不跨钱包。⚠️ hy4 经常「碰墙」——允许你用但派发后静默停，**Paseo 抓不到明确错误** ⇒ ⛔ 别把它当成模型能力问题 |
 | 4 | 🔴 **审查的硬约束是「异构」** | ⛔ **评审模型族 ≠ 实施模型族**（全局红线 #8），是**不变量**，不是针对某个模型的禁令。🔴 **含主会话：主会话就是 Claude，我自己写的东西不得派 `claude/*` 去审**。族对照表见 routing §5。⭐ **未显式指定时**默认 **`github-copilot/gpt-5.5`**（⛔ 不是「不可覆盖」；显式换 provider 会报冲突）；⚠️ **通道另按规模定**：大审查走 Paseo `pi/github-copilot/gpt-5.5`，短审查走 `pi -p`（⛔ prompt ≤200 字符） |
@@ -49,6 +49,29 @@ bash $S/cb-probe.sh hy3                              # 兼容 shim：只探 cb
 | `codebuddy-code` | cb CLI | ⚠️ **也不给状态码**，只能判 stdout 是不是 JSON；但 429 正文**带重置时间** |
 | `volcengine-*` / `bailian-*` | **直连端点** | ⭐ **真实 HTTP 状态码** ⇒ `429`(额度) / `403`(无权限) / `404`(不存在) **三态分得开** |
 | `github-copilot` | pi | 没有可直连的 key ⇒ 只能判正文 |
+| `openrouter-free` | **直连端点**（key 按 pi 配置的 `!command` 从钥匙串取，⛔ 不打印） | ⭐ 真实状态码：`429`(额度，带 `X-RateLimit-Reset`) / `402`(余额为负) / `404`(模型下线) |
+| `qoderclicn` | qcn CLI `-p -o json` | 判 `is_error` + 正文；🔴 **Paseo id ≠ CLI 名**：`qfmodel` 在 CLI 里是 `-m Qwen3.8-Flash` |
+
+⭐ **撞额度自动写冷却**（`scripts/cooldown.sh`，§2 的 `cooldown_until()` 读它）：有重置时间用重置时间，否则 **+1h**（用户 09-29 定）；
+冷却中的落点探活脚本**直接报「冷却中」、⛔ 不再探一次活**（`--force` 才强制探）。
+手动记一笔：`bash $S/cooldown.sh set <upstream> <model> <HH:MM[:SS] | YYYY-MM-DDTHH:MM | +1h> "<原因>"`；
+查看 / 清除：`cooldown.sh list` · `cooldown.sh clear <upstream> <model>`。
+⚠️ 文件在 `~/.cache/rift-dispatch/cooldown.json`（**本机**）—— ⛔ 故意不放 syncthing 同步的目录（额度按账号 / key 算，两机互相覆盖只会添乱）。
+
+🔴 **失败信号 → 动作**（免费落点为主，均来自实测；⚠️ 标「推测」的原文没在真实环境见过）：
+
+| 信号 | 判定 | 动作 |
+|---|---|---|
+| cb「使用量已超出频率限制，将在 HH:MM:SS 重置」 | 额度 | 换下一个免费条目；冷却到该时刻 |
+| Paseo 下 cb 新会话零产出 / 唤不醒 | ⚠️ 先别定性 | **先 CLI 探活**（上面那条就是这样查出来的），⛔ 别直接归因 provider |
+| OpenRouter `429` | 额度（20 次/分 · 50 次/天，北京 08:00 重置） | 换下一个；冷却到 `X-RateLimit-Reset`，没有就 +1h |
+| OpenRouter `402` | 余额为负 | **停用这一条 24h 并报告用户**，继续试下一个免费条目（⛔ 不中止整个派发） |
+| OpenRouter / 任一家 `404` | 模型下线（隐身预览模型随时可能） | 跳过；⚠️ 连续出现 ⇒ 报告用户删 FREE_POOL 条目 |
+| OpenRouter `401` | key 缺失 / 格式错（**通道级**，⛔ 不是额度） | 跳过这一条、试下一个免费条目，并**报告用户**查钥匙串 `openrouter` 条目（⛔ 打印时只报「有没有 / 长度」）；⛔ 不写冷却（等不好）。⚠️ 旧写法「停」会让一把坏 key 卡死整个派发 |
+| 探活脚本报 `SKIP`（pi 配置里没有该 provider） | 探不了 | 按**不可用**处理（⛔ 不是「全部可用」）；Hub 等没配 OpenRouter 的机器上属预期 |
+| qcn `is_error` + 429 / 额度字样 | 额度（⚠️ 推测，原文未见过） | 换下一个；冷却 +1h |
+| ACP「Empty response」 | 客户端版本问题 | 先查 Paseo 的 provider 命令是不是钉了旧版本（09-28 qcn 钉在 1.0.30 就是这个形态） |
+| `pi -p` 零 CPU、零连接、零输出 | stdin 挂死，⛔ 不是模型挂了 | 查有没有 `< /dev/null`（§3.2b） |
 
 🔴 **退出码是三档，⛔ 不是二值**：
 
@@ -75,20 +98,26 @@ n=1 时「全部失败」就是「这一个失败」，⛔ 推不出通道有问
 **第一件事是探活那个模型，⛔ 不是直接归因到 provider 或重派**。
 📌 同族判据在 MEMORY：「断言「X 类不可用」前必须测过该类里多个实例」。
 
-⚠️ **免费档时间线**（🔴 **两条独立的窗口，⛔ 别混成一条**）：
+⚠️ **免费档时间线**（🔴 **每条各有自己的窗口，⛔ 别混成一条**）：
 
 | 型号 | 免费期 | 当前状态 |
 |---|---|---|
-| `hy3` | 🔴 **延长至 `2026-09-30 23:59`**（用户 2026-09-15 告知；此前记的是「08-31 止」） | ✅ 2026-09-15 探活 9s 秒回 |
+| `stealth/space-bunny-alpha` | ⚠️ **截止未公布**（OpenRouter 09-23 上架的隐身预览模型，随时可能下线） | ✅ 2026-09-29 探活通过 |
+| `hy3` | 🔴 **延长至 `2026-09-30 23:59`**（用户 2026-09-15 告知；此前记的是「08-31 止」） | ✅ 2026-09-29 探活通过 |
+| `qfmodel` | `2026-09-30`（用户告知；Qoder 版 Qwen3.8-Flash） | ✅ 2026-09-29 探活通过 |
 | ~~`hy4-preview`~~ | `08-28 ~ 09-10` 已过期 | 🔴 **2026-09-15 用户弃用：不稳定** ⇒ ⛔ 已移出 T0，不再考虑 |
 | ~~`hy3-x`~~ | ⛔ 本来就不是免费档（**0.05x**）。⚠️ 09-24 起它比 cb 上的 T1 落点 glm-5.3-flash(0.06x) 还便宜一点，但⛔**不同档**（同轮 08-21 盲评 hy3 84 < glm 91，差距远大于位置偏好 2.5）⇒ 先选档位再挑便宜，轮不到它 | 🔴 **无派发角色** ⇒ ⛔ 不考虑 |
 
-⚠️ 都是**每日赠额**⛔非连续免费期 —— **不回复 = 当日赠额已用完**，须主动换。
+⚠️ **cb 的 hy 系**是**每日赠额**⛔非连续免费期 —— **不回复 = 当日赠额已用完**，须主动换。
+🔴 这条⛔**不适用于 Space Bunny**：它的额度耗尽是**明确的 429**（OpenRouter 20 次/分 · 50 次/天），而它**本来就慢**
+（实测 150–400s/题）⇒ 「迟迟不回」⛔ 不能当成耗尽，先看有没有 429 / 探活。qfmodel 的额度报错形态⚠️ 未见过原文。
 🔴 **判据永远是探活 + `promo_active`，⛔ 不是面板上的 `x0.00`** —— 那是价格；
 赠额耗尽后价格仍显示 0，表现是**排队 / 不回复**而⛔不是报错。
-⭐ **T0 现在只有 `hy3` 一个成员** —— ⛔ 不再是「免费档序列」，它存在的唯一理由是薅 hy3 的免费额度。
-⚠️ `t0_still_free` / `t0_now_billed` 那套机制**保留** —— 它是给 **hy3 自己 09-30 到期**用的，
-⛔ 不是只为 hy4 写的。
+⭐ **T0 是一张登记表（`FREE_POOL`，2026-09-29 起）**—— 新增 / 下线免费模型**⛔ 不改挑选逻辑**，改的都是数据：
+SKILL §2 `FREE_POOL` + catalog `freePool` 条目（二者 consistency §3o 逐项比对）；若 provider 是**白名单型**（cb / qcn / openrouter-free）
+还要把 id 加进 `WHITELIST`（⛔ 故意不让登记表自动绕过 P0 白名单）；再补标题缩写。漏了哪一项 §3o 都会报出来。
+⚠️ `t0_still_free` / `t0_now_billed` 那套机制**按条目**生效：截止过后，只有**窗口之后**核过费率且仍为 0 的条目才继续用
+（窗口内核的记录只证明促销价是 0）；复核途径写在 catalog 条目的 `verifyVia`。
 
 🔴 **钱包优先级**（routing §3.5，与档位阶梯**正交**）：
 ① **已付费套餐**（边际成本≈0）→ ~~② 京东云积分~~（⛔ 2026-09-09 停用）→ ~~③ DeepSeek 官方 API~~（🔴 **⛔ 已不是自动兜底**，2026-09-09 改为**手动路径**：它还在 opencode `disabled_providers` 里，写成自动兜底 = 假通道；需用户明确接受现金开销 + 解除 disabled 后显式指定）。
@@ -112,17 +141,18 @@ n=1 时「全部失败」就是「这一个失败」，⛔ 推不出通道有问
 | 参数 | 解析方式 | 默认 |
 |---|---|---|
 | `--model <name>` | 短名或完整 model ID（映射见 catalog `shortNames`） | 自动推荐 |
-| `--thinking <level>` | minimal / low / medium / high / xhigh / max | 按模型定：**`hy3`→`max`**（用户 2026-09-15），付费档→`xhigh`（routing §4）。**三条通道都必须传** |
+| `--thinking <level>` | minimal / low / medium / high / xhigh / max | 按模型定：免费条目取 `FREE_POOL.thinking`（**Space Bunny→`high` · `hy3`→`max`** · `qfmodel` 无思考档 ⛔ 不传），付费档→`xhigh`（routing §4）。**有思考档的三条通道都必须传** |
 | `--hub` | 标记 | 否（本地） |
 | `--worktree <path>` | 路径 | 当前目录 |
 | `--provider <name>` | 强制指定 provider | 按 model 自动选 |
-| `--free` | 强制优先 T0 免费档，并放宽**能力类**排除（routing §2 的 `algorithm`/`perf`/`architecture`）<br>⛔ 不放宽**物理不可用**类（多模态会正常计费 · 额度耗尽 · 探活排队 · 本任务已做砸）<br>🔴 T0 拿不到时**停止并报告**，⛔ 不静默转付费 | 否 |
+| `--free` | 强制优先 T0 免费池，并放宽**能力类**排除（各条目的 `avoidTaskTypes`，routing §2.b）<br>⛔ 不放宽**物理不可用**（按条目判：该条目接不了多模态 · 冷却中 · 探活不过 · 本任务已做砸）—— ⚠️ 多模态只挡 `multimodal=false` 的条目，Space Bunny 能免费接图<br>🔴 整个免费池都拿不到时**停止并报告每条原因**，⛔ 不静默转付费 | 否 |
 | 其余文本 | 任务描述 | (必填) |
 
 参数缺失处理：
 
 - 任务描述缺失 → 要求用户补充，⛔ 不猜
-- `--thinking` 非法值 → 回退到该模型默认档（**`hy3`→`max`**，其余→`xhigh`）
+- `--thinking` 非法值 → 回退到该模型默认档（免费条目按 `FREE_POOL.thinking`，其余→`xhigh`）
+- 目标模型**没有思考档**（`NO_THINKING_MODELS`：`qfmodel` · `kimi-k2.7-code`）→ ⛔ 不传，显式 `--thinking` 也作废，§7 回显「不适用」
 - `--thinking` 合法但**目标模型没有该档** → 按 §3.2e 能力表**降到最近可用档**，⛔ 不得静默升档，且必须在输出里回显实际生效档位
 - `--provider` 与 `--model` 不匹配 → 报告冲突，让用户选
 - `--free` 与 `task_type == review` 同时成立 → **报告冲突，让用户选**（review 硬例外固定 `gpt-5.5` 是付费档；⛔ 不擅自替用户决定牺牲哪一边）
@@ -164,7 +194,12 @@ WHITELIST = {                                   # P0，routing §1
   # 🔴🔴 **陈旧版本别名比无版本别名更危险**：它带着版本号，却指向**另一个版本** ⇒
   #    标题会写 `cb-dspF4` 而实际跑的是 `dspF4.1`，**标题在说谎**，
   #    正好击穿 §3.1 标题规范存在的意义。⇒ ⛔ 必须从白名单移除，不能只加注释。
-  'qoderclicn':       ['qmodel_38max'],
+  'qoderclicn':       ['qmodel_38max',
+                       'qfmodel'],               # ⭐ 2026-09-29 T0 免费池 priority 3（Qwen3.8-Flash，免费至 09-30）
+  # ⭐ 2026-09-29 OpenRouter 免费隐身模型 —— 🔴 **白名单型**，⛔ 不进 EXEMPT。
+  #    理由：OpenRouter 同一把 key 能调 347 个模型（大多收费），models.json 里这个 provider 虽只注册了它一个，
+  #    ⇒ 派发侧仍要有「只许这一个」的硬闸，就是这张白名单。
+  'openrouter-free':  ['stealth/space-bunny-alpha'],
 }
 # ⛔ jdcloud-joyagent 2026-09-09 停用（额度用尽、消耗太快）——已从 ~/.pi/agent/models.json 移除。
 #    ⚠️ 配置完整归档在 ~/.pi/agent/providers-disabled/jdcloud-joyagent.json（含恢复清单）。
@@ -248,7 +283,8 @@ EXEMPT_PROVIDERS   = ['claude', 'codex', 'opencode', 'github-copilot',
 # 🔴 `pi` ⛔ 不在豁免集 —— 它是【宿主】不是钱包。豁免顶层 pi 会让
 #    pi/jdcloud-joyagent/GLM-5.2 绕过京东白名单。⚠️ 本清单必须与 catalog whitelist.exempt 一致。
 PI_HOSTED = ('volcengine-coding', 'volcengine-agent-plan', 'volcengine-chat',
-             'bailian-token-plan', 'github-copilot')   # ⛔ 京东已停用
+             'bailian-token-plan', 'github-copilot',
+             'openrouter-free')                      # ⛔ 京东已停用；⭐ 09-29 加 OpenRouter（Paseo 串 pi/openrouter-free/…）
 LADDER = [('deepseek-v4.1-flash', 0.03), ('deepseek-v4-flash', 0.17),
           ('qwen3.8-max', None),     ('kimi-k3-1', 1.62)]      # T1..T4
 # 🔴 2026-09-24 cb 上 v4.1-flash 涨到 **0.11x**（上面 0.03 是 09-10 定档时的 cb 价，⛔ 已过时）。
@@ -291,11 +327,58 @@ ENTRY  = {'algorithm': 1, 'perf': 1}
 #    已知：LRU 题 v4.1(33.5) > glm(29.0)，但**未与 v4-flash 比过**（那格取不到输出）。
 #    ⇒ 🔴 **待补测**：v4.1-flash vs deepseek-v4-flash 的 LRU / perf 头对头。
 #      补出来之前⛔不要当「已验证」用（同 feedback-scoped-comparison-overgeneralized）。
-# routing §2 免费档排除清单分两类。free_blockers(task_type,args) ⇒ 命中项的 set()，
-# 空集 = 不排除。⚠️ 只有【能力类】能被 --free 放宽：
-CAPABILITY_BLOCKERS = {'algorithm', 'perf', 'architecture'}      # 能力短板，有实测依据
-# ⛔ 物理不可用类（⛔ --free 也不放宽）：'multimodal'（会正常计费，免费不成立）
-#    'quota_exhausted' · 'probe_queued'（探活未秒回）· 'failed_this_task'（绕过会死循环）
+# routing §2 免费档排除分两类，🔴 2026-09-29 起**全部按条目判**（⛔ 不再全局套在所有免费模型上）：
+#   · 能力类 = 条目的 avoidTaskTypes ⇒ ⭐ 只有 --free 能放宽（用户显式接受能力风险）
+#   · 物理不可用 = 该落点本任务反复无响应 / 本任务已做砸 / 任务要多模态而它不能免费接 / 撞额度冷却中
+#     ⇒ ⛔ --free 也不放宽（绕过去也拿不到免费，只会静默变成付费或死循环）
+CAPABILITY_BLOCKERS = {'algorithm', 'perf', 'architecture'}      # 能力类的全部取值；avoidTaskTypes ⛔ 只许从这里取
+
+# ⭐ **T0 免费档登记表**（用户 2026-09-29：按表挑，新增 / 下线免费模型**⛔ 不改挑选逻辑**，只改数据）
+#    ⚠️ 「只改数据」≠「只改这一张表」：还要改 catalog `freePool`；白名单型 provider 要加 WHITELIST
+#       （⛔ 故意不让登记表绕过 P0）；再补标题缩写 —— 漏哪项 consistency §3o 都会报。
+#    按 priority 从小到大，取第一个【当前可用】的。⚠️ 与 catalog `freePool.entries` 逐项一致（consistency §3o）。
+#    字段：freeUntil  免费截止，本地时间（Asia/Shanghai，⛔ 不带时区，与 now() 同口径）；None = 未公布
+#          thinking   默认思考档；None = 该模型**没有思考档**（⛔ 不传，见 NO_THINKING_MODELS）
+#          multimodal 能否【免费】接图片 / 视频输入 · avoidTaskTypes 能力短板 · cautionTaskTypes 只提醒不排除
+#          retainsData 服务方是否可能留存 prompt（None = 未知）· allowInSensitiveWorkspace 能否用于 ~/wb 等公司目录
+#    ⛔ 核价记录（creditRecord）与复核途径（verifyVia）**只在 catalog** —— 那是用户核完写进去的数据，⛔ 不双写。
+FREE_POOL = [
+  {'upstream': 'openrouter-free', 'model': 'stealth/space-bunny-alpha', 'priority': 1,
+   'freeUntil': None, 'thinking': 'high', 'multimodal': True,
+   'avoidTaskTypes': set(), 'cautionTaskTypes': {'concurrency_impl'},
+   'retainsData': True, 'allowInSensitiveWorkspace': True},
+   # ⭐ 09-29 第三轮 12 格同轮：均分 33.3 vs qwen3.8-max 34.5 / glm 34.4 / v4.1 33.7，与三个付费臂逐格都 6:6 ⇒ 与 T1 同档
+   #    ⚠️ 三个对照臂**复用 09-24 的同一份答案**重新评审（⛔ 不是重新生成）；Bunny 是直连 API reasoning.effort=high
+   # 🔴 D3（用户）：并发实现题 30.0 偏弱（扣余额漏乘数量、字段 snake/camel 不一致）⇒ **只提醒不排除**
+   # 🔴 D2（用户）：服务方可能留存 prompt，用户知情并决定 ~/wb 下**也不跳过**
+   # ⚠️ 预览期隐身模型，截止未公布、随时可能下线（404 ⇒ 按冷却 / 下线处理）；实测 150–400s/题，偏慢
+  {'upstream': 'codebuddy-code', 'model': 'hy3', 'priority': 2,
+   'freeUntil': '2026-09-30T23:59', 'thinking': 'max', 'multimodal': False,
+   'avoidTaskTypes': {'algorithm', 'perf', 'architecture'}, 'cautionTaskTypes': set(),
+   'retainsData': False, 'allowInSensitiveWorkspace': True},
+   # 🔴 用户 2026-09-15：「hy3 能用最高就用最高思考强度」⇒ `max`。
+   # ⚠️ **`max` 只验证了「被接受」，⛔ 没验证「想得更多」** —— 同一道推理题实测
+   #    `minimal` 1384 / `high` 1130 / `max` **653** reasoning_tokens，非单调（与 `-0731` 六档空转同形）。
+   #    ⭐ 但它免费且不报错 ⇒ 按用户指示取最高档，代价为零。
+   # ⚠️ avoid 三项就是旧的全局排除清单 —— 那张清单**本来就是给 hy3 定的**（07-20 / 08-21 盲评）
+   # ⚠️ 多模态 ⇒ cb 会切到付费多模态模型，免费不成立
+  {'upstream': 'qoderclicn', 'model': 'qfmodel', 'priority': 3,
+   'freeUntil': '2026-09-30T23:59', 'thinking': None, 'multimodal': False,
+   'avoidTaskTypes': {'algorithm', 'perf'}, 'cautionTaskTypes': set(),
+   'retainsData': None, 'allowInSensitiveWorkspace': True},
+   # ⭐ Qoder 免费版 Qwen3.8-Flash（用户告知免费至 09-30）。🔴 **⛔ 不等于百炼直连版**：
+   #    09-24 第二轮 Qoder×2 均分 28.3 / 30.5 vs 百炼版 34.5（11:1 p=0.006）——答案短、快 3–5 倍，疑似默认思考更低
+   # ⏳ avoid algorithm 是 agent 按实测提的（LRU 19.5 / 23.2，其余臂 30–32），**待用户认可**；
+   #    perf 从来没有实测 ⇒ 与 hy3 同一理由按 algorithm 同类保守处理（审查 r2 指出只挡 algorithm 会让 perf 落到它）；
+   #    架构题（Kafka 34.0 / 35.5）与其余臂同档 ⇒ ⛔ 不扩大到 architecture
+]
+# 🔴 没有思考档的模型 ⇒ 收尾 thinking 置 None、build_settings ⛔ 不写 thinkingOptionId
+#    （⛔ 否则收尾的 `thinking or default_thinking(model)` 会给它补一个 xhigh）
+#    ⭐ 免费条目的那部分**由 FREE_POOL 推**（thinking=None 即无思考档）⇒ 新增免费模型⛔不用再改这里（审查 09-29）
+NO_THINKING_MODELS = {'kimi-k2.7-code'} | {e['model'] for e in FREE_POOL if e['thinking'] is None}
+def default_thinking(m):
+    """没给 --thinking 时的默认档：免费条目取 FREE_POOL.thinking，其余 xhigh（routing §4）。"""
+    return next((e['thinking'] for e in FREE_POOL if e['model'] == m and e['thinking'] is not None), 'xhigh')
 
 # 🔴 **失败形态分类 —— 决定走哪条换档路径，⛔ 别让 agent 自己找叙事**（用户 2026-09-10 反馈）
 #    hy4 经常「碰墙」：允许你用，但**派发后静默停 / 唤不醒**，Paseo 抓不到任何明确错误。
@@ -468,13 +551,23 @@ DISCOUNT_WINDOWS = {
 #    ⭐ 最坏的是：这个后果由「用户做了正确的事（去核实）」触发。
 #    ⇒ 名字必须说出真正的谓词：**t0_still_free**，⛔ 不是「有没有核过」。
 RATE_RECHECK_MAX_AGE_DAYS = 7
-def t0_still_free(model_id, dt=now()):
-    """🔴 判据 = catalog 里该型号 `credit` **仍为 0**，且核实日期**足够新**。
+def promo_active(e):
+    """免费窗口是否仍开着。freeUntil 为 None = 截止未公布 ⇒ 视为开着（⚠️ 预览期随时可能下线，靠探活兜）。"""
+    return e['freeUntil'] is None or now() <= parse_local_time(e['freeUntil'])
+
+def t0_still_free(e, dt=now()):
+    """🔴 判据 = catalog 里该条目的 creditRecord.credit **仍为 0**，且核实发生在**窗口之后**、日期**足够新**。
        ⛔ 不接受：模型自述（实测答「不知道」）· `rawUsage`（只有 token 数）· `--help`（只有型号清单）。
-       ⚠️ 费率只在 cb 的 `/model` 面板里 ⇒ **只能由用户核并写进 catalog**。"""
-    rec = catalog_credit_record(model_id)   # {'credit': float, 'verifiedOn': 'YYYY-MM-DD'} 或 None
+       ⚠️ 费率 agent 多半拿不到（cb 只在 `/model` 面板）⇒ **由用户按条目的 verifyVia 核并写进 catalog**。
+       ⚠️ 只在 promo_active(e) 为假时调用 ⇒ 此处 freeUntil 必非 None。"""
+    rec = catalog_credit_record(e['upstream'], e['model'])   # {'credit': float, 'verifiedOn': 'YYYY-MM-DD'} 或 None
     if not rec or rec.get('verifiedOn') is None:
         return False                        # 没核过
+    if rec['verifiedOn'] <= e['freeUntil'][:10]:
+        return False                        # 🔴 窗口内核的只证明「促销价是 0」，⛔ 不证明窗口后仍免费
+        # ⚠️ 2026-09-29 加：条目带上 freeUntil 之后这个洞才构造得出来 —— hy3 的记录是 09-24 面板 0.00x，
+        #    按旧规则到 10-01 仍在 7 天内 ⇒ 会把可能已开始计费的 hy3 当免费再用一天。
+        #    ⚠️ 截止当天（09-30）核的也不算：窗口到 23:59 才关。
     if days_between(rec['verifiedOn'], dt) > RATE_RECHECK_MAX_AGE_DAYS:
         return False                        # 🔴 核实记录过期 —— 本次事故就是陈旧记录被实测证伪
         # ⚠️ 符号约定：`days_between(早, 晚)` 返回**正数天数**（= 晚 − 早）。
@@ -583,6 +676,12 @@ dead_landings = {(f['upstream'], f['model']) for f in past_failures(task_context
                  if f.get('shape') == 'no_response'
                  and f.get('count', 1) >= NO_RESPONSE_LIMIT
                  and f.get('upstream') and f.get('model')}
+# 🔴 本任务里已在某个**免费落点**做砸（有产出但不合格）⇒ 只排除**那一条**，其余免费条目照常可试
+#    ⚠️ 判据与 failed_paid_tiers 同一张 FAILURE_SHAPES 表、同一个缺省 —— ⛔ 别另起一套口径
+#    ⚠️ 这里⛔不计入付费档的做砸数（T0 的失败 tier 为 None，上面那条本来就不数它）
+free_failed_landings = {(f['upstream'], f['model']) for f in past_failures(task_context)
+                        if f.get('tier') is None and f.get('upstream') and f.get('model')
+                        and FAILURE_SHAPES.get(f.get('shape', 'bad_output'), 'quality') == 'quality'}
 # 🔴 provider affinity 的**证据**：cb 接了活然后静默（⛔ 不是「碰过 cb」）
 cb_accepted_then_silent = any(f.get('upstream') == 'codebuddy-code'
                               and f.get('shape') == 'no_response'
@@ -598,6 +697,9 @@ t0_free_unverified = []      # 🔴 免费窗口已过但**仍探活通过**的�
 #   ⛔ 不静默丢掉 —— 若它其实还免费，跳过就是白付 T1 的钱。
 tier_substitutions = []      # ⭐ (原model, 换成, 原因) —— 显式 provider 上没有本档主落点时的同档换落点
 #   ⛔ 与 availability_escalations 分开记：那个是【跨档】向上，这个是【档内】换落点，§7 措辞不同。
+free_cautions = []           # ⭐ (免费落点model, task_type) —— 命中条目的 cautionTaskTypes ⇒ §7 必须打出提醒
+free_skipped  = []           # (upstream, model, 原因集合) —— 被跳过的免费条目；--free 拿不到时整张表报给用户
+t0_probed = False            # 🔴 T0 已对选中的免费落点探过活 ⇒ §5 ⛔ 不再探第二次（第二次失败只会停，不会试下一个免费条目）
 
 # ═══ 1. 显式 provider 先过 P0 ═══ 此时 model 可能仍是 None，validate 允许
 # 🔴 ⛔ review 的 provider 冲突必须【抢在 P0 之前】判（0909 第 7 轮审查）——
@@ -647,57 +749,59 @@ if task_type == 'review':
 
 # ═══ 4. 选模型：T0 免费档 → T1..T4 阶梯 ═══ ⛔ 只赋值，不 return
 elif model is None:
-    # --free 只放宽【能力类】排除（algorithm/perf/architecture）——用户显式接受能力风险；
-    # ⛔ 不放宽【物理不可用】类（多模态计费/额度耗尽/探活排队/本任务已做砸）——
-    #    那几条绕过去也拿不到免费，只会静默变成付费或死循环。判定见 routing §2。
-    blockers = free_blockers(task_type, args)        # ⇒ set()，空集表示不排除
-    # ⚠️ T0 只跑在 codebuddy-code 上 ⇒ 显式指定的正是它时【不算冲突】；
-    #    原先一律要求 explicit_upstream is None，会让 `--free --provider codebuddy-code`
-    #    直接掉进 report_free_unavailable_and_stop（0909 审查抓到）。
-    t0_provider_ok = explicit_upstream in (None, 'codebuddy-code')
-    if t0_provider_ok and (not blockers or
-                           (want_free and blockers <= CAPABILITY_BLOCKERS)):
-        # 🔴 **2026-09-15 T0 只留 `hy3`** —— 用户决定：
-        #    · `hy4-preview` **不稳定，不用了**（它就是「碰墙」那个形态的来源：允许你用、
-        #      派发后静默停、Paseo 抓不到明确错误 ⇒ 见硬默认 #3 与 FAILURE_SHAPES）
-        #    · `hy3-x` ⛔ 本来就不是免费档（**0.05x**）⇒ 无派发角色
-        #      ⚠️ 09-24 起比 cb 的 T1 落点 glm(0.06x) 略便宜，但⛔不同档（hy3 同轮盲评 84 < glm 91）
-        #    ⇒ **T0 存在的唯一理由就是薅 hy3 的免费额度**，⛔ 不再是「免费档序列」。
-        for m in ('hy3',):                          # T0，只此一个
-            # 🔴 **窗口过期 ⛔ 不等于不能用** —— 2026-09-11 实测：记录的免费期是 `08-28~09-10`，
-            #    而 hy4-preview 当天照样 **7s 秒回**（hy3 4s / hy3-x 3s）⇒ 要么延期了（cb 有前例）、
-            #    要么**开始计费了**。⛔ 两头都不能赌：
-            #      · 日期到了就直接跳过 ⇒ 白付 T1 的钱，而 0.00x 可能还在
-            #      · 闭着眼继续用   ⇒ 若已计费，费率未知，可能比 T1 还贵
-            #    ⇒ 过期后**要求费率复核**：复核过（catalog 里该型号的 credit 有当期日期）才用，
-            #      否则按 T1 起步，并在 §7 提示「T0 仍可用但费率未核，核实后可能更省」。
-            #    ⚠️ 费率**只在 cb 的 `/model` 面板里**：`--help` 只给型号清单、
-            #      `rawUsage` 只有 token 数、问模型自己答「不知道」⇒ ⛔ 这一项 agent 拿不到。
-            # 🔴 **dead_landings 必须最先判** —— ⛔ 否则未复核分支里的 `probe_ok(m)`
-            #    会对一个「本任务里已反复静默」的落点**再探一次活**，正是 dead_landings
-            #    当初要挡的超时路径；而且此时提示「本可省下 T1 的费用」也不成立（异构审 0911 #2）。
-            if ('codebuddy-code', m) in dead_landings:
-                continue                            # 🔴 本任务里它已经反复无响应
-            if not promo_active(m) and not t0_still_free(m):
-                rec = catalog_credit_record(m)
-                if rec and rec.get('credit') not in (None, 0.0):
-                    t0_now_billed.append((m, rec['credit']))   # 🔴 核过了，确认已计费
-                elif probe_ok(m):
-                    t0_free_unverified.append(m)    # ⇒ §7 提示，⛔ 不静默丢掉这个机会
-                continue                            # ⛔ 未复核 ⇒ 不当免费档用
-                # ⚠️ `continue` 必须**在未复核这个分支里面** —— 写成无条件 continue
-                #    会让「已复核」也照样跳过（我第一版就是这个错，用例当场抓到）
-            if probe_ok(m):                         # ⚠️ 长任务必须探活，怕撞排队
-                # 🔴 用户 2026-09-15：「hy3 能用最高就用最高思考强度」⇒ 默认 `max`。
-                # ⚠️ **`max` 只验证了「被接受」，⛔ 没验证「想得更多」** —— 同一道推理题实测
-                #    `minimal` 1384 / `high` 1130 / `max` **653** reasoning_tokens，
-                #    **非单调，max 反而最少、最快**（10s vs 22s/31s，三档答案都对）。
-                #    ⇒ 与 `deepseek-v4-flash-0731` 六档空转同一形态。⛔ 别当成「更高=更深」。
-                #    ⭐ 但它免费且不报错 ⇒ 按用户指示取最高档，代价为零。
-                upstream, model, thinking = 'codebuddy-code', m, thinking or 'max'
-                break
+    # ⭐ **T0 = 按 FREE_POOL 的 priority 依次试，取第一个【当前可用】的**（2026-09-29 起登记表驱动）。
+    #    📜 09-15 ~ 09-28 这里写死 `for m in ('hy3',)`：hy4-preview 不稳定被弃用、hy3-x 本来就收费（0.05x）
+    #       ⇒ 当时 T0 只剩 hy3。09-29 用户加了 Space Bunny / qfmodel 并要求「以后新免费模型只改表」。
+    # 🔴 阻断**全部按条目判**，⛔ 不连带其它条目 —— cb 撞 429 ⛔ 不该把 OpenRouter / Qoder 一起跳过
+    #    （原先 quota_exhausted / probe_queued 是全局前置，只有一个免费成员时看不出问题）。
+    needs_mm = needs_multimodal(user_input, args)
+    for e in sorted(FREE_POOL, key=lambda e: e['priority']):
+        u, m = e['upstream'], e['model']
+        # ⚠️ 显式 provider ⇒ 只看同 provider 的免费条目，⛔ 不算冲突
+        #    （原先一律要求 explicit_upstream is None，会让 `--free --provider codebuddy-code`
+        #     直接掉进 report_free_unavailable_and_stop，0909 审查抓到）
+        if explicit_upstream not in (None, u):
+            continue
+        assert set(e['avoidTaskTypes']) <= CAPABILITY_BLOCKERS   # ⛔ avoid 只许写能力类（--free 放宽的前提）
+        # ── 硬阻断：⛔ --free 也不放宽。🔴 必须全部判在**任何探活之前** ——
+        #    ⛔ 否则会对「本任务里已反复静默」的落点再探一次活，正是 dead_landings 当初要挡的超时路径（异构审 0911 #2）
+        hard = set()
+        if (u, m) in dead_landings:          hard.add('no_response')        # 本任务里反复无响应
+        if (u, m) in free_failed_landings:   hard.add('failed_this_task')   # 本任务里已做砸
+        if needs_mm and not e['multimodal']: hard.add('multimodal')         # 会被切到付费模型，免费不成立
+        cd = cooldown_until(u, m)            # 撞额度的冷却记录（~/.cache/rift-dispatch/cooldown.json）；没撞过 ⇒ None
+        if cd is not None and cd > now():    hard.add('quota_cooldown')     # ⛔ 不许拿 None 去比较
+        # ── 能力短板：⭐ 只有 --free 能放宽
+        soft = set(e['avoidTaskTypes']) & {task_type}
+        if hard or (soft and not want_free):
+            free_skipped.append((u, m, hard | soft))
+            continue
+        # 🔴 **窗口过期 ⛔ 不等于不能用** —— 2026-09-11 实测：记录的免费期已过，hy4-preview 当天照样
+        #    **7s 秒回** ⇒ 要么延期了（cb 有前例）、要么**开始计费了**。⛔ 两头都不能赌：
+        #      · 日期到了就直接跳过 ⇒ 白付 T1 的钱，而 0.00x 可能还在
+        #      · 闭着眼继续用   ⇒ 若已计费，费率未知，可能比 T1 还贵
+        #    ⇒ 过期后**要求费率复核**：窗口之后核过且仍为 0（t0_still_free）才用，
+        #      否则跳过，并在 §7 提示「仍可用但费率未核，核实后可能更省」（复核途径见 catalog 条目的 verifyVia）。
+        if not promo_active(e) and not t0_still_free(e):
+            rec = catalog_credit_record(u, m)
+            if rec and rec.get('credit') not in (None, 0.0):
+                t0_now_billed.append((m, rec['credit']))   # 🔴 核过了，确认已计费
+            elif probe_ok(u, m):
+                t0_free_unverified.append(m)    # ⇒ §7 提示，⛔ 不静默丢掉这个机会
+            free_skipped.append((u, m, {'expired'}))
+            continue
+            # ⚠️ `continue` 必须**在未复核这个分支里面** —— 写成无条件 continue
+            #    会让「已复核」也照样跳过（第一版就是这个错，用例当场抓到）
+        if probe_ok(u, m):                      # ⚠️ 长任务必须探活，怕撞排队 / 当日赠额耗尽
+            upstream, model, t0_probed = u, m, True
+            thinking = explicit_thinking if explicit_thinking is not None else e['thinking']
+            #          ↑ ⛔ 用 `is not None`，⛔ 不用 `or`（见第 1 段）；条目 thinking 为 None ⇒ 该模型无思考档
+            if task_type in e['cautionTaskTypes']:
+                free_cautions.append((m, task_type))    # ⇒ §7 必须打出，⛔ 只提醒不排除
+            break
+        free_skipped.append((u, m, {'probe_failed'}))
     if model is None and want_free:
-        report_free_unavailable_and_stop(blockers)   # 🔴 显式要免费却拿不到 ⇒ 停
+        report_free_unavailable_and_stop(free_skipped)   # 🔴 显式要免费却拿不到 ⇒ 停，并列出每条为什么不行
     if model is None:                                # T1..T4
         i = ENTRY.get(task_type, 0) + failed_paid_tiers_in_this_task
         # ⛔ failed_paid_tiers 只数【付费阶梯内】做砸的档数：T0 不计、同档重试不计
@@ -709,7 +813,8 @@ elif model is None:
         #    ⚠️ 措辞按代码来：判据是「cb 吞下过请求」，⛔ 不限于 T0 那一档
         #    （异构审第 4 轮的非阻断观察：原措辞写「T0 失败」比代码窄）。
         #    用户 2026-09-10 明确：「hy4 失效 → cb 的 deepseek-v4.1-flash」，⛔ 不要换 pi。
-        #    依据：T0 只跑在 cb 上，而 cb 通道**本身是活的**（它刚把 hy4 的请求吞了）
+        #    依据：cb 通道**本身是活的**（它刚把 hy4 的请求吞了）。📜 09-10 时 T0 只跑在 cb 上；09-29 起 T0 还有
+        #    OpenRouter / Qoder，但判据本来就是「**cb** 接了活然后静默」，与 T0 有几家无关 ⇒ 本段逻辑不变
         #    ⇒ 换钱包是**没有依据**的动作，只是 agent 手边最熟的动作。
         #    ⚠️ 这只**重排池内顺序**，⛔ 不改档位、⛔ 不改模型 —— 池里没有 cb 时自然回到轮换。
         #    ⭐ 写成不变量而⛔不是靠巧合：现在 T1 恰好只在 cb，但将来 T1 换人就丢了这个性质。
@@ -754,7 +859,9 @@ if explicit_upstream is not None and explicit_model is None:
             tier_substitutions.append((model, _alt[1], f'{explicit_upstream} 上没有 {model}'))
             model = _alt[1]
         else:
-            report_provider_model_mismatch_and_stop(explicit_upstream, model, _pool)
+            report_provider_model_mismatch_and_stop(explicit_upstream, model, _pool, free_skipped)
+            #  ⭐ 带上 free_skipped：`--provider openrouter-free` 这类**只有免费条目**的 provider，停的真实原因是
+            #     「它的免费条目当前不可用」，⛔ 不只是「它没有 v4.1-flash」（审查 r2）
 
 # ═══ 5. 选 provider ═══ ⚠️ 显式 provider 存在时⛔不许被换掉
 if upstream is None:
@@ -769,7 +876,11 @@ if upstream is None:
         report_blocked_model_and_stop(explicit_upstream, model)
     tier = next((i for i, (m, _) in enumerate(LADDER) if m == model), None)
     while True:
-        pool = WALLET_PREF.get(model, [('codebuddy-code', model)])
+        pool = (WALLET_PREF.get(model)
+                or [(u, model) for u, ms in WHITELIST.items() if model in ms]   # 🔴 白名单型 provider 的型号（qfmodel / Bunny / qmodel_38max）
+                or [('codebuddy-code', model)])
+        #  ⚠️ 中间那项 2026-09-29 加（审查 A ❌1）：原先只有 WALLET_PREF 或 cb ⇒ `--model qfmodel` 不给 provider
+        #     会落成 cb/qfmodel 并被白名单报「冲突」—— 报的原因是错的（`qmodel_38max` 早就是这个形态）
         # ⭐ 轮换时把【当前正在打折】的池排前（sorted 稳定 ⇒ 同为打折/同为原价时保持原轮换序）
         # 🔴 这里是【档位内选落点】，⛔ 不许换成别的档位。
         #    2026-08-12 那个 bug 的错误是 is_night() 把「做砸才升上去的高档模型」
@@ -836,9 +947,11 @@ else:
     #    ① 显式 `--provider`（带或不带 model）② review 默认落点（第 3 段设的）
     #    ③ T0 免费档（第 4 段设的）。这些都绕过了第 5 段的自动 provider 选择，
     #    ⇒ 统一在这里做**一次落点探活**，⛔ 别让它们成为漏检口。
+    # ⚠️ ③ 例外（2026-09-29 审查 A ❌2）：T0 循环里**刚探过**（t0_probed）⇒ ⛔ 不探第二次。
+    #    多条目 T0 下，第二次探失败会走到下面的「报告并停止」，而⛔不是换下一个免费条目（违反 D4）。
     if explicit_model is None:
         model = model_id_on(upstream, model)   # 用户只给了 provider ⇒ 在该 provider 内取该模型的 id
-    if first_available([(upstream, model)]) is None:
+    if not t0_probed and first_available([(upstream, model)]) is None:
         # ⛔ 显式指定的落点拿不到 ⇒ **报告并停止**。
         # ⛔ 不许静默换 provider（违反「显式 provider ⛔ 不许被换掉」），
         # ⛔ 也不许走可用性升档 —— 用户点名要这个，换掉就不是他要的东西了。
@@ -861,7 +974,8 @@ if upstream == 'claude':
 # ⭐ 现在可用性只有【一套】真源：§5 的 first_available + 同档替代 + 向上升档 + LAST_RESORT。
 #    ⛔ 不要再在收尾里加第二套判断 —— 两套信号会互相矛盾。
 provider = normalize_provider(upstream, channel)
-thinking = clamp_to_supported(model, thinking or default_thinking(model))  # §3.2e，⛔ 只降不升
+thinking = (None if model in NO_THINKING_MODELS             # 🔴 没有思考档 ⇒ ⛔ 不传（显式 --thinking 也作废，§7 回显）
+            else clamp_to_supported(model, thinking or default_thinking(model)))  # §3.2e，⛔ 只降不升
 result   = execute(channel, provider, model, thinking)    # §3
 agent_id = result.agent_id if channel == 'paseo' else None
 # ⚠️ `pi -p` 是一次性进程，⛔ 没有 agent_id —— 用 result.run_id 留痕
@@ -923,8 +1037,12 @@ print_summary()                                      # §7
 | `--provider volcengine-coding --model deepseek-v4-flash` | ✅ 放行（豁免集） |
 | `--provider github-copilot --model gpt-5.5` | ✅ 放行（豁免集） |
 | `--provider deepseek --model deepseek-v4-pro` | ⛔ **拦住**（DISABLED_PROVIDERS） |
-| 默认任务，**免费档可用** | → `codebuddy-code` + **`hy3`** @ `max`（T0，⛔ 还没进付费阶梯） |
-| 默认任务，免费档被排除/探活失败，0 次付费档做砸 | → `pi/volcengine-coding` + `deepseek-v4.1-flash`（T1 三池轮换首位：火山 coding → agent-plan → 百炼）🔴 **必须校验产出** |
+| 默认任务，**免费池可用** | → `pi/openrouter-free` + **`stealth/space-bunny-alpha`** @ `high`（T0 priority 1，⛔ 还没进付费阶梯） |
+| Space Bunny 冷却中 / 探活不过 | → `codebuddy-code` + **`hy3`** @ `max`（priority 2）；再不行 → `qoderclicn` + **`qfmodel`**（priority 3，⛔ 不传 thinking） |
+| `concurrency_impl` 类，免费池可用 | → 仍落 Space Bunny，但 §7 **必须打出提醒**（用户 D3：只提醒不排除） |
+| `algorithm` 类 + Space Bunny 不可用 | → hy3 / qfmodel 都 avoid ⇒ 付费 T2 `deepseek-v4-flash`；⭐ 带 `--free` 则放宽，落 hy3 |
+| 多模态任务 + Space Bunny 不可用 | → hy3 / qfmodel 都接不了图（会被切到付费模型）⇒ 进付费阶梯；`--free` ⛔ 也不放宽 ⇒ 停止并报告 |
+| 默认任务，免费池三条都拿不到，0 次付费档做砸 | → `pi/volcengine-coding` + `deepseek-v4.1-flash`（T1 三池轮换首位：火山 coding → agent-plan → 百炼）🔴 **必须校验产出** |
 | T1 三池都拿不到 | → 同档替代 `glm-5.3-flash`（火山两套餐 / cb 三池），⛔ 不升 T2 |
 | 🔴 显式 `--provider codebuddy-code`，不给 model，落到 T1 | → `codebuddy-code` + **`glm-5.3-flash`**（同档换落点，`tier_substitutions` 留痕）—— 09-24 cb 的 v4.1 涨到 0.11x，已移出其池 |
 | 显式 `--provider codebuddy-code --model deepseek-v4.1-flash` | ✅ 照派（仍在白名单）—— 用户点名就尊重，价差用户自负 |
@@ -934,7 +1052,7 @@ print_summary()                                      # §7
 | 一路到 T4 仍拿不到 | → 🔴 `claude/claude-sonnet-5` @ `max`（**LAST_RESORT**，§7 必须显著告知在烧 Claude 额度） |
 | 连 `claude/claude-sonnet-5` 也拿不到 | ⛔ **停止并报告**（`report_no_landing_and_stop`），⛔ 不静默降档 |
 | 显式 `--thinking low` + 落到 LAST_RESORT | thinking 保持 **`low`**，⛔ 不被 LAST_RESORT 的 `max` 覆盖 |
-| `algorithm` 类，0 次付费档做砸 | → `pi/volcengine-coding` + `deepseek-v4-flash`（跳 T0，T2 起步） |
+| `algorithm` 类，免费池不可用，0 次付费档做砸 | → `pi/volcengine-coding` + `deepseek-v4-flash`（T2 起步）⚠️ 免费池可用时先落 Space Bunny（它没有 avoid） |
 | 只给 `--provider volcengine-coding` 不给 model | ✅ P1 仍校验该 provider，再按默认档位补 model |
 | 只给 `--model v4-pro` 不给 provider | ✅ 先按 WALLET_PREF 定 provider，再回 P0 校验 |
 | 大审查（多文件 / 20+ 工具调用） | → Paseo `pi/github-copilot/gpt-5.5`，⛔ 不走 `pi -p` |
@@ -998,13 +1116,10 @@ create_agent({
 def build_settings(full_provider, model, thinking):
     # full_provider 形如 'pi/volcengine-coding' / 'codebuddy-code'；model 是该 provider 上的真实 id
     root = full_provider.split('/')[0]
-    _, upstream = split_provider(full_provider)
 
-    # 🔴 该模型的 thinkingOptions 为 null ⇒ ⛔ 一个档位字段都不能传
-    if upstream.startswith('volcengine') and model == 'kimi-k2.7-code':
-        return {}
-
-    s = {'thinkingOptionId': thinking}
+    # 🔴 没有思考档（§2 收尾按 NO_THINKING_MODELS 把 thinking 置成 None：qfmodel / kimi-k2.7-code）
+    #    ⇒ ⛔ 不写 thinkingOptionId（原先只特判了火山的 kimi-k2.7-code，09-29 起统一由 thinking is None 表达）
+    s = {} if thinking is None else {'thinkingOptionId': thinking}
     if root == 'pi':
         return s                              # 🔴 pi provider 的 availableModes 为空，
                                               #    传 modeId 直接报 Invalid mode
@@ -1092,6 +1207,7 @@ create_agent({ provider: "pi/volcengine-coding/deepseek-v4.1-flash",
 | 升档 T3 | `pi/bailian-token-plan/qwen3.8-max` —— ⛔ **不是 `deepseek-v4-pro`**（已全局禁用，照写必撞 stop） |
 | 升档 T4 | `codebuddy-code/kimi-k3-1` —— ⚠️ id 是 `kimi-k3-1`，⛔ 不是 `kimi-k3` / `kimi-k3-2` |
 | Agent Plan 独有 | 🔴 **当前 0 个推荐可派**。⛔ `ark-code-latest` / `doubao-seed-evolving` / `doubao-seed-2.0-mini` 已进 `BLOCKED_MODELS`；⛔ `glm-latest` 是无版本别名不许直接派。⚠️ **`kimi-k3` 暂不推荐**：① 它缺点版本号（对比 cb 权威清单里的 `kimi-k3-1`）⇒ **疑似无版本别名**，与 `glm-latest` 同类风险；② 2026-09-10 用 `只输出:OK` 这种极小 prompt 探活**挂起 >8 分钟无响应**（⚠️ 极小 prompt 也挂 ⇒ 属另一种根因，⛔ 不是 prompt 问题）。⇒ 🔴 **待核实后再决定屏蔽还是保留**，⛔ 在此之前不作为推荐落点。⭐ 判据备忘：**同一族在别处存在更具体的 id ⇒ 较短那个就是别名**，这比「含 latest」更普适 —— §3g 守卫只认字面 `latest`，所以漏了它。 |
+| ⭐ T0 免费池（09-29） | `pi/openrouter-free/stealth/space-bunny-alpha`（thinking `high`）· `codebuddy-code/hy3`（`max`）· `qoderclicn/qfmodel`（⛔ 不传 thinking，mode `yolo`） |
 | 原有通道（不变） | `codebuddy-code/*` · `qoderclicn/qmodel_38max` · `claude/*` · `codex/*` |
 
 ⚠️ `pi/volcengine-*/kimi-k2.7-code` 的 `thinkingOptions` 为 `null`（官方注明不支持 reasoning summaries），
@@ -1105,6 +1221,11 @@ create_agent({ provider: "pi/volcengine-coding/deepseek-v4.1-flash",
 
 ```bash
 pi -p --provider volcengine-coding --model deepseek-v4-flash "{prompt}" < /dev/null
+# ⭐ T0 免费池的 CLI 形态（09-29）：
+pi -p --provider openrouter-free --model stealth/space-bunny-alpha --thinking high "{prompt}" < /dev/null
+#    ⚠️ id 里带 `/` ⇒ ⛔ 别写成 `--model openrouter-free/stealth/…`（pi 会按第一个 `/` 拆 provider），provider 单独给
+codebuddy -p --output-format json --model hy3 --tools "" "{prompt}" < /dev/null          # 见 §3.2c-bis：必须 json
+qoderclicn -p -m Qwen3.8-Flash --tools "" -o json "{prompt}" < /dev/null                 # 🔴 CLI 名 ≠ Paseo id（qfmodel）
 ```
 
 🔴 **`< /dev/null` 必须带**（2026-09-24 A/B 实证）：`pi -p` 碰到**非 TTY 的 stdin** 会去读它，
@@ -1235,6 +1356,8 @@ codebuddy -p --output-format json --model <m> --tools "" "<prompt>" > out.json
 | `mai-code-1.1-flash` | `low` `medium` `high`　⛔无 off minimal xhigh max | ⚠️ 未实测 |
 | `bailian-token-plan/deepseek-v4-flash-0731` | 🔴 走 pi 时**六档全空转**（见下方专条） | ✅ **已实测** |
 | `pi/volcengine-*/kimi-k2.7-code` | ⚠️ `thinkingOptions` 为 `null` | ⛔ 不要传 |
+| `openrouter-free/stealth/space-bunny-alpha` | ⚠️ 无映射表（pi 按默认处理，⛔ 未验证 pi 实际往请求里塞了什么）。服务端支持参数含 `reasoning` / `reasoning_effort`（OpenRouter 公开 models API） | ⚠️ 09-29 bench 是**直连 API** `reasoning.effort=high`，⛔ 不是经 pi |
+| `qoderclicn/qfmodel` | ⛔ **无思考档**（`NO_THINKING_MODELS`）⇒ 一个档位字段都不传 | ✅ 09-24 bench |
 | ~~claude 系~~ | ⛔ 已从 pi 的 Copilot 通道移除（§3.2c）；Paseo 派 `claude/*` 时是 `low`/`medium`/`high`/`max` | — |
 
 🔴 **读法**：`thinkingLevelMap` 里 **value 为 `null` 就是不支持该档**，⛔ 不要只看 key。
@@ -1351,8 +1474,9 @@ ssh hub "paseo run --detach \
 | 检查 | 为什么 |
 |---|---|
 | 🔴 **要派【审查类】？先问时机**：`bash ${AGENT_GATES_DIR:-$HOME/.agent-gates}/bin/agent-gates-review --due -C <目标仓>` | **exit 79 ⇒ 轮不到，⛔ 别派**；其余（0/1/127/命令不存在）**一律照派**。⛔ 命令不在 PATH 上，必须走绝对路径。⚠️ 只管 CHECK 5 交叉/门禁/复审，⛔ 不管 `[验收]`。<br>代价实证（0910）：每修一小块就派一次全量审查 ⇒ **11 个 agent + ≥7 次全量全白烧** —— 审查产物带 `REVIEW_HEAD`/`REVIEW_DIFF_SHA256` 锚点，代码一改就作废；其中一份**根本没看见后续 637+ 行改动**（含它自己要求的修复） |
-| **要派免费档？先探活**（发一条极短 prompt 看是否秒回） | 当日额度耗尽会**进排队**，长任务丢进去会卡住且 Paseo 侧未必立刻可见 |
-| **要派免费档？先过排除清单**（routing §2） | 多模态任务派 Hy 系**照常计费**；algorithm/perf/architecture 有盲评数据支撑 |
+| **要派免费档？先探活**（`probe-models.sh`，默认就从免费池三条探起） | 当日额度耗尽会**进排队**，长任务丢进去会卡住且 Paseo 侧未必立刻可见；撞额度脚本会自动写冷却 |
+| **要派免费档？按条目过排除规则**（routing §2） | 多模态派 hy3 / qfmodel **照常计费**（Space Bunny 能免费接图）；各条目的能力短板写在 `avoidTaskTypes` |
+| **落到 Space Bunny？** | 预览期隐身模型，**慢**（实测 150–400s/题）；做 `concurrency_impl` 要额外核：扣减是否乘了数量、字段风格是否一致（D3 的两处实测失误） |
 | worktree 是否已建、有无 `node_modules` | 缺依赖时 `npx jest` **零输出**，agent 会把空跑当全绿 |
 | 是否给了当前测试基线数字 | 没有基线，"全绿"无法证伪 |
 | 是否写明已排除的错误方向 | 否则 agent 会顺着前任的错误假设做下去 |
@@ -1415,16 +1539,23 @@ ssh hub "paseo run --detach \
 
 子会话已创建
   Agent:  {short_id} — {title}          # 🔴 title 必须已带 · {渠道}-{模型缩写}（§3.1 标题规范）
-  Model:  {provider}/{model} · thinking: {thinking}{requires_output_validation 时追加 " · 🔴 必须校验产出"}
+  Model:  {provider}/{model} · thinking: {thinking（为 None 时写「不适用（该模型无思考档）」；显式给过 --thinking 则追加「，已忽略 --thinking X」）}{requires_output_validation 时追加 " · 🔴 必须校验产出"}
+{落在 T0 免费条目时追加一行 —— ⛔ 不许省略：
+  ⭐ 免费档 priority {n}：{model}（{freeUntil 为 None ⇒ 「截止未公布，预览期随时可能下线」；否则「免费至 {freeUntil}」}）
+     跳过的免费条目：{free_skipped 逐条「model（原因）」；为空就不写}}
+{free_cautions 非空时，整块加在这里 —— ⛔ 不许省略：
+  ⚠️ {model} 做 {task_type} 有已知弱点（见 FREE_POOL 该条目注释）—— 只提醒不排除（用户 D3）。
+     收割时重点核：扣减是否乘了数量、字段命名风格是否前后一致。}
 {t0_now_billed 非空时，整块加在这里 —— ⛔ 不许省略：
   🔴 免费档 {列出型号与倍率} **已开始计费** ⇒ T0 对它关闭，本次走 T1。
      ⚠️ 若它的倍率**低于 cb 上 T1 落点的倍率**（当前 glm-5.3-flash，见 catalog 最新一期 cbCreditRates），那是【定档】问题 —— 需要同口径盲评，
         ⛔ 不因为「它以前是免费档」就继续当 T0 用。}
 {t0_free_unverified 非空时，整块加在这里 —— ⛔ 不许省略：
-  ⚠️ 免费档 {列出型号} **窗口已过但仍探活通过** —— 费率未核实（只在 cb `/model` 面板可见）。
-     若它仍是 0.00x，本次派发本可省下这一次 T1 的费用。
-     ⇒ 请核 cb `/model` 面板并把 `{'credit': x, 'verifiedOn': 'YYYY-MM-DD'}` 写进 catalog。
-     ⚠️ 核实记录**超过 7 天即失效**（本次事故就是陈旧记录被实测证伪）。}{降档时追加 " → {effective_thinking}（该模型无 {thinking} 档）"}
+  ⚠️ 免费档 {列出型号} **窗口已过但仍探活通过** —— 费率未核实。
+     若它仍是 0，本次派发本可省下这一次 T1 的费用。
+     ⇒ 请按 catalog `freePool` 该条目的 `verifyVia` 核（cb 只在 `/model` 面板；OpenRouter 公开 models API 自己就能查），
+       把 `{'credit': x, 'verifiedOn': 'YYYY-MM-DD'}` 写进该条目的 `creditRecord`。
+     ⚠️ 核实记录**超过 7 天即失效**，且⛔**窗口内核的不算**（只证明促销价是 0）。}{降档时追加 " → {effective_thinking}（该模型无 {thinking} 档）"}
 {tier_substitutions 非空时，整块加在这里 —— ⛔ 不许省略：
   ⚠️ 档内换落点: {原model} → {换成} （原因：{原因}）
      ⛔ 这**不是升降档**，价格同档；只是本档主落点在该 provider 上不存在或拿不到。}

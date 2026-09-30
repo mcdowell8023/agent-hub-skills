@@ -47,13 +47,18 @@ def run_case(c):
         'past_failures': lambda _: (
             [{'tier': i, 'shape': 'bad_output'} for i in range(c.get('failed', 0))]
             + list(c.get('extra_failures', []))),
-        'free_blockers':     lambda tt, a: set(c.get('blockers', ())),
-        'CAPABILITY_BLOCKERS': {'algorithm', 'perf', 'architecture'},
-        'promo_active':      lambda m: c.get('promo_ok', True),
+        # 🔴 2026-09-29 T0 改为 FREE_POOL 登记表驱动：⛔ 不再桩 free_blockers / promo_active ——
+        #    阻断按【条目】判、窗口由条目的 freeUntil 推，两者在 §2 里都有真定义，桩掉就等于不测。
+        #    ⇒ 只桩外部依赖：多模态判定 · 冷却记录 · 核价记录 · 时间解析。
+        'needs_multimodal':  lambda *a: c.get('multimodal', False),
+        # ⭐ free_off=True ⇒ 所有免费条目都在冷却中 = 「免费池整体不可用」（替代旧的 free_off=True）
+        'cooldown_until':    lambda u, m: (DT(2099, 1, 1) if c.get('free_off')
+                                           else c.get('cooldowns', {}).get(f'{u}/{m}')),
+        'parse_local_time':  lambda s: DT.fromisoformat(s),
         # 🔴 ⛔ 不桩 t0_still_free 本身 —— 它现在在 §2 里有**真定义**，
         #    桩掉它就等于不测那段逻辑（含「核实记录必须够新」这一条）。
-        #    ⇒ 只桩它的两个外部依赖。
-        'catalog_credit_record': lambda m: c.get('credit_records', {}).get(m),
+        #    ⇒ 只桩它的外部依赖。⚠️ 键是 'upstream/model'（免费条目按落点区分）
+        'catalog_credit_record': lambda u, m: c.get('credit_records', {}).get(f'{u}/{m}'),
         # 🔴 ⛔ 不桩 review_due 本身 —— 「只有 exit 79 才算 due=no」这条 fail-open 规则
         #    就在它里面，桩掉它等于不测这条规则。⇒ 只桩子进程调用。
         #    默认 (1, '') = 模拟【已装 2.9.8 不认 --due】⇒ 必须放行。
@@ -61,7 +66,9 @@ def run_case(c):
         'parse_kv':          lambda out: dict(
             l.split('=', 1) for l in out.strip().splitlines() if '=' in l),
         'days_between':      lambda a, b: (b - __import__('datetime').datetime.fromisoformat(a)).days,
-        'probe_ok':          lambda m: c.get('probe_ok', True),
+        # ⭐ 两参 + 记录探过谁（free_probes 断言「硬阻断必须在探活之前判」）
+        'probe_ok':          lambda u, m: (FREE_PROBES.append(f'{u}/{m}') or (
+                                 c.get('probe_ok', True) and f'{u}/{m}' not in set(c.get('probe_fail', ())))),
         # ⚠️ 桩要能表达「某些落点不可用」，否则 TIER_PEERS 兜底分支永远测不到
         'first_available':   lambda lst: (PROBES.extend(f'{u}/{m}' for u, m in lst) or next(
             ((u, m) for u, m in lst if f'{u}/{m}' not in set(c.get('unavailable', ()))), None)),
@@ -79,7 +86,6 @@ def run_case(c):
         # ⚠️ 桩要能表达「旧 downgrade() 换成低档模型」，否则 §6 的降档风险测不到
         'downgrade':         lambda u, m: c.get('downgrade_to', (u, m)),
         'clamp_to_supported': lambda m, t: t,
-        'default_thinking':  lambda m: 'high' if m.startswith('hy') else 'xhigh',
         'execute':           lambda *a: Result(),
         'save_memory':       lambda **k: None,
         'print_summary':     lambda: None,
@@ -89,12 +95,18 @@ def run_case(c):
         'report_conflict_and_stop':         lambda: (_ for _ in ()).throw(Blocked('conflict')),
         'report_unknown_provider_and_stop': lambda: (_ for _ in ()).throw(Blocked('unknown')),
         'report_ladder_exhausted_and_stop': lambda: (_ for _ in ()).throw(Exhausted()),
-        'report_free_unavailable_and_stop': lambda b=None: (_ for _ in ()).throw(FreeUnavailable()),
+        # ⭐ 记下「逐条为什么不行」—— --free 拿不到时必须把这张表报给用户（审查 09-29：原桩把参数丢了，测不出漏报）
+        'report_free_unavailable_and_stop': lambda b=None: (
+            FREE_REPORT.extend((f'{u}/{m}', sorted(r)) for u, m, r in (b or ()))
+            or (_ for _ in ()).throw(FreeUnavailable())),
         'report_conflict_free_vs_review_and_stop': lambda: (_ for _ in ()).throw(ConflictFreeReview()),
         'report_review_provider_conflict_and_stop': lambda *a: (_ for _ in ()).throw(ReviewProviderConflict()),
         'report_no_landing_and_stop': lambda m=None: (_ for _ in ()).throw(NoLanding()),
         'report_blocked_model_and_stop': lambda *a: (_ for _ in ()).throw(BlockedModel()),
-        'report_provider_model_mismatch_and_stop': lambda *a: (_ for _ in ()).throw(Blocked('mismatch')),
+        # ⭐ 第 4 个参数是 free_skipped —— 显式 provider 的免费条目都不可用时，停的原因要先说清楚这一层（审查 r2）
+        'report_provider_model_mismatch_and_stop': lambda *a: (
+            FREE_REPORT.extend((f'{u}/{m}', sorted(r)) for u, m, r in (a[3] if len(a) > 3 else ()))
+            or (_ for _ in ()).throw(Blocked('mismatch'))),
         'report_review_not_due_and_stop': lambda d: (_ for _ in ()).throw(Blocked('not_due')),
     }
     src = ("def _decide():\n" + textwrap.indent(BODY, '    ')
@@ -104,13 +116,22 @@ def run_case(c):
              " tier_substitutions=tier_substitutions,"
              " requires_output_validation=requires_output_validation,"
              " t0_free_unverified=t0_free_unverified,"
-             " t0_now_billed=t0_now_billed)\n")
+             " t0_now_billed=t0_now_billed,"
+             " free_cautions=free_cautions)\n")
     ns = dict(stub)
     exec(compile(src, '<SKILL.md §2>', 'exec'), ns)     # 🔴 NameError 会在这里炸出来
     return ns['_decide']()
 
 # ── 用例表：必须与 SKILL.md §3「派发路径用例」一致 ──
 PROBES = []          # 🔴 记录 first_available 探过哪些落点（供 no_probe 断言）
+FREE_PROBES = []     # 🔴 记录 T0 的 probe_ok 探过哪些免费落点（供 free_probes 断言）
+FREE_REPORT = []     # 🔴 --free 拿不到时报给用户的逐条原因（供 free_report 断言）
+# 🔴 T0 登记表化后已删除的旋钮 —— 用例里再出现就是**静默失效**（桩不读它，断言照样可能碰巧通过）⇒ 直接判错
+REMOVED_KNOBS = {'blockers': "改用 free_off=True / cooldowns / multimodal / 条目自己的 avoidTaskTypes",
+                 'promo_ok': "改用 when=<freeUntil 之后的时间>（窗口由条目 freeUntil 推）"}
+SPACE_BUNNY = 'openrouter-free/stealth/space-bunny-alpha'
+HY3, QFM = 'codebuddy-code/hy3', 'qoderclicn/qfmodel'
+AFTER_EXPIRY = DT(2026, 10, 2, 15)   # hy3 / qfmodel 的 freeUntil 都是 09-30 23:59
 
 CASES = [
  # 拦截类
@@ -161,55 +182,73 @@ CASES = [
  # 阶梯类
  # 🔴 免费窗口已过但仍探活通过 ⇒ ⛔ 不当免费档用（费率未核），但**必须提示**
  #    实测背景：2026-09-11 记录的免费期已过，hy3 仍秒回 ⇒ 延期或已计费，两头都不能赌。
- # 🔴 2026-09-24 cb 移出 v4.1-flash 的池（涨到 0.11x）⇒ 自动派发的 T1 落轮换首位火山 coding
- dict(n='免费窗口过期但仍探活通过 ⇒ 落 T1 且提示费率待核', task_type='core', promo_ok=False,
+ # 🔴 2026-09-29 T0 登记表化：窗口由条目自己的 freeUntil 推（⛔ 不再桩 promo_active）⇒ 用 when 取到期之后；
+ #    Space Bunny 截止未公布（freeUntil=None）永不过期 ⇒ 这组用例都要先把它冷却掉，才轮得到 hy3 / qfmodel。
+ dict(n='免费窗口过期但仍探活通过 ⇒ 落 T1 且提示费率待核', task_type='core', when=AFTER_EXPIRY,
+      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
       want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash',
-                t0_free_unverified=['hy3'])),
- # ⭐ 复核过费率（catalog 已更新）⇒ 照常当免费档用
- dict(n='费率已复核（3 天前）⇒ T0 照常可用', task_type='core', promo_ok=False,
-      credit_records={'hy3': {'credit': 0.0, 'verifiedOn': '2026-09-07'}},
-      when=DT(2026,9,10,15),
-      want=dict(upstream='codebuddy-code', model='hy3', t0_free_unverified=[])),
+                t0_free_unverified=['hy3', 'qfmodel'])),
+ # ⭐ 窗口过后复核过费率（catalog 已更新）⇒ 照常当免费档用
+ dict(n='费率已复核（窗口过后、3 天内）⇒ T0 照常可用', task_type='core', when=DT(2026, 10, 4, 15),
+      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+      credit_records={HY3: {'credit': 0.0, 'verifiedOn': '2026-10-01'}},
+      want=dict(upstream='codebuddy-code', model='hy3', thinking='max', t0_free_unverified=[])),
+ # 🔴 2026-09-29 新增：**窗口内核的记录⛔不算过期后的复核** —— 它只证明「促销价是 0」。
+ #    ⚠️ 旧规则下构造得出事故：hy3 的 catalog 记录是 09-24 面板截图 0.00x，到 10-01 仍在 7 天内
+ #    ⇒ 会把可能已开始计费的 hy3 当免费再用一天。
+ dict(n='窗口内核的 0.00x（09-24）⛔ 不算过期后复核 ⇒ 提示待核，落 T1', task_type='core',
+      when=DT(2026, 10, 1, 15), cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+      credit_records={HY3: {'credit': 0.0, 'verifiedOn': '2026-09-24'}},
+      want=dict(model='deepseek-v4.1-flash', t0_free_unverified=['hy3', 'qfmodel'])),
  # 🔴🔴 核实结果是「已计费」⇒ T0 **必须关闭** —— ⛔ 这是改名前那版的洞：
  #    原 rate_reverified 只判「核过且够新」，不判「结果仍为 0」⇒ 用户如实写下 0.5x 之后，
  #    闸门返回 True，把一个比 T1 贵 16 倍的模型当免费档用。
  #    ⭐ 最坏的是：这个后果由「用户做了正确的事（去核实）」触发。
- dict(n='核实结果=已计费 0.5x ⇒ T0 关闭并报告，⛔ 不当免费用', task_type='core', promo_ok=False,
-      credit_records={'hy3': {'credit': 0.5, 'verifiedOn': '2026-09-10'}},
-      when=DT(2026,9,11,15),
-      want=dict(model='deepseek-v4.1-flash', t0_now_billed=[('hy3', 0.5)])),
+ dict(n='核实结果=已计费 0.5x ⇒ T0 关闭并报告，⛔ 不当免费用', task_type='core', when=AFTER_EXPIRY,
+      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+      credit_records={HY3: {'credit': 0.5, 'verifiedOn': '2026-10-01'}},
+      want=dict(model='deepseek-v4.1-flash', t0_now_billed=[('hy3', 0.5)],
+                t0_free_unverified=['qfmodel'])),
  # 🔴 反例：核实记录**太旧**（30 天前）⇒ ⛔ 不算复核 —— 这正是本次事故的形状：
  #    陈旧记录若算通过，已开始计费的型号会被当免费用（异构审 0911 #3 的「误开方向」）
- dict(n='核实记录过期（30 天前）⇒ ⛔ 不算复核，落 T1', task_type='core', promo_ok=False,
-      credit_records={'hy3': {'credit': 0.0, 'verifiedOn': '2026-08-11'}},
-      when=DT(2026,9,10,15),
-      want=dict(model='deepseek-v4.1-flash', t0_free_unverified=['hy3'])),
+ dict(n='核实记录过期（30 天前）⇒ ⛔ 不算复核，落 T1', task_type='core', when=DT(2026, 10, 31, 15),
+      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+      credit_records={HY3: {'credit': 0.0, 'verifiedOn': '2026-10-01'}},
+      want=dict(model='deepseek-v4.1-flash', t0_free_unverified=['hy3', 'qfmodel'])),
  # 🔴 反例：有 credit 但**没有 verifiedOn** ⇒ ⛔ 不算复核
- dict(n='credit 无 verifiedOn ⇒ ⛔ 不算复核', task_type='core', promo_ok=False,
-      credit_records={'hy3': {'credit': 0.0}},
+ dict(n='credit 无 verifiedOn ⇒ ⛔ 不算复核', task_type='core', when=AFTER_EXPIRY,
+      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+      credit_records={HY3: {'credit': 0.0}},
       want=dict(model='deepseek-v4.1-flash')),
  # ⭐ 反例：探活也不过 ⇒ ⛔ 不提示（没有「本可省钱」这回事）
- dict(n='窗口过期且探活不过 ⇒ ⛔ 不提示', task_type='core', promo_ok=False, probe_ok=False,
+ dict(n='窗口过期且探活不过 ⇒ ⛔ 不提示', task_type='core', when=AFTER_EXPIRY, probe_ok=False,
+      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},     # ⭐ 显式挡掉 Bunny（审查 r2：别只靠全局 probe_ok=False 顺带挡住它）
       want=dict(model='deepseek-v4.1-flash', t0_free_unverified=[])),
  # 🔴 T0 碰墙（探活不过）⇒ 必须落**同 provider** 的 T1，⛔ 不跨钱包（用户 2026-09-10）
  #    hy4 的形态是「允许你用但派发后静默停」，Paseo 抓不到明确错误 ⇒ 归 availability，
  #    ⛔ 不是「做砸」⇒ ⛔ 不许走质量/成本升档去换模型族。
- # 🔴 2026-09-15 T0 只剩 hy3 ⇒ 它自己反复无响应就没有下一个免费档了 ⇒ 落 T1
- #    ⚠️ 原用例是「hy4 无响应 ⇒ 跳到 hy3」，前提已随 hy4 弃用而消失。
+ # ⭐ 2026-09-29 免费池有三条 ⇒ hy3 反复无响应**只跳过它自己**，⛔ 不连带其它免费条目
+ dict(n='hy3 连续无响应 2 次 ⇒ 只跳过 hy3，落下一个免费条目 qfmodel', task_type='core',
+      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+      extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
+                       'model': 'hy3', 'shape': 'no_response', 'count': 2}],
+      free_probes=[QFM],                         # 🔴 死落点⛔不许再探一次活
+      want=dict(upstream='qoderclicn', model='qfmodel', provider='qoderclicn', thinking=None)),
  # ⏳ 2026-09-24 **待用户裁定**：affinity=cb 但 cb 已不在 v4.1-flash 池里 ⇒ 按「affinity 不改模型」
  #    的既有不变量回到轮换落火山 coding。⚠️ 与 09-10「⛔ 不要换 pi」字面冲突（见 SKILL §4 affinity 注释）。
  #    若用户选「留 cb 用 glm」，本条改断言 upstream='codebuddy-code', model='glm-5.3-flash'。
- dict(n='hy3 连续无响应 2 次 ⇒ T0 落空，转 T1（affinity=cb 在 T1 主池无作用点）', task_type='core',
+ dict(n='hy3 连续无响应 2 次 + 其它免费条目也不可用 ⇒ 转 T1（affinity=cb 在 T1 主池无作用点）',
+      task_type='core', cooldowns={SPACE_BUNNY: DT(2099, 1, 1), QFM: DT(2099, 1, 1)},
       extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
                        'model': 'hy3', 'shape': 'no_response', 'count': 2}],
       want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash')),
  # 🔴🔴 缺省必须偏向【旧行为】：不带 shape 的历史失败**照样算做砸**
  #    ⛔ 否则「质量/成本升档唯一入口」会被整条清零（异构审 2026-09-10 #1）。
- dict(n='不带 shape 的旧失败 ⇒ 仍算做砸（缺省 bad_output）', task_type='core', blockers={'algorithm'},
+ dict(n='不带 shape 的旧失败 ⇒ 仍算做砸（缺省 bad_output）', task_type='core', free_off=True,
       extra_failures=[{'tier': 0}, {'tier': 1}],          # ⛔ 故意不给 shape
       want=dict(model='qwen3.8-max')),                     # 两次做砸 ⇒ T3
  # 🔴 同一落点反复无响应 ⇒ 该落点被排除，⛔ 不许原地无限重派
- dict(n='cb/v4.1 连续无响应 2 次 ⇒ 排除该落点，落同档 glm', task_type='core', blockers={'algorithm'},
+ dict(n='cb/v4.1 连续无响应 2 次 ⇒ 排除该落点，落同档 glm', task_type='core', free_off=True,
       extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
                        'model': 'deepseek-v4.1-flash', 'shape': 'no_response', 'count': 2}],
       unavailable={'volcengine-coding/deepseek-v4.1-flash',
@@ -218,22 +257,23 @@ CASES = [
       want=dict(model='glm-5.3-flash')),
  # ⭐ 反例：只无响应 1 次（未达 NO_RESPONSE_LIMIT）⇒ ⛔ 还不排除，照常落主落点
  # 🔴 2026-09-24 原用例拿 cb/v4.1 当例子，cb 已移出该池 ⇒ 换成**仍在池里**的火山 coding，保留原意图
- dict(n='无响应仅 1 次 ⇒ ⛔ 不排除，仍落该池', task_type='core', blockers={'algorithm'},
+ dict(n='无响应仅 1 次 ⇒ ⛔ 不排除，仍落该池', task_type='core', free_off=True,
       extra_failures=[{'tier': None, 'upstream': 'volcengine-coding',
                        'model': 'deepseek-v4.1-flash', 'shape': 'no_response', 'count': 1}],
       want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash')),
  # 🔴 免费期没开 ⇒ 压根没碰过 cb ⇒ ⛔ 不该有 affinity（同档替代回到轮换首位）
- dict(n='promo 未开 ⇒ 没碰过 cb ⇒ ⛔ 无 affinity', task_type='core', promo_ok=False,
+ dict(n='免费窗口已过 ⇒ 没让 cb 接过活 ⇒ ⛔ 无 affinity', task_type='core', when=AFTER_EXPIRY,
+      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
       unavailable={'volcengine-coding/deepseek-v4.1-flash',
                    'volcengine-agent-plan/deepseek-v4.1-flash',
                    'bailian-token-plan/deepseek-v4.1-flash'},
       want=dict(upstream='volcengine-coding', model='glm-5.3-flash')),
  # 🔴 「没回复」⛔ 不算做砸 —— 两次 no_response 也不许把档位顶上去
- dict(n='no_response ⛔ 不计入做砸（仍停在 T1）', task_type='core', blockers={'algorithm'},
+ dict(n='no_response ⛔ 不计入做砸（仍停在 T1）', task_type='core', free_off=True,
       extra_failures=[{'tier': 0, 'shape': 'no_response'}, {'tier': 0, 'shape': 'no_response'}],
       want=dict(model='deepseek-v4.1-flash')),
  # ⭐ 对照：同样两条但是 bad_output ⇒ 该升到 T3
- dict(n='bad_output 两条 ⇒ 正常升到 T3', task_type='core', blockers={'algorithm'},
+ dict(n='bad_output 两条 ⇒ 正常升到 T3', task_type='core', free_off=True,
       extra_failures=[{'tier': 0, 'shape': 'bad_output'}, {'tier': 1, 'shape': 'bad_output'}],
       want=dict(model='qwen3.8-max')),
  # 🔴 2026-09-24 原名「而 T1 本就在 cb」—— cb 已移出 v4.1-flash 的池，那个前提消失
@@ -243,7 +283,7 @@ CASES = [
  #    ⇒ 落 cb/glm，⛔ 不是火山的 glm（那是池内轮换的首位）
  # ⭐ affinity 的证据是「cb **接了活然后静默**」（hy4 被派出去、然后唤不醒）
  #    ⇒ cb 主落点也拿不到时，同档替代仍优先落 **cb 的 glm**，⛔ 不跳火山
- dict(n='cb 接活后静默 ⇒ 同档替代仍留 cb（落 cb/glm，⛔ 不跳火山）', task_type='core', blockers={'algorithm'},
+ dict(n='cb 接活后静默 ⇒ 同档替代仍留 cb（落 cb/glm，⛔ 不跳火山）', task_type='core', free_off=True,
       extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
                        'model': 'hy3', 'shape': 'no_response'}],   # count=1 ⇒ 未进死点
       unavailable={'volcengine-coding/deepseek-v4.1-flash',
@@ -251,7 +291,7 @@ CASES = [
                    'bailian-token-plan/deepseek-v4.1-flash'},
       want=dict(upstream='codebuddy-code', model='glm-5.3-flash')),
  # 🔴 反例：只是**探活排队**（probe_queued）⇒ cb 一个请求都没成功吞过 ⇒ ⛔ 无 affinity
- dict(n='仅探活排队 ⇒ ⛔ 无 affinity（回到轮换首位火山）', task_type='core', blockers={'algorithm'},
+ dict(n='仅探活排队 ⇒ ⛔ 无 affinity（回到轮换首位火山）', task_type='core', free_off=True,
       extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
                        'model': 'hy3', 'shape': 'probe_queued'}],
       unavailable={'volcengine-coding/deepseek-v4.1-flash',
@@ -260,35 +300,114 @@ CASES = [
       want=dict(upstream='volcengine-coding', model='glm-5.3-flash')),
  # 🔴 反例：没试过 T0（能力类跳过 T0）⇒ ⛔ 不该有 affinity，池内回到正常轮换
  dict(n='未试 T0 ⇒ ⛔ 无 affinity，同档替代回到轮换首位（火山）', task_type='core',
-      blockers={'algorithm'}, unavailable={'volcengine-coding/deepseek-v4.1-flash',
+      free_off=True, unavailable={'volcengine-coding/deepseek-v4.1-flash',
                    'volcengine-agent-plan/deepseek-v4.1-flash',
                    'bailian-token-plan/deepseek-v4.1-flash'},
       want=dict(upstream='volcengine-coding', model='glm-5.3-flash')),
- dict(n='T0 免费档', task_type='core',
+ # ── T0 免费池（2026-09-29 登记表驱动）── 优先级：Space Bunny > hy3 > qfmodel（用户 09-29 定）
+ dict(n='T0 默认落 priority 1：OpenRouter Space Bunny @high', task_type='core',
+      free_probes=[SPACE_BUNNY],
+      want=dict(upstream='openrouter-free', model='stealth/space-bunny-alpha', thinking='high',
+                provider='pi/openrouter-free', channel='paseo', free_cautions=[])),
+ dict(n='Space Bunny 冷却中 ⇒ 落 priority 2：cb/hy3 @max（⛔ 冷却中的⛔不探活）', task_type='core',
+      cooldowns={SPACE_BUNNY: DT(2026, 9, 10, 18)},
+      free_probes=[HY3],
       want=dict(upstream='codebuddy-code', model='hy3', thinking='max')),
+ # ⭐ qfmodel 没有思考档 ⇒ thinking 必须是 None（⛔ 不许被收尾的 default_thinking 补成 xhigh）
+ dict(n='Bunny + hy3 都冷却 ⇒ 落 priority 3：qcn/qfmodel，⛔ 不传 thinking', task_type='core',
+      cooldowns={SPACE_BUNNY: DT(2099, 1, 1), HY3: DT(2099, 1, 1)},
+      want=dict(upstream='qoderclicn', model='qfmodel', provider='qoderclicn', thinking=None)),
+ dict(n='qfmodel + 显式 --thinking high ⇒ 仍⛔不传（该模型没有思考档）', task_type='core',
+      thinking='high', cooldowns={SPACE_BUNNY: DT(2099, 1, 1), HY3: DT(2099, 1, 1)},
+      want=dict(model='qfmodel', thinking=None)),
+ # ⭐ 冷却记录**已过期** ⇒ ⛔ 不算阻断
+ # 🔴 审查 A ❌2：T0 选中的落点 ⛔ 不在 §5 再探第二次（否则第二次失败会直接停，不试下一个免费条目）
+ dict(n='T0 选中后 ⛔ 不再探第二次', task_type='core',
+      unavailable={SPACE_BUNNY},              # 若 §5 再探就会 NoLanding —— 这条就是要证明它不会
+      free_probes=[SPACE_BUNNY], probes=[],
+      want=dict(model='stealth/space-bunny-alpha')),
+ # 🔴 审查 A ❌1：显式 --model 给了免费 / 白名单型号但⛔没给 provider ⇒ 按白名单找它的 provider，⛔ 不落成 cb/<它>
+ dict(n='显式 --model qfmodel（无 provider）⇒ 落 qcn，⛔ 不当 cb 型号', task_type='core', model='qfmodel',
+      want=dict(upstream='qoderclicn', model='qfmodel', thinking=None)),
+ dict(n='显式 --model stealth/space-bunny-alpha（无 provider）⇒ 落 OpenRouter @high', task_type='core',
+      model='stealth/space-bunny-alpha',
+      want=dict(upstream='openrouter-free', provider='pi/openrouter-free', thinking='high')),
+ dict(n='显式 --model qmodel_38max（无 provider）⇒ 落 qcn（顺带修掉的旧同形）', task_type='core',
+      model='qmodel_38max', want=dict(upstream='qoderclicn', model='qmodel_38max')),
+ # ⭐ 反例：不在任何池、也不在任何白名单里的型号 ⇒ 仍合成 cb 落点 ⇒ 白名单拦（⛔ 不替用户猜 provider）
+ dict(n='显式 --model 不在任何池/白名单（无 provider）⇒ 合成 cb ⇒ 白名单拦', task_type='core',
+      model='grok-4.6', block='conflict'),
+ dict(n='冷却已过期 ⇒ 照常落 Space Bunny', task_type='core',
+      cooldowns={SPACE_BUNNY: DT(2026, 9, 10, 14)},
+      want=dict(model='stealth/space-bunny-alpha')),
+ dict(n='显式 --thinking low ⇒ Space Bunny 用 low（⛔ 不被条目默认 high 覆盖）', task_type='core',
+      thinking='low', want=dict(model='stealth/space-bunny-alpha', thinking='low')),
+ # 🔴 hy3 / qfmodel 09-30 到期；Space Bunny 截止未公布（freeUntil=None）⇒ 到期后免费池只剩它
+ dict(n='10-01 起 hy3/qfmodel 到期 ⇒ Space Bunny 仍可用', task_type='core', when=DT(2026, 10, 1, 15),
+      want=dict(model='stealth/space-bunny-alpha', t0_free_unverified=[])),
+ # 🔴 D3（用户 09-29）：Space Bunny 做并发实现类**只提醒不排除**（并发题 30.0，漏乘数量 / 字段风格不一致）
+ dict(n='concurrency_impl ⇒ 仍落 Space Bunny，但必须带提醒', task_type='concurrency_impl',
+      want=dict(model='stealth/space-bunny-alpha',
+                free_cautions=[('stealth/space-bunny-alpha', 'concurrency_impl')])),
+ # ⭐ 能力短板是【条目】的属性（avoidTaskTypes），⛔ 不再全局套在所有免费模型上 ——
+ #    那张清单本来只对 hy3 有依据；Space Bunny 的 LRU 32.2 与 T1 同档
+ dict(n='algorithm ⇒ Space Bunny 照常接（它没有 avoid）', task_type='algorithm',
+      want=dict(model='stealth/space-bunny-alpha')),
+ # ⏳ qfmodel avoid perf：与 hy3 同一理由（perf 从来没有实测，按 algorithm 同类保守处理）—— 待用户认可
+ dict(n='perf + Bunny 冷却 ⇒ hy3/qfmodel 都 avoid ⇒ 付费 T2 起步', task_type='perf',
+      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)}, free_probes=[],
+      want=dict(model='deepseek-v4-flash')),
+ dict(n='algorithm + Bunny 冷却 ⇒ hy3/qfmodel 都 avoid ⇒ 付费 T2 起步', task_type='algorithm',
+      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)}, free_probes=[],
+      want=dict(model='deepseek-v4-flash', upstream='volcengine-coding')),
+ # ⭐ 多模态：Space Bunny 能免费接图（hy3 会被 cb 切到付费多模态模型）
+ dict(n='多模态任务 ⇒ Space Bunny 可接', task_type='core', multimodal=True,
+      want=dict(model='stealth/space-bunny-alpha')),
+ dict(n='多模态 + Bunny 冷却 ⇒ hy3/qfmodel 物理不可用 ⇒ T1', task_type='core', multimodal=True,
+      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)}, free_probes=[],
+      want=dict(model='deepseek-v4.1-flash')),
+ # ⭐ 本任务里已在某免费落点做砸（有产出不合格）⇒ 只排除那一条
+ dict(n='hy3 本任务已做砸 ⇒ 只跳过 hy3，落 qfmodel', task_type='core',
+      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+      extra_failures=[{'tier': None, 'upstream': 'codebuddy-code', 'model': 'hy3',
+                       'shape': 'bad_output'}],
+      free_probes=[QFM], want=dict(model='qfmodel')),
+ # ⭐ 显式 provider ⇒ 只看同 provider 的免费条目（⛔ 不算冲突）
+ dict(n='显式 --provider openrouter-free ⇒ Space Bunny', provider='openrouter-free', task_type='core',
+      want=dict(upstream='openrouter-free', model='stealth/space-bunny-alpha')),
+ dict(n='显式 --provider qoderclicn ⇒ 只看 qfmodel', provider='qoderclicn', task_type='core',
+      free_probes=[QFM], want=dict(upstream='qoderclicn', model='qfmodel')),
+ # 🔴 openrouter-free 是【白名单型】provider（只放这一个模型）⇒ 其它 id ⛔ 一律拦
+ dict(n='--provider openrouter-free --model 其它 ⇒ 白名单拦', provider='openrouter-free',
+      model='stealth/other-alpha', task_type='core', block='conflict'),
+ dict(n='显式 openrouter-free + Bunny 冷却 ⇒ 付费档没有该 provider ⇒ 报错配并停',
+      provider='openrouter-free', task_type='core', cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+      block='mismatch', free_report=[(SPACE_BUNNY, ['quota_cooldown'])]),
  # 🔴 2026-09-24 cb 移出 v4.1-flash 的池 ⇒ 自动派发落轮换首位火山 coding，且 Paseo 串带 pi/ 前缀
- dict(n='T1 起步（免费档被排除）', task_type='core', blockers={'algorithm'},
+ dict(n='T1 起步（免费档被排除）', task_type='core', free_off=True,
       want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash',
                 provider='pi/volcengine-coding')),
- dict(n='T3 落百炼 qwen3.8-max', task_type='core', blockers={'algorithm'}, failed=2,
+ dict(n='T3 落百炼 qwen3.8-max', task_type='core', free_off=True, failed=2,
       want=dict(upstream='bailian-token-plan', model='qwen3.8-max',
                 provider='pi/bailian-token-plan')),
  # 🔴 产出校验要求必须是**决策结果的字段**，⛔ 不是散文
- dict(n='T1(v4.1-flash) 必须要求校验产出', task_type='core', blockers={'algorithm'}, failed=0,
+ dict(n='T1(v4.1-flash) 必须要求校验产出', task_type='core', free_off=True, failed=0,
       want=dict(model='deepseek-v4.1-flash', requires_output_validation=True)),
- dict(n='T2(v4-flash) ⛔ 不要求校验（无该失败形态）', task_type='core', blockers={'algorithm'}, failed=1,
+ dict(n='T2(v4-flash) ⛔ 不要求校验（无该失败形态）', task_type='core', free_off=True, failed=1,
       want=dict(model='deepseek-v4-flash', requires_output_validation=False)),
  # 🔴 2026-09-23 改走【可用性 peer】路径 —— 原先靠「火山上没有 T1 主落点」触发，
  #    但 coding 当天上了 v4.1-flash，那个前提消失了。落 glm 仍要测（它决定校验开关关不关）。
- dict(n='T1 三池全不可用 → 落同档 glm ⇒ ⛔ 不再要求校验', task_type='core', blockers={'algorithm'},
+ dict(n='T1 三池全不可用 → 落同档 glm ⇒ ⛔ 不再要求校验', task_type='core', free_off=True,
       unavailable={'volcengine-coding/deepseek-v4.1-flash',
                    'volcengine-agent-plan/deepseek-v4.1-flash',
                    'bailian-token-plan/deepseek-v4.1-flash'},
       want=dict(model='glm-5.3-flash', requires_output_validation=False)),
- dict(n='T4 落 K3', task_type='core', blockers={'algorithm'}, failed=3,
+ dict(n='T4 落 K3', task_type='core', free_off=True, failed=3,
       want=dict(model='kimi-k3-1')),
- dict(n='超 T4 必停', task_type='core', blockers={'algorithm'}, failed=4, exhausted=True),
- dict(n='algorithm 跳 T0 从 T2 起', task_type='algorithm', blockers={'algorithm'},
+ dict(n='超 T4 必停', task_type='core', free_off=True, failed=4, exhausted=True),
+ # ⚠️ 原名「algorithm 跳 T0 从 T2 起」—— 09-29 起 algorithm ⛔不再整档跳 T0（Space Bunny 可接），
+ #    本条只测「免费池不可用时，algorithm 付费从 T2 起步」
+ dict(n='algorithm + 免费池不可用 ⇒ 付费从 T2 起', task_type='algorithm', free_off=True,
       want=dict(model='deepseek-v4-flash', upstream='volcengine-coding')),
  # 审查类
  dict(n='大审查走 Paseo', task_type='review', scope='large',
@@ -318,31 +437,34 @@ CASES = [
  #    ⚠️ 原用例断言的是「同档换成 glm 并留痕」—— 09-23 那条路径一度不可达（打过 pragma 豁免）；
  #    09-24 cb 移出池后**重新可达**，覆盖改由下方「显式 cb 无 model ⇒ 同档换落点」承担。
  dict(n='显式火山 coding + 自动 T1 ⇒ 直接落 v4.1-flash，⛔ 无需换落点',
-      provider='volcengine-coding', task_type='core', blockers={'algorithm'},
+      provider='volcengine-coding', task_type='core', free_off=True,
       want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash',
                 tier_substitutions=[])),
  # 🔴 反例：同档里也没有该 provider 的落点 ⇒ 必须报错配并停，⛔ 不许硬派
  dict(n='显式 copilot + 自动 T1 → 同档也没有 ⇒ 报错配并停',
-      provider='github-copilot', task_type='core', blockers={'algorithm'},
+      provider='github-copilot', task_type='core', free_off=True,
       block='mismatch'),
  # ⭐ 原用例的意图（补出的默认 model 拿不到 ⇒ 停）保留，但要用**合法**的 provider×model 对
  # ⚠️ 走的是 T0 路径：hy3 过了 probe_ok 但最终落点探活失败 ⇒ 当场 NoLanding，⛔ 走不到 T1。
  #    （09-24 前这里还列了 cb/v4.1 —— 那条从来没被读到过，是死数据，已删。）
- dict(n='显式 cb 无 model，补出的默认 model 不可用 → 停止',
-      provider='codebuddy-code', task_type='core',
-      unavailable={'codebuddy-code/hy3'},
-      no_landing=True),
+ # 🔴 2026-09-29 语义改了（审查 A ❌2）：T0 的探活就是那一次探活，§5 ⛔ 不再探第二次。
+ #    原用例靠「probe_ok 过 + first_available 不过」这种自相矛盾的桩触发 NoLanding —— 多条目 T0 下那会让
+ #    「选中后第二次探失败」直接停，而不是换下一个免费条目（违反 D4）。
+ #    ⇒ 现在 hy3 拿不到就在 T0 里被跳过；显式 cb 进 T1 ⇒ 同档换落点 cb/glm。「换完仍不可用 ⇒ 停」见下面那条。
+ dict(n='显式 cb 无 model + hy3 探活不过 ⇒ T1 同档换落点 cb/glm（⛔ 不跨 provider）',
+      provider='codebuddy-code', task_type='core', probe_fail={HY3},
+      want=dict(upstream='codebuddy-code', model='glm-5.3-flash')),
  # 🔴🔴 2026-09-24 「同档换落点」分支**重新可达** —— 这三条就是它的覆盖（原先靠 pragma 豁免）
  #    cb 移出 v4.1-flash 的池（涨到 0.11x > glm 0.06x），而 cb 仍是 TIER_PEERS 成员。
  dict(n='显式 cb 无 model，自动选出 T1 ⇒ 同档换落点 cb/glm 并留痕',
-      provider='codebuddy-code', task_type='core', blockers={'algorithm'},
+      provider='codebuddy-code', task_type='core', free_off=True,
       want=dict(upstream='codebuddy-code', model='glm-5.3-flash',
                 requires_output_validation=False,
                 tier_substitutions=[('deepseek-v4.1-flash', 'glm-5.3-flash',
                                      'codebuddy-code 上没有 deepseek-v4.1-flash')])),
  # ⛔ 换完落点仍要过「显式 provider ⛔ 不许被换掉」：cb/glm 也拿不到 ⇒ 停，⛔ 不跳火山
  dict(n='显式 cb 无 model，换到 cb/glm 也不可用 → 停止（⛔ 不跨 provider）',
-      provider='codebuddy-code', task_type='core', blockers={'algorithm'},
+      provider='codebuddy-code', task_type='core', free_off=True,
       unavailable={'codebuddy-code/glm-5.3-flash'},
       no_landing=True),
  # ⭐ 用户**点名** v4.1-flash 就照派 —— 白名单还在，⛔ 不因为「不再自动选它」就拦
@@ -384,17 +506,17 @@ CASES = [
       want=dict(upstream='volcengine-coding')),
  # ⭐ 折扣窗口：🔴 只在【档位内选落点】起作用，⛔ 不得跨档下调
  #    DT(周三15:00)=两家都原价 · DT(周三19:00)=仅 cb 打折 · DT(周三23:00)=两家都打折
- dict(n='高峰(周三15点) T2 走轮换首位火山', task_type='core', blockers={'algorithm'}, failed=1,
+ dict(n='高峰(周三15点) T2 走轮换首位火山', task_type='core', free_off=True, failed=1,
       when=DT(2026,9,9,15), want=dict(upstream='volcengine-coding', model='deepseek-v4-flash')),
  # 🔴 2026-09-10 换代连带：cb 退出 T2 池 ⇒ **cb 打折也影响不到 T2**（池里没它）。
  #    ⛔ 这两条原本断言「非高峰/周末 T2 落 cb」，换代后已被推翻 ⇒ 改成断言新不变量。
- dict(n='非高峰(周三19点) cb 打折也进不了 T2（池里没 cb）', task_type='core', blockers={'algorithm'}, failed=1,
+ dict(n='非高峰(周三19点) cb 打折也进不了 T2（池里没 cb）', task_type='core', free_off=True, failed=1,
       when=DT(2026,9,9,19), want=dict(upstream='volcengine-coding', model='deepseek-v4-flash')),
  # 🔴 2026-09-11 百炼移出 T2 池（`-0731` 是另一个模型，且百炼的裸 id 是 403）
  #    ⇒ T2 只剩火山两套餐，**深夜没有可切的打折池** ⇒ 落点不变。
- dict(n='深夜(周三23点) T2 只剩火山两池 ⇒ 落点不变', task_type='core', blockers={'algorithm'}, failed=1,
+ dict(n='深夜(周三23点) T2 只剩火山两池 ⇒ 落点不变', task_type='core', free_off=True, failed=1,
       when=DT(2026,9,9,23), want=dict(upstream='volcengine-coding', model='deepseek-v4-flash')),
- dict(n='周末白天 cb 全天打折，T2 仍不落 cb', task_type='core', blockers={'algorithm'}, failed=1,
+ dict(n='周末白天 cb 全天打折，T2 仍不落 cb', task_type='core', free_off=True, failed=1,
       when=DT(2026,9,12,15), want=dict(upstream='volcengine-coding', model='deepseek-v4-flash')),
  # ⚠️ cb 的折扣集现在是**空的**（唯一成员 deepseek-v4-pro 已禁用）⇒ **cb 折扣对阶梯无作用点**。
  #    ⛔ 不要因此删掉 DISCOUNT_WINDOWS 的 cb 条目——`deepseek-v4.1-flash` 若确认继承折扣就会复活。
@@ -402,41 +524,50 @@ CASES = [
  #    09-24 cb 又移出 ⇒ 池 = 火山两套餐 + 百炼。周末 15:00：cb 虽在折扣时段但不在池里，
  #    百炼的夜间窗口不覆盖下午 ⇒ 三池都原价 ⇒ 回轮换首位。
  dict(n='周末下午 T1 三池都原价 ⇒ 回轮换首位火山 coding', task_type='core',
-      blockers={'algorithm'}, failed=0,
+      free_off=True, failed=0,
       when=DT(2026,9,12,15), want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash')),
  # 🔴 关键反例：任何时段都⛔不得把档位冲掉
- dict(n='深夜 T1 档位不被冲掉', task_type='core', blockers={'algorithm'}, failed=0,
+ dict(n='深夜 T1 档位不被冲掉', task_type='core', free_off=True, failed=0,
       when=DT(2026,9,9,23), want=dict(model='deepseek-v4.1-flash')),
  dict(n='深夜免费档仍是 T0', task_type='core', when=DT(2026,9,9,23),
-      want=dict(upstream='codebuddy-code', model='hy3')),
+      want=dict(upstream='openrouter-free', model='stealth/space-bunny-alpha')),
  # --free 新语义（0909：不再委派，只影响选档）
  dict(n='--free 无排除 → T0', free=True, task_type='core',
-      want=dict(upstream='codebuddy-code', model='hy3')),
- dict(n='--free 放宽能力类排除 → 仍走 T0', free=True, task_type='core',
-      blockers={'algorithm', 'perf'},
-      want=dict(upstream='codebuddy-code', model='hy3')),
- dict(n='--free 遇物理不可用 → 停止', free=True, task_type='core',
-      blockers={'quota_exhausted'}, free_unavailable=True),
- dict(n='--free 混合排除(含物理) → 停止', free=True, task_type='core',
-      blockers={'algorithm', 'multimodal'}, free_unavailable=True),
+      want=dict(upstream='openrouter-free', model='stealth/space-bunny-alpha')),
+ # ⭐ --free 只放宽【能力类】：Bunny 冷却时 hy3 的 algorithm 短板被放宽 ⇒ hy3 接
+ dict(n='--free 放宽能力类 → algorithm + Bunny 冷却 ⇒ hy3 接', free=True, task_type='algorithm',
+      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+      want=dict(upstream='codebuddy-code', model='hy3', thinking='max')),
+ dict(n='--free 遇物理不可用（全池冷却）→ 停止', free=True, task_type='core',
+      free_off=True, free_unavailable=True, free_probes=[]),
+ # 🔴 --free ⛔ 不放宽物理不可用：多模态 + Bunny 冷却 ⇒ hy3/qfmodel 都接不了图 ⇒ 停（⛔ 不静默变付费）
+ dict(n='--free + 多模态 + Bunny 冷却 → 停止（⛔ 能力放宽不含物理不可用）', free=True,
+      task_type='algorithm', multimodal=True, cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+      free_unavailable=True, free_probes=[],
+      free_report=[(SPACE_BUNNY, ['quota_cooldown']), (HY3, ['algorithm', 'multimodal']),
+                   (QFM, ['algorithm', 'multimodal'])]),
+ dict(n='--free + 全池探活不过 → 停止', free=True, task_type='core', probe_ok=False,
+      free_unavailable=True, free_probes=[SPACE_BUNNY, HY3, QFM],
+      free_report=[(SPACE_BUNNY, ['probe_failed']), (HY3, ['probe_failed']), (QFM, ['probe_failed'])]),
  dict(n='--free + review → 冲突停止', free=True, task_type='review', conflict_free_review=True),
  dict(n='--free --provider codebuddy-code → 不冲突走 T0', free=True,
       provider='codebuddy-code', task_type='core',
       want=dict(upstream='codebuddy-code', model='hy3')),
- # ⛔ 不带 --free 时能力类排除仍跳 T0（证明放宽只对 --free 生效）
- dict(n='无 --free 时能力类排除照旧跳 T0', task_type='core', blockers={'algorithm'},
-      want=dict(model='deepseek-v4.1-flash')),
+ # ⛔ 不带 --free 时能力类排除照旧生效（证明放宽只对 --free 生效）—— 与上面 --free 那条同一输入
+ dict(n='无 --free 时 algorithm + Bunny 冷却 ⇒ hy3 仍被 avoid 挡住', task_type='algorithm',
+      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+      want=dict(model='deepseek-v4-flash')),
  # 🔴 2026-09-10：T3 从「v4-pro 四池 + qwen 同档替代」变成「qwen3.8-max 单池、无同档替代」
  #    ⇒ 原本那两条以「四池全不可用」为前提的用例前提已不存在，改成断言新形态。
- dict(n='T3 单池即主落点（⛔ 不再有四池轮换）', task_type='core', blockers={'algorithm'}, failed=2,
+ dict(n='T3 单池即主落点（⛔ 不再有四池轮换）', task_type='core', free_off=True, failed=2,
       want=dict(upstream='bailian-token-plan', model='qwen3.8-max',
                 provider='pi/bailian-token-plan')),
  # 🔴 反例：主落点可用时⛔不许被同档替代插队
  dict(n='TIER_PEERS 已空 ⇒ T3 照常落主落点，⛔ 不因空表报错', task_type='core',
-      blockers={'algorithm'}, failed=2,
+      free_off=True, failed=2,
       want=dict(upstream='bailian-token-plan', model='qwen3.8-max')),
  # 🔴 T3 主池+peer 全不可用 ⇒ 【可用性升档】到 T4，⛔ 不停在半路
- dict(n='T3 主池+peer 全不可用 → 升到 T4', task_type='core', blockers={'algorithm'}, failed=2,
+ dict(n='T3 主池+peer 全不可用 → 升到 T4', task_type='core', free_off=True, failed=2,
       unavailable={'bailian-token-plan/qwen3.8-max'},
       want=dict(model='kimi-k3-1', availability_escalations=[('qwen3.8-max','kimi-k3-1','unavailable')])),
  # ⭐ 可用性升档（用户 2026-09-09 决定：允许【向上】换档 + 必须报告）
@@ -444,7 +575,7 @@ CASES = [
  # ⭐ T1 主池（cb）拿不到但同档 peer（glm 三池）可用 ⇒ 落 peer 并**留痕**
  #    🔴 这条专测异构审查抓到的漏：§5 落到 TIER_PEERS 时原先**根本不 append**，
  #       导致【档内换落点】对用户完全不可见。
- dict(n='T1 主池不可用 → 落同档 glm 并留痕', task_type='core', blockers={'algorithm'},
+ dict(n='T1 主池不可用 → 落同档 glm 并留痕', task_type='core', free_off=True,
       unavailable={'volcengine-coding/deepseek-v4.1-flash',
                    'volcengine-agent-plan/deepseek-v4.1-flash',
                    'bailian-token-plan/deepseek-v4.1-flash'},
@@ -454,20 +585,20 @@ CASES = [
  # ⭐ T1 池内逐级换池，⛔ 不该过早掉到同档替代
  # 🔴 2026-09-24 cb 移出后池序 = [火山 coding, 火山 agent-plan, 百炼]。原先三条是四池级联
  #    （cb → coding → agent-plan → 百炼），cb 那一级已不存在 ⇒ 收成两级，⛔ 不留假级联。
- dict(n='T1 coding 不可用 → 落 agent-plan（轮换第二位），⛔ 不掉 peer', task_type='core', blockers={'algorithm'},
+ dict(n='T1 coding 不可用 → 落 agent-plan（轮换第二位），⛔ 不掉 peer', task_type='core', free_off=True,
       unavailable={'volcengine-coding/deepseek-v4.1-flash'},
       want=dict(upstream='volcengine-agent-plan', model='deepseek-v4.1-flash',
                 tier_substitutions=[])),
- dict(n='T1 火山两套餐都不可用 → 落百炼', task_type='core', blockers={'algorithm'},
+ dict(n='T1 火山两套餐都不可用 → 落百炼', task_type='core', free_off=True,
       unavailable={'volcengine-coding/deepseek-v4.1-flash',
                    'volcengine-agent-plan/deepseek-v4.1-flash'},
       want=dict(upstream='bailian-token-plan', model='deepseek-v4.1-flash')),
  # ⭐ 百炼这份带「限时夜间 5 折」⇒ 22:00-08:00 折扣排序把它提前
- dict(n='深夜 T1 百炼打折 ⇒ 排到池首', task_type='core', blockers={'algorithm'},
+ dict(n='深夜 T1 百炼打折 ⇒ 排到池首', task_type='core', free_off=True,
       when=DT(2026,9,15,23), want=dict(upstream='bailian-token-plan', model='deepseek-v4.1-flash')),
- dict(n='白天 T1 无人打折 ⇒ 回轮换首位火山 coding', task_type='core', blockers={'algorithm'},
+ dict(n='白天 T1 无人打折 ⇒ 回轮换首位火山 coding', task_type='core', free_off=True,
       when=DT(2026,9,15,15), want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash')),
- dict(n='T1 全不可用 → 向上换档到 T2（⛔ 不是 T3 的 peer）', task_type='core', blockers={'algorithm'},
+ dict(n='T1 全不可用 → 向上换档到 T2（⛔ 不是 T3 的 peer）', task_type='core', free_off=True,
       unavailable={'volcengine-coding/deepseek-v4.1-flash',
                    'volcengine-agent-plan/deepseek-v4.1-flash',
                    'bailian-token-plan/deepseek-v4.1-flash',
@@ -475,7 +606,7 @@ CASES = [
                    'codebuddy-code/glm-5.3-flash'},
       want=dict(model='deepseek-v4-flash', upstream='volcengine-coding',
                 availability_escalations=[('deepseek-v4.1-flash','deepseek-v4-flash','unavailable')])),
- dict(n='T1+T2 全不可用 → 一路升到 T3', task_type='core', blockers={'algorithm'},
+ dict(n='T1+T2 全不可用 → 一路升到 T3', task_type='core', free_off=True,
       unavailable={'volcengine-coding/deepseek-v4.1-flash',
                    'volcengine-agent-plan/deepseek-v4.1-flash',
                    'bailian-token-plan/deepseek-v4.1-flash',
@@ -488,23 +619,23 @@ CASES = [
                                           ('deepseek-v4-flash','qwen3.8-max','unavailable')])),
  # 🔴 本档已无同档替代 ⇒ 唯一池拿不到就**只能升 T4**，⛔ 不得落到任何未测模型
  dict(n='T3 唯一池不可用 → 只能升 T4，⛔ 不落未测模型', task_type='core',
-      blockers={'algorithm'}, failed=2,
+      free_off=True, failed=2,
       unavailable={'bailian-token-plan/qwen3.8-max'},
       want=dict(upstream='codebuddy-code', model='kimi-k3-1',
                 availability_escalations=[('qwen3.8-max','kimi-k3-1','unavailable')])),
  # 🔴 阶梯到顶仍拿不到 ⇒ LAST_RESORT claude/claude-sonnet-5@max（⛔ 不停在半路）
- dict(n='T4 也拿不到 → 落 LAST_RESORT sonnet-5@max', task_type='core', blockers={'algorithm'}, failed=3,
+ dict(n='T4 也拿不到 → 落 LAST_RESORT sonnet-5@max', task_type='core', free_off=True, failed=3,
       unavailable={'codebuddy-code/kimi-k3-1'},
       want=dict(upstream='claude', model='claude-sonnet-5', thinking='max',
                 availability_escalations=[('kimi-k3-1','claude-sonnet-5','LAST_RESORT')])),
  dict(n='T3→T4 全不可用 → 一路到 LAST_RESORT（⛔ 不回落低档）', task_type='core',
-      blockers={'algorithm'}, failed=2,
+      free_off=True, failed=2,
       unavailable={'bailian-token-plan/qwen3.8-max', 'codebuddy-code/kimi-k3-1'},
       want=dict(upstream='claude', model='claude-sonnet-5',
                 availability_escalations=[('qwen3.8-max','kimi-k3-1','unavailable'),
                                           ('kimi-k3-1','claude-sonnet-5','LAST_RESORT')])),
  # 🔴 连 LAST_RESORT 都没有才停止
- dict(n='付费档全不可用 + claude 也不可用 → 停止', task_type='core', blockers={'algorithm'},
+ dict(n='付费档全不可用 + claude 也不可用 → 停止', task_type='core', free_off=True,
       unavailable={'volcengine-coding/deepseek-v4.1-flash',
                    'volcengine-agent-plan/deepseek-v4.1-flash',
                    'bailian-token-plan/deepseek-v4.1-flash',
@@ -518,23 +649,23 @@ CASES = [
       # ⚠️ 判据用 unavailable 而⛔不是 provider_available —— 0909 第 4 轮起 LAST_RESORT 做
       #    【model 级】探活（claude 活着但 sonnet-5 拿不到，也必须停）。
  # 🔴 反例：⛔ 任何情况都不许【向下】换档 —— T3 起步、全不可用，⛔ 不许回落 T1/T2
- dict(n='T3 全不可用 ⛔ 不许回落到更低档', task_type='core', blockers={'algorithm'}, failed=2,
+ dict(n='T3 全不可用 ⛔ 不许回落到更低档', task_type='core', free_off=True, failed=2,
       unavailable={'bailian-token-plan/qwen3.8-max'},
       want=dict(model='kimi-k3-1')),   # ⛔ ⛔ 绝不能是 glm-5.3-flash / deepseek-v4-flash
  # ⛔ 没有可用性问题时⛔不许无故升档
- dict(n='一切可用 → availability_escalations 必须为空', task_type='core', blockers={'algorithm'},
+ dict(n='一切可用 → availability_escalations 必须为空', task_type='core', free_off=True,
       want=dict(model='deepseek-v4.1-flash', availability_escalations=[])),
  # ── 第 4 轮审查补 ──────────────────────────────────────────────
  # ❌1 LAST_RESORT ⛔ 不许覆盖用户显式 --thinking
- dict(n='LAST_RESORT ⛔ 不覆盖显式 --thinking', task_type='core', blockers={'algorithm'},
+ dict(n='LAST_RESORT ⛔ 不覆盖显式 --thinking', task_type='core', free_off=True,
       failed=3, thinking='low', unavailable={'codebuddy-code/kimi-k3-1'},
       want=dict(upstream='claude', model='claude-sonnet-5', thinking='low')),
  # ❌2 LAST_RESORT 要做 model 级探活，⛔ 不能只查 provider
- dict(n='claude 活着但 sonnet-5 拿不到 → 停止', task_type='core', blockers={'algorithm'},
+ dict(n='claude 活着但 sonnet-5 拿不到 → 停止', task_type='core', free_off=True,
       failed=3, unavailable={'codebuddy-code/kimi-k3-1', 'claude/claude-sonnet-5'},
       no_landing=True),
  # ❌3 §6 的旧 downgrade() ⛔ 不许把档位降下去
- dict(n='⛔ 收尾 downgrade 不得降到更低档', task_type='core', blockers={'algorithm'}, failed=2,
+ dict(n='⛔ 收尾 downgrade 不得降到更低档', task_type='core', free_off=True, failed=2,
       dead_providers={'volcengine-coding'},
       downgrade_to=('codebuddy-code', 'glm-5.3-flash'),   # 破坏性桩：企图从 T3 降到 T1
       # 🔴 T3 现在是 qwen3.8-max。⛔ 绝不能变成 glm-5.3-flash —— 那是【跨档下调】。
@@ -551,18 +682,22 @@ CASES = [
  # ⚠️2 kimi-k3-1 进 WALLET_PREF 后，默认合成池⛔不该再掩盖它
  # ❌5 LAST_RESORT 固定走 Paseo —— provider 表里 claude 只有 create_agent 路径
  dict(n='LAST_RESORT 必须走 paseo（即使是 cli 规模）', task_type='core', scope='small',
-      force_cli=True, blockers={'algorithm'}, failed=2,
+      force_cli=True, free_off=True, failed=2,
       unavailable={'bailian-token-plan/qwen3.8-max', 'codebuddy-code/kimi-k3-1'},
       want=dict(upstream='claude', model='claude-sonnet-5', channel='paseo',
                 provider='claude')),   # ⛔ 绝不能是 pi/claude
  dict(n='T4 落 cb kimi-k3-1（显式在 WALLET_PREF 里）', task_type='core',
-      blockers={'algorithm'}, failed=3,
+      free_off=True, failed=3,
       want=dict(upstream='codebuddy-code', model='kimi-k3-1')),
 ]
 
 fails = []
 for c in CASES:
-    PROBES.clear()
+    PROBES.clear(); FREE_PROBES.clear(); FREE_REPORT.clear()
+    _stale = sorted(set(c) & set(REMOVED_KNOBS))
+    if _stale:
+        fails.append(f"{c['n']}: 🔴 用了已删除的旋钮 {_stale} —— " + '；'.join(REMOVED_KNOBS[k] for k in _stale))
+        continue
     try:
         got = run_case(c)
         if c.get('block'):     fails.append(f"{c['n']}: 期望被拦({c['block']})，实际放行 {got}"); continue
@@ -601,6 +736,13 @@ for c in CASES:
         fails.append(f"{c['n']}: 🔴 伪代码里有未定义名 —— {e}")
     except Exception as e:
         fails.append(f"{c['n']}: {type(e).__name__}: {e}")
+    # ⚠️ 放在 try 之外：被拦 / 停止的用例（如 --free 拿不到）同样要核「探过谁」
+    if 'free_probes' in c and FREE_PROBES != c['free_probes']:
+        fails.append(f"{c['n']}: T0 探活 期望 {c['free_probes']} 实际 {FREE_PROBES}")
+    if 'probes' in c and PROBES != c['probes']:
+        fails.append(f"{c['n']}: first_available 探活 期望 {c['probes']} 实际 {PROBES}")
+    if 'free_report' in c and FREE_REPORT != c['free_report']:
+        fails.append(f"{c['n']}: --free 逐条原因 期望 {c['free_report']} 实际 {FREE_REPORT}")
 
 print("=== §2 管线表驱动验证 ===")
 print(f"用例 {len(CASES)} 条")

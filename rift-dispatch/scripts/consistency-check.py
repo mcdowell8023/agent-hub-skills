@@ -24,9 +24,19 @@ R = (B/'model-routing.md').read_text()
 PI = pathlib.Path.home()/'.pi/agent/models.json'
 pi = json.load(open(PI)) if PI.exists() else None
 
+# 🔴 T0 免费池字面量（2026-09-29）：直接执行 SKILL 里那一段赋值取值 —— ⛔ 不用正则拆字段
+#    （条目里有 set()、None、嵌套 ⇒ 正则一定会漏；只给 `set` 一个内建，别的名字一概不给）
+_FP = re.search(r"^FREE_POOL = \[\n.*?^\]", S, re.S | re.M)
+_ns = {}
+if _FP: exec(_FP.group(0), {'__builtins__': {'set': set}}, _ns)
+SK_FP = sorted(_ns.get('FREE_POOL', []), key=lambda x: x['priority'])
+
 e = []
 def chk(cond, msg):
     if not cond: e.append(msg)
+w = []                                   # ⚠️ 只提醒、⛔ 不致失败（如免费条目截止已过：该清理了，但不是规则错）
+def warn(cond, msg):
+    if not cond: w.append(msg)
 
 # ── 1. 豁免集：SKILL 与 catalog 一致，且 pi / jdcloud / deepseek 都不在里面 ──
 sk  = set(re.findall(r"'([a-z0-9._\-]+)'",
@@ -45,11 +55,12 @@ WL_PROVIDERS = [k for k, v in d['whitelist'].items()
                 if not k.startswith('_') and isinstance(v, list) and k not in NON_PROVIDER]
 chk(WL_PROVIDERS, "catalog whitelist 里一个 provider 都没有")
 for prov in WL_PROVIDERS:
-    w = set(d['whitelist'][prov])
+    wl_ids = set(d['whitelist'][prov])
     m = re.search(rf"'{re.escape(prov)}':\s*\[(.*?)\]", S, re.S)
     chk(m is not None, f"SKILL 缺 {prov} 白名单")
     if m:
-        chk(w == set(re.findall(r"'([A-Za-z0-9._\-]+)'", m.group(1))),
+        # ⚠️ 字符类必须带 `/` —— 2026-09-29 起有 `stealth/space-bunny-alpha` 这种带斜杠的 id
+        chk(wl_ids == set(re.findall(r"'([A-Za-z0-9._/\-]+)'", m.group(1))),
             f"{prov} 白名单 SKILL≠catalog")
 
 # ── 3. 钱包：SKILL 与 catalog 全序 + modelId 一致 + JD 必须大写 modelId ──
@@ -172,8 +183,15 @@ RESIDUE = [
   #    反过来拦截正确写法（守卫把当时的事实编成了常量，事实一变守卫就站到错的一边）。
   (re.compile(r'四池 ?\+ ?同档替代|四池轮换 ?\+'), _PEER_QUALIFIERS,
    f'⛔ 别把「四池 + 同档替代」当通则：同档替代目前只在 {"/".join(_PEER_TIERS) or "（无）"}（由 SKILL 的 TIER_PEERS 推出）'),
+  # ⭐ 2026-09-29 T0 改成登记表：「T0 只有 hy3 / 唯一成员」是 09-15~09-28 的事实，现在只许以历史口吻出现
+  (re.compile(r'T0[^。\n]{0,6}(唯一成员|只(有|剩|留)[^。\n]{0,4}hy3)'), ('📜', '当时', '09-15 ~ 09-28'),
+   'T0 已是 FREE_POOL 登记表（三条），⛔ 别再写「T0 只有 hy3」—— 要讲历史就带上时间'),
   (re.compile(r'官方 ?API|deepseek/\*'), ('手动', '已不是自动兜底', '不在自动降级链'),
    '`deepseek/*` ⛔ 已不是自动兜底，⛔ 不许再写「永远兜底/前面拿不到才用」'),
+  # ⭐ 2026-09-29 审查 r3：entryTier.skipFreeEntries 已改成 FREE_POOL.avoidTaskTypes 的只读镜像，
+  #    ⛔ 不再是独立数据源 —— 「entryTier 是唯一真源」这句若不带限定，会让人以为改这里就能改免费池排除规则
+  (re.compile(r'entryTier[^\n]{0,40}唯一真源|唯一真源[^\n]{0,40}entryTier'), ('分字段', '镜像', 'FREE_POOL'),
+   'entryTier 的 paidEntry 仍是权威，但 skipFreeEntries 只是 FREE_POOL avoidTaskTypes 的镜像，⛔ 不要笼统写「唯一真源」'),
 ]
 for topic, musts, why in RESIDUE:
     musts = (musts,) if isinstance(musts, str) else musts
@@ -245,6 +263,7 @@ dispatchable |= set(re.findall(r"\('([a-z0-9.\-]+)',\s*[\d.]+\)",
 dispatchable |= {mid for _u, mid in re.findall(r"\('([^']+)',\s*'([^']+)'\)",
                  re.search(r"TIER_PEERS\s*=\s*\{(.*?)\n\}", S, re.S).group(1))}
 for prov in WL_PROVIDERS: dispatchable |= set(d['whitelist'][prov])
+dispatchable |= {x['model'] for x in SK_FP}      # ⭐ T0 免费池（09-29）
 lr = re.search(r"LAST_RESORT = \('([^']+)', '([^']+)'", S)
 if lr: dispatchable.add(lr.group(2))
 dispatchable.add('gpt-5.5')                       # review 默认
@@ -269,6 +288,7 @@ wp_pairs = []
 for m, pool in re.findall(r"'([a-z0-9.\-]+)':\s*\[(.*?)\]",
                           re.search(r"WALLET_PREF\s*=\s*\{(.*?)\n\}", S, re.S).group(1), re.S):
     wp_pairs += re.findall(r"\('([^']+)',\s*'([^']+)'\)", pool)
+wp_pairs += [(x['upstream'], x['model']) for x in SK_FP]   # ⭐ 免费落点同样拼标题
 byCh = {}
 for up, mid in wp_pairs:
     byCh.setdefault(up, {}).setdefault(mdAbbr.get(mid, '?'), set()).add(mid)
@@ -343,6 +363,9 @@ if m:
     #    T3 仍是已全局禁用的 deepseek-v4-pro、T4 仍是别名 kimi-k3-2，而 SKILL 开头写着「以 routing 为准」。
     #    ⇒ 本脚本原先对 routing 只搜旧语、⛔ 不比结构，于是漂了没人知道。
     # ⚠️ 只抽「带 @thinking 的型号行」：§0 里每个落点都写成 `model @档位`；没有 @ 的续行（说明、箭头）⛔ 不是落点，故意不抽
+    # ⚠️ 2026-09-29 改：落点 token 取「@ 之前的整段非空白」—— model id 里可以有 `/`（stealth/space-bunny-alpha），
+    #    旧正则 `(?:[a-z-]+/)?([a-z0-9…]+)` 会把它切成 `space-bunny-alpha`。前缀（cb/ · or/ · qcn/）比对时再剥。
+    LEVELS = r'(minimal|low|medium|high|xhigh|max|none)'
     def routing_chain(text):
         blk = re.search(r"## 0\. 派发链.*?```\n(.*?)\n```", text, re.S)
         if not blk: return None
@@ -352,22 +375,43 @@ if m:
             if mt: tier = mt.group(1)
             elif line[:1].strip(): tier = None          # 顶格非 T* 行（如「兜底」）⇒ 离开阶梯
             if tier is None: continue
-            for mm in re.finditer(r'(?:[a-z][a-z\-]*/)?([a-z0-9][a-z0-9._\-]*)\s+@(?:minimal|low|medium|high|xhigh|max)\b', line):
-                out.setdefault(tier, []).append(mm.group(1))
+            for mm in re.finditer(rf'(\S+)\s+@{LEVELS}\b', line):
+                out.setdefault(tier, []).append((mm.group(1), mm.group(2)))
         return out
+    def _strip(tok, known):
+        return next((k for k in known if tok == k or tok.endswith('/' + k)), tok)
     _rc = routing_chain(R)
     chk(_rc is not None, "routing 找不到 §0 派发链代码块")
     if _rc:
         _ladder = re.findall(r"\('([a-z0-9._\-]+)',", re.search(r"LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
-        _t0 = re.search(r"for m in \(((?:'[^']+',?\s*)+)\):\s*#\s*T0", S)
-        _t0 = re.findall(r"'([^']+)'", _t0.group(1)) if _t0 else None
-        chk(_t0 is not None, "SKILL 里找不到 T0 循环（for m in (...):  # T0）")
-        if _t0 is not None:
-            chk(sorted(_rc.get('T0', [])) == sorted(_t0),
-                f"⛔ routing §0 的 T0 {_rc.get('T0')} ≠ SKILL 实际执行的 {_t0}")
+        # 🔴 T0 由 FREE_POOL 推（⛔ 不再匹配 `for m in (...): # T0` —— 09-29 起没有那个循环了）
+        chk(bool(SK_FP), "SKILL 里找不到 FREE_POOL 字面量（T0 免费池登记表）")
+        # ⭐ 连 provider 前缀一起比（审查 r2：只比 model 时 `cb/stealth/space-bunny-alpha` 这种错前缀也会通过）
+        _t0_want = [(chAbbr.get(x['upstream'], '?').lower(), x['model'], x['thinking'] or 'none') for x in SK_FP]
+        _t0_got = []
+        for t, lv in _rc.get('T0', []):
+            mm_ = _strip(t, [x['model'] for x in SK_FP])
+            _t0_got.append((t[:-len(mm_) - 1].lower() if t.endswith('/' + mm_) else '', mm_, lv))
+        chk(_t0_got == _t0_want,
+            f"⛔ routing §0 的 T0 {_t0_got} ≠ SKILL FREE_POOL（按 priority，含思考档）{_t0_want}")
         for i, m in enumerate(_ladder):
-            got = _rc.get(f'T{i+1}', [])
+            got = [_strip(t, _ladder) for t, _ in _rc.get(f'T{i+1}', [])]
             chk(got == [m], f"⛔ routing §0 的 T{i+1} {got} ≠ SKILL LADDER 的 {m!r}")
+        # 🔴 §0 每条免费落点后面那句「avoid 算法 / 性能 / …」是**散文**，⛔ 不在上面的结构比对范围内
+        #    ——审查 r3 抓到：qfmodel 新加了 perf 之后，SKILL/catalog/§2.b/§6 都同步了，唯独这行没改。
+        #    ⇒ 解析这句「avoid <中文项 / 中文项>」，把中文映射回 task_type，逐条目跟 FREE_POOL 的 avoidTaskTypes 比对。
+        _ZH2TT = {'算法': 'algorithm', '性能': 'perf', '架构': 'architecture'}
+        _blk = re.search(r"## 0\. 派发链.*?```\n(.*?)\n```", R, re.S).group(1)
+        for x in SK_FP:
+            _line = next((ln for ln in _blk.splitlines() if f"/{x['model']}" in ln or ln.strip().split()[0:1] == [x['model']]), None)
+            chk(_line is not None, f"⛔ routing §0 里找不到免费条目 {x['model']} 所在的行")
+            if _line is None: continue
+            _m = re.search(r'avoid\s+([^；;]+)', _line)
+            _got_zh = set(re.findall(r'算法|性能|架构', _m.group(1))) if _m else set()
+            _got_tt = {_ZH2TT[z] for z in _got_zh}
+            chk(_got_tt == set(x['avoidTaskTypes']),
+                f"⛔ routing §0 里 {x['model']} 的 avoid 中文列表 {sorted(_got_zh)}（⇒{sorted(_got_tt)}）"
+                f" ≠ FREE_POOL.avoidTaskTypes {sorted(x['avoidTaskTypes'])}")
 
     # 🔴 §3k 失败形态表必须与 catalog 一致，且**必须被真正读取**
     fm = re.search(r"FAILURE_SHAPES\s*=\s*\{(.*?)\n\}", S, re.S)
@@ -421,7 +465,7 @@ if m:
     #    而它在 EXEMPT_PROVIDERS 里 ⇒ 显式指定就能绕过 P0；SKILL 注释当时还写着「四个 provider 全写」。
     #    ⇒ 覆盖面必须由 **catalog 的 providers 表**推出来，⛔ 不能人肉列举。
     wl = re.search(r"WHITELIST\s*=\s*\{(.*?)\n\}", S, re.S)
-    sk_wl = ({km.group(1): set(re.findall(r"'([A-Za-z0-9._\-]+)'", km.group(2)))
+    sk_wl = ({km.group(1): set(re.findall(r"'([A-Za-z0-9._/\-]+)'", km.group(2)))
               for km in re.finditer(r"'([a-z0-9.\-]+)':\s*\[(.*?)\]", wl.group(1), re.S)}
              if wl else {})
     dm = re.search(r"DISABLED_PROVIDERS\s*=\s*\[(.*?)\]", S, re.S)
@@ -500,6 +544,120 @@ if lr:
     chk("LAST_RESORT = ('claude', 'claude-sonnet-5', 'max')" in S,
         "SKILL 的 LAST_RESORT 常量与 catalog 不一致")
 
+# ── 3o. 🔴 T0 免费池：SKILL FREE_POOL ⇔ catalog freePool.entries，且每一条都真能派出去（2026-09-29）──
+#    ⚠️ 登记表的承诺是「以后只改表」⇒ 表里任何一条写错（白名单漏加 / 缩写漏配 / thinking 口径不一），
+#       派发时就会在 validate() 或拼标题那一步才炸 ⇒ 必须在这里提前拦。
+FP_SEL = ('upstream', 'model', 'priority', 'freeUntil', 'thinking', 'multimodal',
+          'avoidTaskTypes', 'cautionTaskTypes', 'retainsData', 'allowInSensitiveWorkspace')
+FP_CAT_ONLY = ('creditRecord', 'verifyVia', 'evalRef', 'note')     # ⛔ 只在 catalog（不双写）
+def _fp_norm(x):
+    return {k: (sorted(x[k]) if isinstance(x.get(k), (set, list, tuple)) else x.get(k)) for k in FP_SEL}
+cat_fp = sorted(d.get('freePool', {}).get('entries', []), key=lambda x: x.get('priority', 0))
+chk(bool(cat_fp), "catalog 缺 freePool.entries")
+chk([_fp_norm(x) for x in SK_FP] == [_fp_norm(x) for x in cat_fp],
+    f"FREE_POOL SKILL≠catalog: SKILL={[_fp_norm(x) for x in SK_FP]} catalog={[_fp_norm(x) for x in cat_fp]}")
+for x in cat_fp:
+    miss = [k for k in FP_SEL + FP_CAT_ONLY if k not in x]
+    chk(not miss, f"freePool 条目 {x.get('upstream')}/{x.get('model')} 缺字段 {miss}")
+    chk(bool(x.get('verifyVia')), f"freePool {x.get('model')} 的 verifyVia 为空 —— 窗口过期后用户无从复核")
+_prios = [x['priority'] for x in SK_FP]
+chk(len(_prios) == len(set(_prios)), f"⛔ FREE_POOL priority 重复 {_prios} ⇒ 挑选顺序不确定")
+_cap = set(re.findall(r"'([a-z_]+)'", re.search(r"CAPABILITY_BLOCKERS\s*=\s*\{(.*?)\}", S).group(1)))
+_nt_line = re.search(r"^NO_THINKING_MODELS\s*=\s*(.*)$", S, re.M).group(1)
+_nothink_base = set(re.findall(r"'([^']+)'", re.search(r"\{(.*?)\}", _nt_line).group(1)))
+# ⭐ 免费条目那部分由 FREE_POOL 推（thinking=None）⇒ 断言「确实是推出来的」，⛔ 不是又手写了一份
+chk("for e in FREE_POOL if e['thinking'] is None" in _nt_line,
+    "⛔ NO_THINKING_MODELS 不再由 FREE_POOL 推导 ⇒ 新增无思考档的免费模型会被收尾补成 xhigh")
+_pihosted = set(re.findall(r"'([a-z0-9.\-]+)'", re.search(r"PI_HOSTED\s*=\s*\((.*?)\)", S, re.S).group(1)))
+_wl_sk = {km.group(1): set(re.findall(r"'([A-Za-z0-9._/\-]+)'", km.group(2)))
+          for km in re.finditer(r"'([a-z0-9.\-]+)':\s*\[(.*?)\]",
+                                re.search(r"WHITELIST\s*=\s*\{(.*?)\n\}", S, re.S).group(1), re.S)}
+_dis = set(re.findall(r"'([a-z0-9.\-]+)'", re.search(r"DISABLED_PROVIDERS\s*=\s*\[(.*?)\]", S, re.S).group(1)))
+_blk_any = set(re.findall(r"'([A-Za-z0-9._/\-]+)'", re.search(r"BLOCKED_MODELS_ANY_PROVIDER\s*=\s*\{(.*?)\}", S).group(1)))
+from datetime import datetime as _DT
+_r2b = re.search(r"### 2\.b .*?(?=\n### )", R, re.S)
+_r2b = _r2b.group(0) if _r2b else None
+chk(_r2b is not None, "routing 找不到 §2.b 能力短板表")
+# ⑨ evalRef 必须指向 catalog 里真实存在的测评记录（`a · b` 多个、`a → 子键` 取 a）
+for x in cat_fp:
+    for part in str(x.get('evalRef', '')).split(' · '):
+        head = part.split(' → ')[0].strip()
+        chk(head in d, f"⛔ freePool {x.get('model')} 的 evalRef `{head}` 在 catalog 里不存在")
+# ⑩ probe-models.sh 的默认清单必须以免费池三条（按 priority）打头 —— 否则「派前先探活」探不到免费档
+_P = (B / 'scripts/probe-models.sh').read_text()
+_def = re.search(r"^DEFAULT=\((.*?)\)", _P, re.S | re.M)
+_def_ids = re.findall(r"\S+", _def.group(1)) if _def else []
+_want = [f"{x['upstream']}/{x['model']}" for x in SK_FP]
+chk(_def_ids[:len(_want)] == _want,
+    f"⛔ probe-models.sh DEFAULT 前 {len(_want)} 项 {_def_ids[:len(_want)]} ≠ FREE_POOL 按 priority {_want}")
+# ⑪ catalog 里的旧免费链（审查 r2：反残留正则只拦散文，catalog 的数值 / 布尔字段拦不住）⇒ 结构性比对
+_ladder_ids = re.findall(r"\('([a-z0-9._\-]+)',", re.search(r"LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
+_et = d.get('dispatchDefaults', {}).get('entryTier', {})
+for k, v in _et.items():
+    if not isinstance(v, dict): continue
+    chk('skipFreeTier' not in v, f"⛔ entryTier.{k} 仍有 skipFreeTier（整档跳过）—— 09-29 起按条目：用 skipFreeEntries")
+    if 'skipFreeEntries' in v:
+        _want_skip = [x['model'] for x in SK_FP if k in x['avoidTaskTypes']]
+        chk(v['skipFreeEntries'] == _want_skip,
+            f"⛔ entryTier.{k}.skipFreeEntries {v['skipFreeEntries']} ≠ 由 FREE_POOL avoid 推出的 {_want_skip}")
+_rule = d.get('dispatchDefaults', {}).get('escalation', {}).get('rule', '')
+_pos = [_rule.find(x) for x in [x['model'] for x in SK_FP] + _ladder_ids]
+chk(all(p >= 0 for p in _pos) and _pos == sorted(_pos),
+    f"⛔ dispatchDefaults.escalation.rule 与 FREE_POOL + LADDER 的顺序不一致：{_rule[:120]}")
+# ⚠️ 上面只查「型号按序出现」，光这样能让「LAST_RESORT 无条件可用」这类错误描述蒙混过关（审查 r3 指出）。
+#    ⇒ 额外钉两条历史上真出过错的措辞（0909 曾把 LAST_RESORT 当 T5 自动纳入升档；09-29 前 T0 曾是单模型整档跳过）：
+chk('仅可用性耗尽' in _rule or 'LAST_RESORT' not in _rule,
+    "⛔ escalation.rule 提到 LAST_RESORT 却没有「仅可用性耗尽」这类限定 —— 会让人以为它是阶梯里普通一档")
+chk('逐条按条目判' in _rule or 'FREE_POOL' not in _rule,
+    "⛔ escalation.rule 提到 FREE_POOL 却没说明是逐条判 —— 会让人以为撞额度会跳过整个 T0")
+# 🔴 `selectableByDefault=true` 的型号必须真在某条自动路径上（阶梯 / 池 / 同档替代 / 免费池），且⛔不许是被禁型号
+#    —— hy4-preview 09-15 弃用后仍标 true + dispatchRank 1，agent 读数值字段会当它是第一顺位（审查 r2）
+_auto = set(_ladder_ids) | {x['model'] for x in SK_FP}
+_auto |= {mid for _u, mid in re.findall(r"\('([^']+)',\s*'([^']+)'\)", re.search(r"WALLET_PREF = \{(.*?)\n\}", S, re.S).group(1))}
+_auto |= {mid for _u, mid in re.findall(r"\('([^']+)',\s*'([^']+)'\)", re.search(r"TIER_PEERS\s*=\s*\{(.*?)\n\}", S, re.S).group(1))}
+for mid, ent in d.get('models', {}).items():
+    if isinstance(ent, dict) and ent.get('selectableByDefault') is True:
+        chk(mid in _auto, f"⛔ models['{mid}'].selectableByDefault=true，但它不在任何自动路径上（阶梯/池/同档/免费池）")
+        chk(mid not in _blk_any, f"⛔ models['{mid}'] 已全局禁用却仍 selectableByDefault=true")
+for x in SK_FP:
+    u, m = x['upstream'], x['model']
+    # ⑫ catalog-only 字段⛔不许在 SKILL 里双写（双写就会漂）
+    _dup = [k for k in FP_CAT_ONLY + ('quota', 'userDecisions') if k in x]
+    chk(not _dup, f"⛔ SKILL FREE_POOL 的 {m} 双写了 catalog-only 字段 {_dup}")
+    # ① 能过 validate()：白名单型 provider 必须列了它；否则必须在豁免集；且⛔不在停用 / 全局禁用里
+    chk(u not in _dis, f"⛔ 免费条目 {u}/{m} 的 provider 已停用")
+    chk(m not in _blk_any, f"⛔ 免费条目 {m} 已全局禁用")
+    chk((u in _wl_sk and m in _wl_sk[u]) or (u not in _wl_sk and u in sk),
+        f"⛔ 免费条目 {u}/{m} 过不了 validate()：白名单没列它，provider 也不在豁免集")
+    # ② avoid 只许写能力类 —— 否则 --free 放宽的语义就不成立（§2 里有同一条 assert）
+    chk(set(x['avoidTaskTypes']) <= _cap,
+        f"⛔ {m} 的 avoidTaskTypes {sorted(x['avoidTaskTypes'])} 超出能力类 {sorted(_cap)}")
+    chk(not (set(x['avoidTaskTypes']) & set(x['cautionTaskTypes'])),
+        f"⛔ {m} 同一任务类既 avoid 又 caution —— 自相矛盾")
+    # ③ 手写的那部分⛔不许与条目矛盾：条目说有思考档，手写集合却把它列成无思考档 ⇒ 收尾会把档位置空
+    chk(not (x['thinking'] is not None and m in _nothink_base),
+        f"⛔ {m}: 条目 thinking={x['thinking']!r}，但被手写进 NO_THINKING_MODELS")
+    # ④ 标题缩写（派发时拼 `· 渠道-模型`）
+    chk(u in chAbbr and m in mdAbbr, f"⛔ 免费条目 {u}/{m} 缺渠道或模型缩写")
+    # ⑤ 🔴 豁免自带失效条件：D2（用户 09-29）之后没有条目需要「敏感目录闸门」，所以**没写闸门代码**。
+    #    一旦出现「会留存数据 且 不许进公司目录」的条目，这个前提就不成立 ⇒ 必须先实现闸门再加条目。
+    chk(not (x['retainsData'] is True and not x['allowInSensitiveWorkspace']),
+        f"⛔ {m} 标了 retainsData=True 且不允许敏感目录，但 §2 **没有**敏感目录闸门 —— 先实现闸门再加这条")
+    # ⑥ pi 宿主的免费落点必须真在 pi 配置里注册了（否则 Paseo 串 pi/<u>/<m> 派不出去）
+    if pi and u in _pihosted:
+        _ids = [mm.get('id') for mm in pi.get('providers', {}).get(u, {}).get('models', [])]
+        chk(m in _ids, f"⛔ 免费条目 {u}/{m} 不在 ~/.pi/agent/models.json 的 {u} 里")
+    # ⑧ routing §2.b 的 avoid 表必须与条目一致（审查 09-29：只比了 SKILL⇔catalog，散文表会漂）
+    _row = re.search(rf"^\| `{re.escape(m)}` \| ([^|]*)\|", _r2b, re.M) if _r2b else None
+    chk(_row is not None, f"⛔ routing §2.b 表里没有 `{m}` 这一行")
+    if _row:
+        chk(set(re.findall(r"`([a-z_]+)`", _row.group(1))) == set(x['avoidTaskTypes']),
+            f"⛔ routing §2.b `{m}` 的 avoid 列 {sorted(re.findall(r'`([a-z_]+)`', _row.group(1)))} ≠ 条目 {sorted(x['avoidTaskTypes'])}")
+    # ⑦ 截止已过 ⇒ ⚠️ 只提醒（逻辑上会自动跳过 / 走复核），⛔ 不致失败
+    if x['freeUntil']:
+        warn(_DT.now() <= _DT.fromisoformat(x['freeUntil']),
+             f"免费条目 {u}/{m} 已过 freeUntil={x['freeUntil']} —— 该延期就更新、该下线就删条目")
+
 # ── 4. 🔴 伪代码结构：单一线性管线 ──
 body = re.search(r"## 2\. 决策流程.*?```python\n(.*?)\n```", S, re.S).group(1)
 for fn in ('split_provider', 'normalize_provider', 'validate', ):
@@ -562,4 +720,5 @@ if pi:
 print("=== rift-dispatch 一致性校验 ===")
 print(f"仓库: {B}")
 print("✅ 全部通过" if not e else "\n".join("❌ " + x for x in e))
+if w: print("\n".join("⚠️  " + x for x in w))
 sys.exit(1 if e else 0)

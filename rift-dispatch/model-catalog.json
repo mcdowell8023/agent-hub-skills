@@ -1,8 +1,8 @@
 {
-  "version": "6.41.0",
+  "version": "6.42.0",
   "lastUpdated": "2026-09-29",
   "whitelist": {
-    "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
+    "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn / openrouter-free)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
     "codebuddy-code": [
       "hy4-preview",
       "hy3",
@@ -12,7 +12,11 @@
       "kimi-k3-1"
     ],
     "qoderclicn": [
-      "qmodel_38max"
+      "qmodel_38max",
+      "qfmodel"
+    ],
+    "openrouter-free": [
+      "stealth/space-bunny-alpha"
     ],
     "exempt": {
       "_note": "🔴 键是 **split_provider() 拆出的 upstream 名，⛔ 不带 `pi/` 前缀** —— 校验写作 `upstream in EXEMPT`，加前缀会对不上。🔴 ⛔ 顶层 `pi` 不在本表：它是**宿主**不是钱包，豁免它会让 `pi/jdcloud-joyagent/GLM-5.2` 绕过京东白名单。⚠️ `jdcloud-joyagent` 也⛔不在本表——它有自己的白名单（只准两个 DeepSeek）。⚠️ 本表必须与 SKILL.md 的 `EXEMPT_PROVIDERS` 逐项一致。",
@@ -195,58 +199,147 @@
       "supersededBy": "🔴 walletPriority.discountWindows（2026-09-09）：百炼 22:00-08:00、codebuddy 工作日 09-12/14-18 之外全部时段。⭐ 只在【档位内选落点】介入，⛔ 不参与选档位 ⇒ 与上面的不变量不冲突。"
     },
     "escalation": {
-      "rule": "T0 hy4-preview (0.00x，至 **09-10**) → hy3 (0.00x，至 08-31) → T1 glm-5.3-flash → T2 deepseek-v4-flash → T3 deepseek-v4-pro → T4 kimi-k3-1",
+      "rule": "T0 免费池 FREE_POOL（stealth/space-bunny-alpha → hy3 → qfmodel，逐条按条目判）→ T1 deepseek-v4.1-flash → T2 deepseek-v4-flash → T3 qwen3.8-max → T4 kimi-k3-1 →（仅可用性耗尽）LAST_RESORT claude-sonnet-5",
       "toK3Condition": "⛔ 【质量/成本升档】：要 v4-pro 也做砸才升 K3。⚠️ **可用性换档⛔不受此约束** —— T3 池 + 同档替代全不可用时可升 T4（见 walletPriority.availabilityEscalation）。⛔ 不做预防性升档（2026-08-02 n=1 + 2026-08-06 n=12 两次实测支撑）。K3 是 v4-flash 的 9.5 倍、glm-5.3-flash 的 27 倍。",
       "k3Status": "✅ 2026-08-16 用户恢复启用，作为极致档 / 唯一升档目标。原 P5.4『0723 实测不可靠、定弃用、改派 M3』的结论失效（M3 也已关闭）。⚠️ 0723 观察到的现象保留为已知风险：反复空转、报进度就 idle、git 无产出 —— 派完必须核 git 是否真有 commit",
       "noFallbackForK3": "🔴 K3 撞限额时【白名单内】无替代（唯一 S 级，M3 已关闭）⇒ 2026-09-09 起走 **LAST_RESORT claude/claude-sonnet-5@max**（见 claudeModels.claude-sonnet-5.lastResort），⛔ 不再是「只能报告用户」；连它也拿不到才停止",
       "toV4ProCondition": "⛔ 【质量/成本升档】唯一入口：上一档已在【本任务】做砸过一轮（⛔ 可用性换档不受此约束，见 walletPriority.availabilityEscalation）。它 0.51x、贵 deepseek-v4-flash(0.17x) **3.0 倍**、贵 glm-5.3-flash(0.06x) 8.5 倍；而 K3 贵 v4-flash **9.5 倍**。⇒ 升档时升 v4-pro、⛔ 不要跳 K3。⛔ 仍不做预防性升档。",
-      "entryTierSourceOfTruth": "dispatchDefaults.entryTier（⛔ 唯一真源，⛔ 不要在别处再写一份）",
-      "ruleNote": "🔴 本字段只列【模型档位】，⛔ 不再写 provider —— provider 由 walletPriority.modelProviderPreference 决定（两者正交）"
+      "entryTierSourceOfTruth": "dispatchDefaults.entryTier —— 唯一真源，但**分字段**：`paidEntry`（付费起步档）本表是权威；`skipFreeEntries`（09-29 起）⛔ **不是**独立真源，只是 SKILL FREE_POOL 各条 `avoidTaskTypes` 的只读镜像（consistency §⑪ 保同步）——实际派发逻辑读的是 FREE_POOL，⛔ 不读这个字段。⛔ 不要在别处再写第三份 paidEntry",
+      "ruleNote": "🔴 本字段只列【模型档位】，⛔ 不再写 provider —— provider 由 walletPriority.modelProviderPreference 决定（两者正交）。⚠️ 本字段是摘要，权威在 SKILL §2 LADDER / FREE_POOL 与 routing §0（consistency 比对）；2026-09-29 按当前阶梯重写（旧值停在 08-28：T0 hy4→hy3、T1 glm、T3 v4-pro）"
     },
     "supersedes": "白名单（约束 6）吸收了 07-28『qcn 只准派 Qwen3.8-Max』与 08-02『GLM-5.2 全面禁用』；08-02『夜间默认 qcn』已作废（前提消失）",
     "modelFamilyPreference": {
       "rule": "🔴 2026-08-28 改写。DeepSeek 仍是【族偏好】，但⛔ 不再是【第一落点】——08-21 涨价后 deepseek-v4-flash 从 0.05x 变 0.17x，「又强又便宜」的前提消失，h2hEval_20260828 显示同口径与 0.06x 的 glm-5.3-flash 打平（66 vs 67）",
       "howItAppliesNow": "族偏好现在体现为：【质量/成本升档】 T1 做砸过一轮才升 T2 的 deepseek-v4-flash（⚠️ **可用性换档⛔不受此约束**（见 walletPriority.availabilityEscalation）。），⛔ 不跳去别的族。⛔ 不再体现为「一上来就用 DeepSeek」",
-      "primary": "glm-5.3-flash（T1 起步档）",
+      "primary": "deepseek-v4.1-flash（T1 起步档，2026-09-10 起；cb 上用同档 glm-5.3-flash）",
       "deepseekRole": "deepseek-v4-flash = T2；deepseek-v4-pro = T3，⛔ 仅升档用",
-      "freeTierRelation": "T0 免费档（hy4-preview 至 **09-10** · hy3 至 08-31）仍压在所有付费档之前。⛔ 09-10 后默认落点是 glm-5.3-flash，⛔ 不是 deepseek-v4-flash，也⛔不要自动落回 hy4-preview-x(0.29x)",
+      "freeTierRelation": "T0 免费池（FREE_POOL：Space Bunny → hy3 → qfmodel，2026-09-29 起）仍压在所有付费档之前；三条都拿不到才进 T1。⛔ 不要自动落到 hy4-preview(0.29x) 或 hy3-x(0.05x)",
       "supersedes": "本字段取代 2026-08-20「族内优先 deepseek-v4-flash」与「08-31 后 flash 自动接管第一顺位」两条"
     },
     "entryTier": {
-      "_note": "⛔ 每级【质量/成本】上移的唯一入口仍是「上一档已在【本任务】做砸过一轮」（⛔ 可用性换档不受此约束）。本表只定【起步档】",
+      "_note": "⛔ 每级【质量/成本】上移的唯一入口仍是「上一档已在【本任务】做砸过一轮」（⛔ 可用性换档不受此约束）。本表只定【起步档】。⭐ 2026-09-29 `skipFreeTier`（整档跳过）改为 `skipFreeEntries`（只跳过这些免费条目，由 freePool 各条 avoidTaskTypes 推）；default / architecture 的 paidEntry 随 09-10 T1 换代改成 deepseek-v4.1-flash。⚠️ concurrency_* 的 paidEntry 仍写 T2，与 SKILL ENTRY（09-10 起 T1）不一致 —— 待用户裁定，未动",
       "default": {
-        "skipFreeTier": false,
-        "paidEntry": "glm-5.3-flash"
+        "paidEntry": "deepseek-v4.1-flash",
+        "skipFreeEntries": []
       },
       "algorithm": {
-        "skipFreeTier": true,
         "paidEntry": "deepseek-v4-flash",
-        "evidence": "hy3 盲评 LRU 22 ⇒ 跳免费档。⚠️ 付费起步档【无干净证据】——h2hEval_20260828 的 LRU 一格口径不同（v4-flash 在 agent 上下文按 TDD 真建工程并跑了测试），⛔ 不能引用。现有依据是并发题（同口径，v4-flash 35 > glm 31）作为『精细实现类』的最近代理。对口的 LRU 同口径数据待补测。"
+        "evidence": "hy3 盲评 LRU 22 ⇒ 跳免费档。⚠️ 付费起步档【无干净证据】——h2hEval_20260828 的 LRU 一格口径不同（v4-flash 在 agent 上下文按 TDD 真建工程并跑了测试），⛔ 不能引用。现有依据是并发题（同口径，v4-flash 35 > glm 31）作为『精细实现类』的最近代理。对口的 LRU 同口径数据待补测。",
+        "skipFreeEntries": [
+          "hy3",
+          "qfmodel"
+        ]
       },
       "perf": {
-        "skipFreeTier": true,
         "paidEntry": "deepseek-v4-flash",
-        "evidence": "⚠️ 从来没有 perf 类实测，按 algorithm 同类保守处理"
+        "evidence": "⚠️ 从来没有 perf 类实测，按 algorithm 同类保守处理",
+        "skipFreeEntries": [
+          "hy3",
+          "qfmodel"
+        ]
       },
       "architecture": {
-        "skipFreeTier": true,
-        "paidEntry": "glm-5.3-flash",
-        "evidence": "🔴 2026-08-28 修正：原为 deepseek-v4-flash。h2hEval_20260828 Kafka glm 36 > v4-flash 31，旧规则的依据（v4-flash 重测 Kafka 34 > v4-pro 31）说的是 v4-flash 与 v4-pro 的关系，⛔ 不涉及 glm。⚠️ n=1、单评委，待同口径复测——与 algorithm 一样标为待补"
+        "paidEntry": "deepseek-v4.1-flash",
+        "evidence": "🔴 2026-08-28 修正：原为 deepseek-v4-flash。h2hEval_20260828 Kafka glm 36 > v4-flash 31，旧规则的依据（v4-flash 重测 Kafka 34 > v4-pro 31）说的是 v4-flash 与 v4-pro 的关系，⛔ 不涉及 glm。⚠️ n=1、单评委，待同口径复测——与 algorithm 一样标为待补",
+        "skipFreeEntries": [
+          "hy3"
+        ]
       },
       "concurrency_diag": {
-        "skipFreeTier": false,
         "paidEntry": "deepseek-v4-flash",
-        "evidence": "h2hEval_20260828 并发题 v4-flash 35 > glm 31（同口径）。⚠️ 旧依据『hy3 并发盲评 36.5 白名单内最高』是 07-20 单次——08-21 逐字同题复测 hy3 只得 29（三臂最低），⛔ 不再用它给规则承重"
+        "evidence": "h2hEval_20260828 并发题 v4-flash 35 > glm 31（同口径）。⚠️ 旧依据『hy3 并发盲评 36.5 白名单内最高』是 07-20 单次——08-21 逐字同题复测 hy3 只得 29（三臂最低），⛔ 不再用它给规则承重",
+        "skipFreeEntries": []
       },
       "concurrency_impl": {
-        "skipFreeTier": false,
         "paidEntry": "deepseek-v4-flash",
-        "evidence": "同 concurrency_diag；写并发原语实现比诊断更吃精细度"
+        "evidence": "同 concurrency_diag；写并发原语实现比诊断更吃精细度",
+        "skipFreeEntries": []
       },
       "_taskTypeCodes": "⛔ classify() 必须产出本表里的代号。concurrency 要先判子类 → concurrency_diag / concurrency_impl，⛔ 不能产出裸的 'concurrency'（查表落空会退回 T1）。代号清单与 model-routing.md §6 表一一对应。",
       "_failedTierCounting": "⛔ 计数口径：只数【付费阶梯内】做砸过的档数。T0 免费档做砸不计入（否则默认类会跳过 T1 的 glm-5.3-flash）；同一档重试不计入。"
     },
     "codebuddyDefaultModelNote": "🔴 2026-08-28 从 deepseek-v4-flash 改为 glm-5.3-flash（T1）。⛔ 这只是【默认起步档】——algorithm/perf/concurrency-实现 三类仍从 T2 的 deepseek-v4-flash 起步，见 entryTier。"
+  },
+  "freePool": {
+    "_note": "⭐ T0 免费档登记表（用户 2026-09-29：新增 / 下线免费模型⛔不改挑选逻辑，只改数据：本表 + SKILL FREE_POOL；白名单型 provider（cb / qcn / openrouter-free）还要加 WHITELIST（⛔ 故意不让登记表绕过 P0），再补标题缩写 —— 漏哪项 consistency §3o 都会报）。按 priority 从小到大取第一个当前可用的。🔴 选择字段（upstream/model/priority/freeUntil/thinking/multimodal/avoidTaskTypes/cautionTaskTypes/retainsData/allowInSensitiveWorkspace）与 SKILL.md §2 的 FREE_POOL 逐项一致（consistency §3o）；creditRecord / verifyVia / quota / evalRef / note **只在这里**（用户或 agent 核完写进来，⛔ 不双写）。时间一律本地 Asia/Shanghai、不带时区。",
+    "⚠️ recheckRule": "freeUntil 过后，只有 creditRecord.verifiedOn **晚于 freeUntil 当天**、距今 ≤7 天、且 credit==0 才继续当免费档用；窗口内核的记录只证明促销价是 0（2026-09-29 起）。",
+    "entries": [
+      {
+        "upstream": "openrouter-free",
+        "model": "stealth/space-bunny-alpha",
+        "priority": 1,
+        "freeUntil": null,
+        "thinking": "high",
+        "multimodal": true,
+        "avoidTaskTypes": [],
+        "cautionTaskTypes": [
+          "concurrency_impl"
+        ],
+        "retainsData": true,
+        "allowInSensitiveWorkspace": true,
+        "creditRecord": {
+          "credit": 0.0,
+          "verifiedOn": "2026-09-29",
+          "source": "OpenRouter 公开 /api/v1/models：pricing prompt=0 / completion=0"
+        },
+        "verifyVia": "curl -s https://openrouter.ai/api/v1/models（公开，无需 key）查该 id 的 pricing；⭐ 这一家 agent 自己就能核",
+        "quota": "OpenRouter 规则：购买 <10 credits 的账号，免费模型 20 次/分、50 次/天（UTC 0 点 = 北京 08:00 重置）。⚠️ 实测 3 次调用后 `GET /api/v1/key` 的 free_model_daily_requests 仍为 0 ⇒ 隐身模型是否计入该限额**未证实**。402 = 余额为负。",
+        "evalRef": "spaceBunnyEval_20260929",
+        "userDecisions": [
+          "D1 priority 1（高于 hy3 / qfmodel）",
+          "D2 在 ~/wb 公司目录下**也不跳过**（服务方可能留存 prompt，用户知情并决定）",
+          "D3 concurrency_impl 只提醒、不排除"
+        ],
+        "note": "OpenRouter 上架 2026-09-23（created 字段）；1M 上下文，输入 text / image / video；预览期隐身模型，截止未公布、随时可能下线（404 ⇒ 按下线处理）。实测 150–400s/题，偏慢。pi 里走自定义 provider `openrouter-free`（只注册这一个模型，⛔ 没合并进内置 openrouter —— 那会带出 347 个收费模型）。"
+      },
+      {
+        "upstream": "codebuddy-code",
+        "model": "hy3",
+        "priority": 2,
+        "freeUntil": "2026-09-30T23:59",
+        "thinking": "max",
+        "multimodal": false,
+        "avoidTaskTypes": [
+          "algorithm",
+          "perf",
+          "architecture"
+        ],
+        "cautionTaskTypes": [],
+        "retainsData": false,
+        "allowInSensitiveWorkspace": true,
+        "creditRecord": {
+          "credit": 0.0,
+          "verifiedOn": "2026-09-24",
+          "source": "cb /model 面板截图 0.00x（⚠️ 在免费窗口内核的 ⇒ 不算过期后的复核）"
+        },
+        "verifyVia": "cb `/model` 面板（⛔ agent 拿不到：--help 只给型号清单、rawUsage 只有 token 数、问模型答「不知道」）⇒ 只能请用户看面板",
+        "evalRef": "sameRoundEval_20260816 · hy4Eval_20260821",
+        "note": "免费期延长至 2026-09-30 23:59（用户 2026-09-15 告知）；每日赠额，耗尽表现为排队 / 不回复（cb 429 正文带重置时间）。avoid 三项就是旧的全局排除清单 —— 那张清单本来就是给 hy3 定的。多模态会被 cb 切到付费模型。"
+      },
+      {
+        "upstream": "qoderclicn",
+        "model": "qfmodel",
+        "priority": 3,
+        "freeUntil": "2026-09-30T23:59",
+        "thinking": null,
+        "multimodal": false,
+        "avoidTaskTypes": [
+          "algorithm",
+          "perf"
+        ],
+        "cautionTaskTypes": [],
+        "retainsData": null,
+        "allowInSensitiveWorkspace": true,
+        "creditRecord": {
+          "credit": 0.0,
+          "verifiedOn": "2026-09-24",
+          "source": "`qoderclicn -p -o json` 返回 total_credits=0（09-24 第二轮 6 格生成，⚠️ 在免费窗口内）"
+        },
+        "verifyVia": "`qoderclicn -p -m Qwen3.8-Flash -o json` 的 total_credits，或 Paseo list_models 的 Credit 列",
+        "evalRef": "qwen38flashEval_20260924 → 🔴 round2_qoderSamples",
+        "note": "Qoder 免费版 Qwen3.8-Flash（用户告知免费至 09-30）。🔴 ⛔ 不等于百炼直连版：09-24 第二轮 Qoder×2 均分 28.3 / 30.5 vs 百炼版 34.5（11:1 p=0.006），答案短、快 3–5 倍。⏳ avoid=algorithm·perf 是 agent 提的，待用户认可：algorithm 按实测（LRU 19.5 / 23.2，其余臂 30–32），perf 无实测、与 hy3 同理按 algorithm 同类保守；Kafka 34.0 / 35.5 与其余臂同档 ⇒ ⛔ 不扩大到 architecture。没有思考档 ⇒ ⛔ 不传 thinkingOptionId。Paseo 走原生 1.1.62 ACP（mode=yolo）。"
+      }
+    ]
   },
   "benchmark": {
     "tasks": "LRU Cache + 并发 Bug 诊断 + Kafka 架构设计 (3 题盲评，各 40 分，合计 120)",
@@ -307,20 +400,20 @@
         "codebuddy-code": {
           "modelId": "hy3",
           "credit": 0.0,
-          "note": "限免延期至 2026-08-31（官方 08-02 公告，原 08-05）；2026-08-12 用户再次确认活动延续、截止仍为 08-31"
+          "note": "限免多次延期：08-05 → 08-31（官方 08-02 公告）→ **09-30 23:59**（用户 2026-09-15 告知）。⭐ 2026-09-29 起以 freePool 条目为准"
         }
       },
       "preferredProvider": "codebuddy-code",
       "dispatchRank": 2,
-      "dispatchNote": "⚠️ 2026-08-21 让位给 hy4-preview：同为免费但本轮盲评 84 < hy4 的 103（三题全负）。免费期 08-31 结束（早于 hy4 的 **09-10**）⇒ 09-01 起 hy3 退出免费档。原第一顺位地位由 hy4 接替",
+      "dispatchNote": "📜 2026-08-21 曾让位给 hy4-preview（本轮盲评 84 < hy4 103），当时以为 08-31 免费期结束就退出。⛔ 已过时：hy4 09-15 被弃用，hy3 免费期又延到 09-30 ⇒ 09-15 起重回 T0；09-29 起是 freePool 的 priority 2",
       "promo": {
         "type": "free",
         "start": "2026-07-06",
-        "end": "2026-08-31",
+        "end": "2026-09-30",
         "credit": 0.0,
         "extendedOn": "2026-08-02",
         "reconfirmedOn": "2026-08-12",
-        "history": "原定 ~07-20 → 延 07-22 → 延 08-05 → 延 08-31（官方 08-02 公告，已连续延期 3 次）；2026-08-12 用户再次确认仍延续至 08-31。⚠️ 连延 3 次不代表会有第 4 次，08-31 前留好切换预案（落点 cb/deepseek-v4-flash 0.06x）"
+        "history": "原定 ~07-20 → 延 07-22 → 延 08-05 → 延 08-31（官方 08-02 公告，已连续延期 3 次）；2026-08-12 用户再次确认仍延续至 08-31。⚠️ 连延 3 次不代表会有第 4 次，08-31 前留好切换预案（落点 cb/deepseek-v4-flash 0.06x） → 延 09-30 23:59（用户 2026-09-15 告知）。⭐ 2026-09-29 起以 freePool 条目为准。"
       },
       "bestFor": [
         "core",
@@ -711,6 +804,14 @@
           "kafka": 38.2,
           "thinking": "provider 默认",
           "note": "见 qwen38flashEval_20260924（直连 API、4 臂 4 移位；⛔ 与别轮不可比）"
+        },
+        "2026-09-29": {
+          "total": 103.25,
+          "lru": 32.75,
+          "concurrency": 32.25,
+          "kafka": 38.25,
+          "thinking": "provider 默认",
+          "note": "见 spaceBunnyEval_20260929（⚠️ 复用 09-24 的同一份答案重新评审，⛔ 不是重新生成）"
         }
       },
       "🔴 roleChange_20260910": "🔴 2026-09-10 由 **T1 主落点** 降为 **T1 同档替代**（`tierPeers`）—— `deepseek-v4.1-flash` 同价且能力不弱。⭐ 它仍然很重要：v4.1-flash 只有 cb 一池，glm 的**三池**是 T1 可用性的实际来源。（⚠️ 其中「v4.1-flash 只有 cb 一池」09-15 起已过时，现为火山两套餐 + 百炼三池）",
@@ -1112,9 +1213,9 @@
         }
       },
       "preferredProvider": "codebuddy-code",
-      "selectableByDefault": true,
-      "dispatchRank": 1,
-      "dispatchNote": "⭐ 2026-08-21 起第一顺位：免费 + 本轮三题全胜（103/120，S 级区间）。⚠️ **09-10** 免费结束，届时按 hy4-preview-x 的 0.29x 重新评估",
+      "selectableByDefault": false,
+      "dispatchRank": 99,
+      "dispatchNote": "⛔ 2026-09-15 用户弃用（不稳定，「碰墙」形态的来源），免费期 09-10 已过、09-24 面板 0.29x ⇒ ⛔ 不自动派。📜 08-21 ~ 09-10 曾是第一顺位（免费 + 三题 103/120）",
       "promo": {
         "type": "free-daily-quota",
         "window": "2026-08-28 ~ 2026-09-10",
@@ -1218,6 +1319,14 @@
           "kafka": 34.8,
           "thinking": "provider 默认",
           "note": "见 qwen38flashEval_20260924（直连 API、4 臂 4 移位；⛔ 与别轮不可比）"
+        },
+        "2026-09-29": {
+          "total": 103.5,
+          "lru": 32.0,
+          "concurrency": 36.5,
+          "kafka": 35.0,
+          "thinking": "provider 默认",
+          "note": "见 spaceBunnyEval_20260929（⚠️ 复用 09-24 的同一份答案重新评审，⛔ 不是重新生成）"
         }
       },
       "nightDiscountRate": "4 折（09-29 控制台；此前记 5 折已过时）"
@@ -1415,6 +1524,14 @@
           "kafka": 36.0,
           "thinking": "provider 默认",
           "note": "见 qwen38flashEval_20260924（直连 API、4 臂 4 移位；⛔ 与别轮不可比）"
+        },
+        "2026-09-29": {
+          "total": 101.0,
+          "lru": 31.5,
+          "concurrency": 34.75,
+          "kafka": 34.75,
+          "thinking": "provider 默认",
+          "note": "见 spaceBunnyEval_20260929（⚠️ 复用 09-24 的同一份答案重新评审，⛔ 不是重新生成）"
         }
       }
     },
@@ -1425,6 +1542,52 @@
       "dispatchNote": "⚠️ **尚未定档** —— 没有同口径盲评 ⇒ ⛔ 不进任何档位的池；显式 `--model` 可派。⛔ 未被点名禁用（与 `-0813` 不同）。",
       "⚠️ thinkingInert": "⚠️ 走 pi 时**六档思考全空转**（2026-09-10 实测）—— 派它别指望 `--thinking` 起作用。",
       "titleAbbr": "dspF4@0731 —— ⛔ 不得简写成 `dspF4`（会与火山的 `deepseek-v4-flash` 混淆）"
+    },
+    "stealth/space-bunny-alpha": {
+      "label": "Space Bunny Alpha（OpenRouter 免费隐身模型）",
+      "provider": "openrouter-free",
+      "contextWindow": 1000000,
+      "maxTokens": 524288,
+      "credit": 0.0,
+      "providers": {
+        "openrouter-free": {
+          "modelId": "stealth/space-bunny-alpha",
+          "credit": 0.0
+        }
+      },
+      "note": "T0 免费池 priority 1（见 freePool）。上架 2026-09-23，截止未公布。",
+      "blindEval": {
+        "lru": 32.25,
+        "bug": 30.0,
+        "arch": 37.75,
+        "total": 100.0,
+        "judge": "gpt-5.5",
+        "date": "2026-09-29",
+        "thinking": "reasoning.effort=high",
+        "⚠️_scope": "⛔ 不可与别轮横比；同轮对照见 spaceBunnyEval_20260929"
+      },
+      "blindEvalByRound": {
+        "2026-09-29": {
+          "total": 100.0,
+          "lru": 32.25,
+          "concurrency": 30.0,
+          "kafka": 37.75,
+          "thinking": "reasoning.effort=high",
+          "note": "见 spaceBunnyEval_20260929"
+        }
+      }
+    },
+    "qfmodel": {
+      "label": "Qwen3.8-Flash（Qoder 免费版）",
+      "provider": "qoderclicn",
+      "credit": 0.0,
+      "providers": {
+        "qoderclicn": {
+          "modelId": "qfmodel",
+          "credit": 0.0
+        }
+      },
+      "note": "T0 免费池 priority 3（见 freePool），免费至 2026-09-30。🔴 ⛔ 与百炼 qwen3.8-flash 不是同一表现（09-24 第二轮 p=0.006）⇒ ⛔ 不能互相代测。无思考档。"
     }
   },
   "claudeModels": {
@@ -2381,7 +2544,8 @@
       "qoderclicn": "qcn",
       "claude": "Cld",
       "codex": "Cdx",
-      "opencode": "oc"
+      "opencode": "oc",
+      "openrouter-free": "OR"
     },
     "modelAbbr": {
       "deepseek-v4-flash": "dspF4",
@@ -2414,7 +2578,9 @@
       "gemini-3.8-flash": "gemF3.8",
       "mai-code-1.1-flash": "maiF1.1",
       "deepseek-v4.1-flash": "dspF4.1",
-      "kimi-k3-1": "k3.1"
+      "kimi-k3-1": "k3.1",
+      "stealth/space-bunny-alpha": "sbA0923",
+      "qfmodel": "qwF3.8"
     },
     "🔴 rules": [
       "⛔ **缩写必须含版本号** —— dspF4 / glmF5.3 / k3.2 / gpt5.5。⛔ 不许写成 dsp / glm / kimi。",
@@ -2425,7 +2591,8 @@
     ],
     "🔴 noVersionlessAliases": "🔴 ⛔ **不许把无版本别名当派发落点** —— `glm-latest` 这类名字**按定义就带不出版本**，而本规范的全部意义就是标题里能看出版本。⇒ 派发前必须先解析成具体型号再派。⚠️ 已知解析：火山 `glm-latest` / `glm-5.2` → **`glm-5.3`**（2026-09 实测别名表）。⚠️ 对比：`hy4-preview` 可以派 —— `preview` 是它真实 id 的一部分，缩写 `hy4` 仍带版本。",
     "🔴 staleVersionAlias": "🔴🔴 **陈旧版本别名比无版本别名更危险** —— `deepseek-v4-flash`(cb) 带着版本号却指向 v4.1 ⇒ 标题写 `cb-dspF4` 而实跑 `dspF4.1`，**标题在说谎**，正好击穿本规范存在的意义。⇒ ⛔ 这类别名必须从白名单**移除**，⛔ 不能只加注释。判据：**假 id 的 400 报错会附服务端权威清单**，不在清单里但请求不报错 = 别名。",
-    "🔴 snapshotIdsNeedOwnAbbr": "🔴 **带快照后缀的 id 必须有自己的缩写** —— 2026-09-11 之前 `deepseek-v4-flash-0731` 与 `deepseek-v4-flash` **共用 `dspF4`**，`-0813` 与 `deepseek-v4-pro` 共用 `dspP4`。而实测证明它们**不是同一个被服务的模型** ⇒ 标题 `百炼-dspF4` 会让人以为跟 `火山C-dspF4` 是同一个模型、只是换了钱包 —— **标题说谎**，正是这套规范要防的东西。⇒ 改成 `dspF4@0731` / `dspP4@0813`。"
+    "🔴 snapshotIdsNeedOwnAbbr": "🔴 **带快照后缀的 id 必须有自己的缩写** —— 2026-09-11 之前 `deepseek-v4-flash-0731` 与 `deepseek-v4-flash` **共用 `dspF4`**，`-0813` 与 `deepseek-v4-pro` 共用 `dspP4`。而实测证明它们**不是同一个被服务的模型** ⇒ 标题 `百炼-dspF4` 会让人以为跟 `火山C-dspF4` 是同一个模型、只是换了钱包 —— **标题说谎**，正是这套规范要防的东西。⇒ 改成 `dspF4@0731` / `dspP4@0813`。",
+    "_freePoolAbbrNote": "sbA0923 = Space Bunny Alpha + OpenRouter 上架日期 09-23（它没有版本号，⛔ 用日期占版本位）；qfmodel 与百炼 qwen3.8-flash 同缩写 qwF3.8，靠渠道前缀 qcn / 百炼 区分（§3f 只禁同渠道撞名）"
   },
   "poolQuotaState": {
     "_note": "⚠️ **运行时状态，⛔ 不是规则** —— 会过期。判据永远是**实际探活**。",
@@ -2594,6 +2761,57 @@
     "🔴 dispatchImplication": "🔴 **建议⛔不进阶梯**（⏳ 待用户定）：① 它与 qwen3.8-max、百炼那份 v4.1-flash **同一钱包** ⇒ 百炼撞额度时一起没 ⇒ 当同档替代或 T3 第二池都**零可用性增益**；② 慢 5 倍 + 思考易失控；③ 质量上没有胜过任何一个已在阶梯里的对手。⇒ 保持「显式 --model 可派、不自动选」。",
     "⚠️ caveats": "① 每格只生成 1 次（生成方差未测）；② 本轮 harness（直连 API、默认思考）与以往 /120 榜不同 ⇒ ⛔ 不可与别轮横比；③ 百炼与火山是不同服务方；④ 要把「实现题上 flash < max」做实，需每格多次生成（如 3 次 × 3 题）",
     "🔴 round2_qoderSamples": "🔴 09-24 第二轮（百炼 flash / Qoder flash ×2 / v4.1-flash，12 格同轮）：均分 34.5 / **28.3 / 30.5** / 34.4（/40）。百炼 vs Qoder#1 **11:1 p=0.006**；Qoder#1 vs v4.1 **2:10 p=0.039** ⇒ ⛔ **Qoder 免费版 ≠ 百炼版的表现**（答案短 1/2~2/3、快 3–5 倍 ⇒ 疑似默认思考更低），⛔ 不能互相代测或合并样本。百炼 flash vs v4.1 复评仍打平（7:5）。"
+  },
+  "spaceBunnyEval_20260929": {
+    "_question": "OpenRouter 免费隐身模型 Space Bunny Alpha 能不能当 T0 免费档用（用户 2026-09-29 要求用三道评分题免费测一轮）",
+    "_armToModel": {
+      "orBunny": "stealth/space-bunny-alpha",
+      "bQwenMax": "bailian-qwen3.8-max",
+      "vGlm": "glm-5.3-flash",
+      "vV41": "deepseek-v4.1-flash"
+    },
+    "method": {
+      "harness": "直连 OpenRouter chat/completions（流式），reasoning.effort=high，无系统提示、无工具。⚠️ rift-dispatch 实派是经 pi（thinking=high），pi 对这个 provider 没有 thinkingLevelMap，它实际往请求里塞了什么**未验证** ⇒ ⛔ 不能断言本轮与实派一致",
+      "tasks": "沿用 LRU 实现 / 并发题（找 bug + 根因 + **生产级修复代码** + 测试场景）/ Kafka 架构三题（各 /40）",
+      "judge": "github-copilot/gpt-5.5 · medium · 只读；4 臂 × 4 个循环移位",
+      "validity": "finish=stop 且 validate_cell 通过 ⇒ 3 格首次即有效（150s / 400s / 340s）",
+      "data": "~/AgentWorkspace/tmp/qwen38flash-bench-20260924/（raw/orBunny--* · blind3/ · out3/）"
+    },
+    "scores": {
+      "orBunny": {
+        "lru": 32.25,
+        "concurrency": 30.0,
+        "kafka": 37.75,
+        "total": 100.0
+      },
+      "bQwenMax": {
+        "lru": 32.0,
+        "concurrency": 36.5,
+        "kafka": 35.0,
+        "total": 103.5
+      },
+      "vGlm": {
+        "lru": 32.75,
+        "concurrency": 32.25,
+        "kafka": 38.25,
+        "total": 103.25
+      },
+      "vV41": {
+        "lru": 31.5,
+        "concurrency": 34.75,
+        "kafka": 34.75,
+        "total": 101.0
+      }
+    },
+    "positionBias": "A 36.8 / B 34.2 / C 33.2 / D 31.8（n=12/位）⇒ A–D 差 5.0 ⇒ 单场名次基本由位置决定，⛔ 只看拉丁方均值",
+    "firstPlaceFlip": "三题第一名在移位间全部翻转 ⇒ 三题各自都「不可分」",
+    "pairwise12": "12 格配对（胜:负:平，Δ，符号检验双侧 p）：Bunny vs qwen3.8-max 6:6 Δ−1.17 p=1.0 · Bunny vs glm 6:6 Δ−1.08 p=1.0 · Bunny vs v4.1 6:6 Δ−0.33 p=1.0 · max vs glm 4:7:1 p=0.55 · max vs v4.1 7:5 p=0.77 · glm vs v4.1 7:5 p=0.77 ⇒ 无一组显著",
+    "⭐ verdict": "⭐ Space Bunny ≈ 三个付费对照臂（T1 的 v4.1 / glm、T3 的 qwen3.8-max），逐格都 6:6，且免费 ⇒ 用户定为 T0 priority 1。分项：Kafka 37.75 强；并发题 30.0 弱，失分在**修复代码**（扣余额漏乘数量、字段 snake/camel 不一致）⇒ 映射到 concurrency_impl 只提醒（用户 D3）。⚠️ concurrency_diag 任务若也要求给修复实现，同样该核这两处。",
+    "⚠️ caveats": [
+      "🔴 三个对照臂**复用 09-24 生成的同一份答案**，只是和 Bunny 放在一起重新评审 ⇒ 它们本轮的分与 09-24 那轮不同，差异全部来自评审上下文，⛔ 不是重新生成",
+      "每臂每题只有 1 份生成（n=1 × 4 移位）⇒ 生成方差没测到",
+      "Bunny 走 reasoning effort=high；对照臂是 provider 默认思考（与 09-24 一致）"
+    ]
   },
   "🔴 cbAccountModelList_20260910": {
     "_how": "⭐ 派一个**假 model id**，400 报错正文里直接附**服务端权威清单** —— 比 `list_models` / `--help` 都硬。⚠️ 错误信息常比正常输出信息量大。",
@@ -2846,7 +3064,7 @@
   "t0ProviderAffinity": {
     "rule": "🔴 **T0 试过且失败 ⇒ 落点优先留在同一个 provider（cb）**，⛔ 不跨钱包。",
     "userWord": "用户 2026-09-10：「我希望 hy4 更换为 cb 的 deepseek v4.1 flash」——实测 agent 当时换去了 `pi/volcengine-agent-plan/glm-5.3-flash`。",
-    "⭐ why": "⭐ T0 只跑在 cb 上，而 cb 通道**本身是活的**（它刚把 hy4 的请求吞了）⇒ 换钱包是**没有依据**的动作，只是 agent 手边最熟的动作。",
+    "⭐ why": "⭐ cb 通道**本身是活的**（它刚把 hy4 的请求吞了）⇒ 换钱包是**没有依据**的动作，只是 agent 手边最熟的动作。（📜 09-10 时 T0 只跑在 cb 上；09-29 起 T0 还有 OpenRouter / Qoder，但判据是「cb 接了活然后静默」，与 T0 有几家无关）",
     "scope": "⚠️ 只**重排池内顺序**（含同档替代 peers），⛔ 不改档位、⛔ 不改模型；池里没有 cb 时自然回到轮换。",
     "🔴 tradeoff": "🔴 **affinity 优先于折扣** —— 有意的取舍：「留在已知活着的 provider」压过「省一点钱」。⛔ 不要因为「折扣更便宜」把它翻回来。",
     "⭐ invariantNotCoincidence": "⭐ 写成不变量而⛔不是靠巧合 —— 现在 T1 恰好只在 cb，但将来 T1 换人就丢了这个性质（这正是本次要修的东西）。（🔴 **2026-09-24 已兑现**：cb 移出 v4.1-flash 的池 ⇒ affinity=cb 在 T1 主池无作用点，按不变量回到轮换；与 09-10「⛔ 不要换 pi」字面冲突 ⇒ ⏳ 待用户裁定，见 models['deepseek-v4.1-flash']['🔴 cbPriceHike_20260924']）",
