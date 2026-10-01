@@ -1,6 +1,6 @@
 {
-  "version": "6.42.0",
-  "lastUpdated": "2026-09-29",
+  "version": "6.42.1",
+  "lastUpdated": "2026-10-01",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn / openrouter-free)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
     "codebuddy-code": [
@@ -296,7 +296,7 @@
         "upstream": "codebuddy-code",
         "model": "hy3",
         "priority": 2,
-        "freeUntil": "2026-09-30T23:59",
+        "freeUntil": "2026-10-31T23:59",
         "thinking": "max",
         "multimodal": false,
         "avoidTaskTypes": [
@@ -314,7 +314,7 @@
         },
         "verifyVia": "cb `/model` 面板（⛔ agent 拿不到：--help 只给型号清单、rawUsage 只有 token 数、问模型答「不知道」）⇒ 只能请用户看面板",
         "evalRef": "sameRoundEval_20260816 · hy4Eval_20260821",
-        "note": "免费期延长至 2026-09-30 23:59（用户 2026-09-15 告知）；每日赠额，耗尽表现为排队 / 不回复（cb 429 正文带重置时间）。avoid 三项就是旧的全局排除清单 —— 那张清单本来就是给 hy3 定的。多模态会被 cb 切到付费模型。"
+        "note": "免费期二次延长至 2026-10-31 23:59（CodeBuddy&混元官方 2026-09-30 公告，用户 10-01 转发；此前是 09-30 止）；每日赠额，耗尽表现为排队 / 不回复（cb 429 正文带重置时间）。avoid 三项就是旧的全局排除清单 —— 那张清单本来就是给 hy3 定的。多模态会被 cb 切到付费模型。"
       },
       {
         "upstream": "qoderclicn",
@@ -400,20 +400,20 @@
         "codebuddy-code": {
           "modelId": "hy3",
           "credit": 0.0,
-          "note": "限免多次延期：08-05 → 08-31（官方 08-02 公告）→ **09-30 23:59**（用户 2026-09-15 告知）。⭐ 2026-09-29 起以 freePool 条目为准"
+          "note": "限免多次延期：08-05 → 08-31（官方 08-02 公告）→ 09-30 23:59（用户 2026-09-15 告知）→ **10-31 23:59**（CodeBuddy&混元官方 2026-09-30 公告，用户 10-01 转发截图）。⭐ 2026-09-29 起以 freePool 条目为准"
         }
       },
       "preferredProvider": "codebuddy-code",
       "dispatchRank": 2,
-      "dispatchNote": "📜 2026-08-21 曾让位给 hy4-preview（本轮盲评 84 < hy4 103），当时以为 08-31 免费期结束就退出。⛔ 已过时：hy4 09-15 被弃用，hy3 免费期又延到 09-30 ⇒ 09-15 起重回 T0；09-29 起是 freePool 的 priority 2",
+      "dispatchNote": "📜 2026-08-21 曾让位给 hy4-preview（本轮盲评 84 < hy4 103），当时以为 08-31 免费期结束就退出。⛔ 已过时：hy4 09-15 被弃用，hy3 免费期延到 10-31 ⇒ 09-15 起重回 T0；09-29 起是 freePool 的 priority 2，10-01 起 freeUntil 随官方公告同步延到 10-31",
       "promo": {
         "type": "free",
         "start": "2026-07-06",
-        "end": "2026-09-30",
+        "end": "2026-10-31",
         "credit": 0.0,
         "extendedOn": "2026-08-02",
         "reconfirmedOn": "2026-08-12",
-        "history": "原定 ~07-20 → 延 07-22 → 延 08-05 → 延 08-31（官方 08-02 公告，已连续延期 3 次）；2026-08-12 用户再次确认仍延续至 08-31。⚠️ 连延 3 次不代表会有第 4 次，08-31 前留好切换预案（落点 cb/deepseek-v4-flash 0.06x） → 延 09-30 23:59（用户 2026-09-15 告知）。⭐ 2026-09-29 起以 freePool 条目为准。"
+        "history": "原定 ~07-20 → 延 07-22 → 延 08-05 → 延 08-31（官方 08-02 公告，已连续延期 3 次）；2026-08-12 用户再次确认仍延续至 08-31。⚠️ 连延 3 次不代表会有第 4 次，08-31 前留好切换预案（落点 cb/deepseek-v4-flash 0.06x） → 延 09-30 23:59（用户 2026-09-15 告知）。⭐ 2026-09-29 起以 freePool 条目为准。 → 二次延 10-31 23:59（CodeBuddy&混元官方 2026-09-30 公告：同一公告也把 hy4-preview 改成夜间限免延至 10-31，⛔ 但 hy4-preview 仍因 09-15 的「不稳定」理由排除在 FREE_POOL 外，与免费窗口无关）。"
       },
       "bestFor": [
         "core",
@@ -1209,19 +1209,20 @@
         "codebuddy-code": {
           "modelId": "hy4-preview",
           "credit": 0.0,
-          "note": "⚠️ 免费 08-28 ~ **09-10**（每日赠额，🔴 原记 09-12 已更正）。⛔ 别写成 hy4-preview-x —— 那是同名收费版 0.29x"
+          "note": "⚠️ 原始免费窗口 08-28 ~ 09-10（每日赠额，🔴 原记 09-12 已更正）已过。🔴 2026-10-01 官方二次公告（见 hy3Extended_20261001）给了新结构：已用过的用户夜间 23:00-次日8:00 限免延至 10-31，其余时段正常计费；未用过的用户 10-10 23:59 前首次开启可拿 14 天每日免费额度。⛔ 别写成 hy4-preview-x —— 那是同名收费版 0.29x"
         }
       },
       "preferredProvider": "codebuddy-code",
       "selectableByDefault": false,
       "dispatchRank": 99,
-      "dispatchNote": "⛔ 2026-09-15 用户弃用（不稳定，「碰墙」形态的来源），免费期 09-10 已过、09-24 面板 0.29x ⇒ ⛔ 不自动派。📜 08-21 ~ 09-10 曾是第一顺位（免费 + 三题 103/120）",
+      "dispatchNote": "⛔ 2026-09-15 用户弃用（不稳定，「碰墙」形态的来源），⛔ 不自动派 —— 这条判断与免费窗口无关。🔴 2026-10-01 官方给了新的夜间限免结构（延至 10-31），但**不稳定的理由没有解除**，⛔ 本次不据此重新纳入 FREE_POOL，需用户另行决定。📜 08-21 ~ 09-10 曾是第一顺位（免费 + 三题 103/120）",
       "promo": {
         "type": "free-daily-quota",
         "window": "2026-08-28 ~ 2026-09-10",
         "🔴 correction": "⚠️ 2026-09-09 用户更正：原记「免费至 09-12」是**错的**，实际 **09-10 止**。且是**每日赠送免费额度**，⛔ 不是连续免费期。",
         "dailyQuota": "⚠️ 当日额度用完就会被限：**不回复 = 已被限**，需**主动换模型**，⛔ 不要干等。⇒ 派长任务前探活这条纪律更重要了",
-        "paidSuccessor": "hy4-preview-x @ 0.29x —— ⛔ 09-10 后别自动落回它，它比 T2 还贵"
+        "paidSuccessor": "hy4-preview-x @ 0.29x —— ⛔ 09-10 后别自动落回它，它比 T2 还贵",
+        "secondAnnouncement_20261001": "已用过的用户：夜间 23:00-次日8:00 继续免费，截至 10-31，其余时段正常消耗积分。未用过的用户：10-10 23:59 前首次开启对话，从首次开启起 14 天每日有免费额度（例：10-10 开启则用到 10-24）。见 hy3Extended_20261001"
       },
       "paseo": {
         "provider": "codebuddy-code/hy4-preview",
@@ -3105,5 +3106,11 @@
     "⭐ sampleGate": "⭐ exit 2 带**样本量门槛**：只探 1 个就失败 ⇒ 降级为 1。n=1 时「全部失败」就是「这一个失败」，⛔ 推不出通道问题。",
     "⚠️ bashPitfall": "⚠️ 写它时又踩了「**中文紧跟变量必须 `${VAR}`**」——全角字符会被并进变量名，`set -u` 下直接炸 unbound variable。memory 里记着这条，还是犯了。"
   },
-  "⚠️ echoFormatVariesByPlan_20260923": "⚠️ **同一 provider 的不同套餐，`model` 回显格式可以不一样** —— 2026-09-23 实测：火山 coding 回显 `deepseek-v4-1-flash`、agent-plan 回显 `deepseek-v4-1-flash-260910`，而两者 prompt_tokens 同为 46、且互相接受对方的 id。⇒ 🔴 **回显既不是运行值（0910 已记），格式还因套餐而异** ⇒ ⛔ 单看回显判不了同一性，必须配**同句输入的 prompt_tokens 指纹** + **403/404/200 三态**。"
+  "⚠️ echoFormatVariesByPlan_20260923": "⚠️ **同一 provider 的不同套餐，`model` 回显格式可以不一样** —— 2026-09-23 实测：火山 coding 回显 `deepseek-v4-1-flash`、agent-plan 回显 `deepseek-v4-1-flash-260910`，而两者 prompt_tokens 同为 46、且互相接受对方的 id。⇒ 🔴 **回显既不是运行值（0910 已记），格式还因套餐而异** ⇒ ⛔ 单看回显判不了同一性，必须配**同句输入的 prompt_tokens 指纹** + **403/404/200 三态**。",
+  "🔴 hy3Extended_20261001": {
+    "what": "CodeBuddy & 混元联合项目团队 2026-09-30 官方公告：hy3 限免延期至 2026-10-31 23:59；hy4-preview 改为夜间（23:00-次日8:00）限免延至 10-31（已用过的用户），或首次开启后 14 天每日免费额度（10-10 23:59 前首次开启的新用户）。",
+    "source": "用户 2026-10-01 转发 CodeBuddy 公众号截图（标题「Hy4 preview 夜间限免、Hy3 限免延期至10月31日」）",
+    "appliedTo": "SKILL.md FREE_POOL hy3.freeUntil / models.hy3.promo.end 均已同步改为 2026-10-31T23:59；qfmodel（Qoder 家的促销，与本公告无关）⛔ 未受影响，仍是 09-30",
+    "hy4PreviewStatus": "⛔ 仍未纳入 FREE_POOL —— 09-15 排除理由是【不稳定/碰墙，Paseo 抓不到错误】，与免费窗口长短无关，本次公告不改变该判断；若要重新启用需用户另行决定"
+  }
 }

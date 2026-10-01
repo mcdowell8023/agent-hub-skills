@@ -131,7 +131,8 @@ REMOVED_KNOBS = {'blockers': "改用 free_off=True / cooldowns / multimodal / �
                  'promo_ok': "改用 when=<freeUntil 之后的时间>（窗口由条目 freeUntil 推）"}
 SPACE_BUNNY = 'openrouter-free/stealth/space-bunny-alpha'
 HY3, QFM = 'codebuddy-code/hy3', 'qoderclicn/qfmodel'
-AFTER_EXPIRY = DT(2026, 10, 2, 15)   # hy3 / qfmodel 的 freeUntil 都是 09-30 23:59
+# 🔴 2026-10-01 CodeBuddy 官方公告二次延期：hy3 → 10-31 23:59；qfmodel 仍是 09-30 23:59（未受影响，另一家）
+AFTER_EXPIRY = DT(2026, 11, 2, 15)   # 两者都已过期（取两个 freeUntil 的较大者之后）
 
 CASES = [
  # 拦截类
@@ -189,15 +190,17 @@ CASES = [
       want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash',
                 t0_free_unverified=['hy3', 'qfmodel'])),
  # ⭐ 窗口过后复核过费率（catalog 已更新）⇒ 照常当免费档用
- dict(n='费率已复核（窗口过后、3 天内）⇒ T0 照常可用', task_type='core', when=DT(2026, 10, 4, 15),
+ dict(n='费率已复核（窗口过后、3 天内）⇒ T0 照常可用', task_type='core', when=DT(2026, 11, 4, 15),
       cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
-      credit_records={HY3: {'credit': 0.0, 'verifiedOn': '2026-10-01'}},
+      credit_records={HY3: {'credit': 0.0, 'verifiedOn': '2026-11-01'}},
       want=dict(upstream='codebuddy-code', model='hy3', thinking='max', t0_free_unverified=[])),
  # 🔴 2026-09-29 新增：**窗口内核的记录⛔不算过期后的复核** —— 它只证明「促销价是 0」。
  #    ⚠️ 旧规则下构造得出事故：hy3 的 catalog 记录是 09-24 面板截图 0.00x，到 10-01 仍在 7 天内
  #    ⇒ 会把可能已开始计费的 hy3 当免费再用一天。
+# ⚠️ 2026-10-01 hy3 延期后，verifiedOn='2026-09-24' 换算成新 freeUntil(10-31) 仍在窗口内（09-24 < 10-31）
+ #    ⇒ 「窗口内核的记录不算过期后复核」这条断言本身不受延期影响，只需把 `when` 挪到新窗口之后
  dict(n='窗口内核的 0.00x（09-24）⛔ 不算过期后复核 ⇒ 提示待核，落 T1', task_type='core',
-      when=DT(2026, 10, 1, 15), cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+      when=DT(2026, 11, 1, 15), cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
       credit_records={HY3: {'credit': 0.0, 'verifiedOn': '2026-09-24'}},
       want=dict(model='deepseek-v4.1-flash', t0_free_unverified=['hy3', 'qfmodel'])),
  # 🔴🔴 核实结果是「已计费」⇒ T0 **必须关闭** —— ⛔ 这是改名前那版的洞：
@@ -206,14 +209,14 @@ CASES = [
  #    ⭐ 最坏的是：这个后果由「用户做了正确的事（去核实）」触发。
  dict(n='核实结果=已计费 0.5x ⇒ T0 关闭并报告，⛔ 不当免费用', task_type='core', when=AFTER_EXPIRY,
       cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
-      credit_records={HY3: {'credit': 0.5, 'verifiedOn': '2026-10-01'}},
+      credit_records={HY3: {'credit': 0.5, 'verifiedOn': '2026-11-01'}},
       want=dict(model='deepseek-v4.1-flash', t0_now_billed=[('hy3', 0.5)],
                 t0_free_unverified=['qfmodel'])),
  # 🔴 反例：核实记录**太旧**（30 天前）⇒ ⛔ 不算复核 —— 这正是本次事故的形状：
  #    陈旧记录若算通过，已开始计费的型号会被当免费用（异构审 0911 #3 的「误开方向」）
- dict(n='核实记录过期（30 天前）⇒ ⛔ 不算复核，落 T1', task_type='core', when=DT(2026, 10, 31, 15),
+ dict(n='核实记录过期（29 天前）⇒ ⛔ 不算复核，落 T1', task_type='core', when=DT(2026, 11, 30, 15),
       cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
-      credit_records={HY3: {'credit': 0.0, 'verifiedOn': '2026-10-01'}},
+      credit_records={HY3: {'credit': 0.0, 'verifiedOn': '2026-11-01'}},
       want=dict(model='deepseek-v4.1-flash', t0_free_unverified=['hy3', 'qfmodel'])),
  # 🔴 反例：有 credit 但**没有 verifiedOn** ⇒ ⛔ 不算复核
  dict(n='credit 无 verifiedOn ⇒ ⛔ 不算复核', task_type='core', when=AFTER_EXPIRY,
@@ -342,9 +345,15 @@ CASES = [
       want=dict(model='stealth/space-bunny-alpha')),
  dict(n='显式 --thinking low ⇒ Space Bunny 用 low（⛔ 不被条目默认 high 覆盖）', task_type='core',
       thinking='low', want=dict(model='stealth/space-bunny-alpha', thinking='low')),
- # 🔴 hy3 / qfmodel 09-30 到期；Space Bunny 截止未公布（freeUntil=None）⇒ 到期后免费池只剩它
- dict(n='10-01 起 hy3/qfmodel 到期 ⇒ Space Bunny 仍可用', task_type='core', when=DT(2026, 10, 1, 15),
+ # 🔴 2026-10-01 CodeBuddy 二次延期：hy3 → 10-31 23:59；qfmodel 仍 09-30 23:59
+ #    Space Bunny 截止未公布（freeUntil=None）⇒ 两者都到期后免费池只剩它
+ dict(n='11-01 起 hy3/qfmodel 都已到期 ⇒ Space Bunny 仍可用', task_type='core', when=DT(2026, 11, 1, 15),
       want=dict(model='stealth/space-bunny-alpha', t0_free_unverified=[])),
+ # ⭐ 正面回归：10-01（qfmodel 已过期）~ 10-31 23:59（hy3 延期窗口内）⇒ hy3 仍正常当选，⛔ 不提前判过期
+ #    这条直接验证「二次延期生效」——若 SKILL 的 freeUntil 没跟着改，这里会落 Space Bunny 而不是 hy3
+ dict(n='10-15（qfmodel 已过期但 hy3 延期至 10-31 仍在窗口内）⇒ 正常落 hy3', task_type='core',
+      when=DT(2026, 10, 15, 15), cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},   # ⚠️ 必须挡掉优先级更高的 Bunny，否则测不到 hy3
+      want=dict(upstream='codebuddy-code', model='hy3', thinking='max', t0_free_unverified=[])),
  # 🔴 D3（用户 09-29）：Space Bunny 做并发实现类**只提醒不排除**（并发题 30.0，漏乘数量 / 字段风格不一致）
  dict(n='concurrency_impl ⇒ 仍落 Space Bunny，但必须带提醒', task_type='concurrency_impl',
       want=dict(model='stealth/space-bunny-alpha',

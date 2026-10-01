@@ -18,7 +18,7 @@
 ```
 T0  免费档   按 FREE_POOL 的 priority 取第一个可用的（⭐ 登记表驱动，新增 / 下线免费模型⛔不改逻辑，只改数据，2026-09-29）
      ① or/stealth/space-bunny-alpha @high   0.00x   OpenRouter 隐身预览模型，截止未公布；⚠️ 并发实现类只提醒
-     ② cb/hy3 @max                          0.00x   免费至 09-30 23:59（每日赠额）；avoid 算法 / 性能 / 架构
+     ② cb/hy3 @max                          0.00x   免费至 **10-31** 23:59（10-01 官方二次延期，原 09-30）；avoid 算法 / 性能 / 架构
      ③ qcn/qfmodel @none                    0.00x   Qoder 版 Qwen3.8-Flash，免费至 09-30；avoid 算法 / 性能；无思考档
               ↓ 逐条按【该条目】判（§2）：冷却中 / 本任务无响应或做砸 / 接不了多模态 / 能力 avoid / 过期未复核 / 探活不过
 T1  低价档   deepseek-v4.1-flash  @xhigh          付费档起步 —— 🔴 三池轮换：火山 coding · 火山 agent-plan · 百炼
@@ -48,10 +48,12 @@ T4  极致档   cb/kimi-k3-1         @xhigh  1.62x   🔴 红线，见 §3.3（�
 
 ```
 stealth/space-bunny-alpha  OpenRouter 2026-09-23 上架，截止未公布（预览期，随时可能下线）⇒ T0 priority 1
-hy3                        免费期延长至 2026-09-30 23:59（用户 2026-09-15 告知）⇒ T0 priority 2
+hy3                        免费期二次延长至 2026-10-31 23:59（CodeBuddy&混元官方 2026-09-30 公告，用户 10-01 转发；
+                           此前 09-15 告知的是 09-30 止）⇒ T0 priority 2
 qfmodel                    Qoder 版 Qwen3.8-Flash，免费至 2026-09-30（用户 2026-09-28 告知）⇒ T0 priority 3
 hy4-preview                08-28 ~ 09-10 免费期已过；🔴 2026-09-15 用户弃用（不稳定，「碰墙」形态的来源）
                            2026-09-24 面板显示 0.29x
+                           🔴 2026-10-01 官方给了新夜间限免结构（23:00-次日8:00 延至 10-31，新用户 10-10 前首开送 14 天），⛔ 但不稳定的弃用理由不受此影响，⛔ 不自动重新纳入 T0
 hy3-x                      ⛔ 从来不是免费档（0.05x），无派发角色
 ```
 
@@ -63,9 +65,9 @@ hy3-x                      ⛔ 从来不是免费档（0.05x），无派发角�
 
 | id | 费率 | |
 |---|---|---|
-| `hy3` | **0.00x** | T0 免费池 priority 2（免费至 09-30，每日赠额） |
+| `hy3` | **0.00x** | T0 免费池 priority 2（免费至 **10-31**，每日赠额；10-01 二次延期） |
 | `hy3-x` | **0.05x** | ⚠️ 同名收费版 —— label 同样叫「Hy3」 |
-| `hy4-preview` | 0.29x（09-24 面板） | 免费期已过，09-15 起弃用；旧记的 `hy4-preview-x` 09-24 面板已不出现 |
+| `hy4-preview` | 0.29x（09-24 面板） | 免费期已过，09-15 起弃用；旧记的 `hy4-preview-x` 09-24 面板已不出现。🔴 10-01 官方给了新夜间限免结构但弃用理由不变 |
 
 🔴 **派发认 id，⛔ 不认 label** —— `hy3` 与 `hy3-x` 的 label 都是「Hy3」，按 label 匹配会选错。
 
@@ -83,9 +85,9 @@ hy3-x                      ⛔ 从来不是免费档（0.05x），无派发角�
 | Provider | model id | 费率 | 角色 |
 |---|---|---|---|
 | `openrouter-free` | **`stealth/space-bunny-alpha`** | **0** | ⭐ T0 免费池 priority 1（2026-09-29）。🔴 白名单型：同一把 key 能调 347 个模型（大多收费），⛔ 只放这一个 |
-| `codebuddy-code` | **`hy3`** | **0.00x** | ⭐ T0 免费池 priority 2（免费至 09-30） |
+| `codebuddy-code` | **`hy3`** | **0.00x** | ⭐ T0 免费池 priority 2（免费至 **10-31**，10-01 二次延期） |
 | `qoderclicn` | **`qfmodel`** | **0.00x** | ⭐ T0 免费池 priority 3（Qwen3.8-Flash，免费至 09-30）。⚠️ ⛔ 不等于百炼版（09-24 第二轮显著更弱） |
-| `codebuddy-code` | `hy4-preview` | 0.29x | ⚠️ 仍在白名单，但 09-15 起⛔不自动派（不稳定） |
+| `codebuddy-code` | `hy4-preview` | 0.29x（白天）/ 0.00x（夜间 23:00-08:00，10-01 官方延至 10-31） | ⚠️ 仍在白名单，但 09-15 起⛔不自动派（不稳定，与免费窗口无关） |
 | 火山两套餐 · 百炼 | **`deepseek-v4.1-flash`** | 包月 | 🔴 T1 主落点·三池轮换·必须校验产出 |
 | `codebuddy-code` | `deepseek-v4.1-flash` | **0.11x** | ⚠️ 仍在白名单（可显式点名），2026-09-24 起⛔不自动选 —— 贵过同档 glm |
 | `codebuddy-code` / 火山两套餐 | `glm-5.3-flash` | 0.06x | T1 **同档替代**；🔴 **cb 上的 T1 落点** |
@@ -955,7 +957,7 @@ P2  审查硬例外（§5）                 模型**默认** github-copilot/gpt
      ⚠️ 通道按【规模】分：大审查 → Paseo pi/github-copilot/gpt-5.5；短审查 → pi -p
 P3  ⚠️ Claude 模型可派不推荐         消耗订阅额度，建议留给主会话
 P4  运行环境约束                     --hub 时确认 provider 在 Hub 可用
-P5  免费档（§0 T0 + §2 按条目判）   FREE_POOL：Space Bunny > hy3 > qfmodel（后两条免费至 09-30）
+P5  免费档（§0 T0 + §2 按条目判）   FREE_POOL：Space Bunny > hy3（免费至 10-31）> qfmodel（免费至 09-30）
 P6  任务类型 → 落点（§6）
 P7  成本优化                         同模型多 provider 时选最便宜的
 P8  Provider 降级（§8）

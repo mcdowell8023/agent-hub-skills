@@ -103,7 +103,7 @@ n=1 时「全部失败」就是「这一个失败」，⛔ 推不出通道有问
 | 型号 | 免费期 | 当前状态 |
 |---|---|---|
 | `stealth/space-bunny-alpha` | ⚠️ **截止未公布**（OpenRouter 09-23 上架的隐身预览模型，随时可能下线） | ✅ 2026-09-29 探活通过 |
-| `hy3` | 🔴 **延长至 `2026-09-30 23:59`**（用户 2026-09-15 告知；此前记的是「08-31 止」） | ✅ 2026-09-29 探活通过 |
+| `hy3` | 🔴🔴 **二次延长至 `2026-10-31 23:59`**（CodeBuddy&混元官方 2026-09-30 公告，用户 10-01 转发截图；此前记的是「09-30 止」，09-15 之前更早记的是「08-31 止」） | ✅ 2026-10-01 探活通过 |
 | `qfmodel` | `2026-09-30`（用户告知；Qoder 版 Qwen3.8-Flash） | ✅ 2026-09-29 探活通过 |
 | ~~`hy4-preview`~~ | `08-28 ~ 09-10` 已过期 | 🔴 **2026-09-15 用户弃用：不稳定** ⇒ ⛔ 已移出 T0，不再考虑 |
 | ~~`hy3-x`~~ | ⛔ 本来就不是免费档（**0.05x**）。⚠️ 09-24 起它比 cb 上的 T1 落点 glm-5.3-flash(0.06x) 还便宜一点，但⛔**不同档**（同轮 08-21 盲评 hy3 84 < glm 91，差距远大于位置偏好 2.5）⇒ 先选档位再挑便宜，轮不到它 | 🔴 **无派发角色** ⇒ ⛔ 不考虑 |
@@ -353,9 +353,12 @@ FREE_POOL = [
    # 🔴 D2（用户）：服务方可能留存 prompt，用户知情并决定 ~/wb 下**也不跳过**
    # ⚠️ 预览期隐身模型，截止未公布、随时可能下线（404 ⇒ 按冷却 / 下线处理）；实测 150–400s/题，偏慢
   {'upstream': 'codebuddy-code', 'model': 'hy3', 'priority': 2,
-   'freeUntil': '2026-09-30T23:59', 'thinking': 'max', 'multimodal': False,
+   'freeUntil': '2026-10-31T23:59', 'thinking': 'max', 'multimodal': False,
    'avoidTaskTypes': {'algorithm', 'perf', 'architecture'}, 'cautionTaskTypes': set(),
    'retainsData': False, 'allowInSensitiveWorkspace': True},
+   # 🔴 2026-10-01 CodeBuddy&混元官方公告二次延期至 10-31 23:59（原 09-30）——
+   #    同一公告里 hy4-preview 也改成「夜间 23:00-次日8:00 限免延至 10-31」的新结构，
+   #    ⛔ 但 hy4-preview 09-15 被弃用的理由是【不稳定/碰墙】，与免费窗口无关 ⇒ 仍不纳入 FREE_POOL。
    # 🔴 用户 2026-09-15：「hy3 能用最高就用最高思考强度」⇒ `max`。
    # ⚠️ **`max` 只验证了「被接受」，⛔ 没验证「想得更多」** —— 同一道推理题实测
    #    `minimal` 1384 / `high` 1130 / `max` **653** reasoning_tokens，非单调（与 `-0731` 六档空转同形）。
@@ -363,7 +366,7 @@ FREE_POOL = [
    # ⚠️ avoid 三项就是旧的全局排除清单 —— 那张清单**本来就是给 hy3 定的**（07-20 / 08-21 盲评）
    # ⚠️ 多模态 ⇒ cb 会切到付费多模态模型，免费不成立
   {'upstream': 'qoderclicn', 'model': 'qfmodel', 'priority': 3,
-   'freeUntil': '2026-09-30T23:59', 'thinking': None, 'multimodal': False,
+   'freeUntil': '2026-09-30T23:59', 'thinking': None, 'multimodal': False,  # ⚠️ Qoder 家的促销，与 hy3 的 CodeBuddy 公告无关，⛔ 未随之延期
    'avoidTaskTypes': {'algorithm', 'perf'}, 'cautionTaskTypes': set(),
    'retainsData': None, 'allowInSensitiveWorkspace': True},
    # ⭐ Qoder 免费版 Qwen3.8-Flash（用户告知免费至 09-30）。🔴 **⛔ 不等于百炼直连版**：
@@ -567,7 +570,7 @@ def t0_still_free(e, dt=now()):
         return False                        # 🔴 窗口内核的只证明「促销价是 0」，⛔ 不证明窗口后仍免费
         # ⚠️ 2026-09-29 加：条目带上 freeUntil 之后这个洞才构造得出来 —— hy3 的记录是 09-24 面板 0.00x，
         #    按旧规则到 10-01 仍在 7 天内 ⇒ 会把可能已开始计费的 hy3 当免费再用一天。
-        #    ⚠️ 截止当天（09-30）核的也不算：窗口到 23:59 才关。
+        #    ⚠️ 截止当天核的也不算：窗口到当天 23:59 才关（该条目的 freeUntil 是哪天就按哪天算，⛔ 不是写死 09-30）。
     if days_between(rec['verifiedOn'], dt) > RATE_RECHECK_MAX_AGE_DAYS:
         return False                        # 🔴 核实记录过期 —— 本次事故就是陈旧记录被实测证伪
         # ⚠️ 符号约定：`days_between(早, 晚)` 返回**正数天数**（= 晚 − 早）。
