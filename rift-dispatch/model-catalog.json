@@ -1,6 +1,6 @@
 {
-  "version": "6.42.1",
-  "lastUpdated": "2026-10-01",
+  "version": "6.42.3",
+  "lastUpdated": "2026-10-02",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn / openrouter-free)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
     "codebuddy-code": [
@@ -217,14 +217,14 @@
       "supersedes": "本字段取代 2026-08-20「族内优先 deepseek-v4-flash」与「08-31 后 flash 自动接管第一顺位」两条"
     },
     "entryTier": {
-      "_note": "⛔ 每级【质量/成本】上移的唯一入口仍是「上一档已在【本任务】做砸过一轮」（⛔ 可用性换档不受此约束）。本表只定【起步档】。⭐ 2026-09-29 `skipFreeTier`（整档跳过）改为 `skipFreeEntries`（只跳过这些免费条目，由 freePool 各条 avoidTaskTypes 推）；default / architecture 的 paidEntry 随 09-10 T1 换代改成 deepseek-v4.1-flash。⚠️ concurrency_* 的 paidEntry 仍写 T2，与 SKILL ENTRY（09-10 起 T1）不一致 —— 待用户裁定，未动",
+      "_note": "⛔ 每级【质量/成本】上移的唯一入口仍是「上一档已在【本任务】做砸过一轮」（⛔ 可用性换档不受此约束）。本表只定【起步档】。⭐ 2026-09-29 `skipFreeTier`（整档跳过）改为 `skipFreeEntries`（只跳过这些免费条目，由 freePool 各条 avoidTaskTypes 推）；default / architecture 的 paidEntry 随 09-10 T1 换代改成 deepseek-v4.1-flash。⭐ 2026-10-02 并发两类 paidEntry 已改回 deepseek-v4.1-flash（T1）：SKILL ENTRY 自 09-10 起就是 T1，此前本表一直写错三周；各类型的起步档由 consistency §3p 对 SKILL ENTRY + LADDER 做结构性比对，⛔ 不再靠人记得同步",
       "default": {
         "paidEntry": "deepseek-v4.1-flash",
         "skipFreeEntries": []
       },
       "algorithm": {
         "paidEntry": "deepseek-v4-flash",
-        "evidence": "hy3 盲评 LRU 22 ⇒ 跳免费档。⚠️ 付费起步档【无干净证据】——h2hEval_20260828 的 LRU 一格口径不同（v4-flash 在 agent 上下文按 TDD 真建工程并跑了测试），⛔ 不能引用。现有依据是并发题（同口径，v4-flash 35 > glm 31）作为『精细实现类』的最近代理。对口的 LRU 同口径数据待补测。",
+        "evidence": "hy3 盲评 LRU 22 ⇒ 跳免费档。⚠️ 付费起步档【无干净证据】——h2hEval_20260828 的 LRU 一格口径不同（v4-flash 在 agent 上下文按 TDD 真建工程并跑了测试），⛔ 不能引用。📜 原先取并发题（同口径，v4-flash 35 > glm 31）作为『精细实现类』的最近代理；🔴 但该代理 09-10 被同题 4 臂推翻（v41FlashEval_20260910 并发题 v4.1 37.5 > v4-flash 30.5），并发两类已回到 T1。⇒ algorithm 保留 T2 起步仅因「无干净证据、按保守」，🔴 待补测 v4.1 vs v4-flash 的 LRU / perf 头对头（SKILL ENTRY 注释同）。",
         "skipFreeEntries": [
           "hy3",
           "qfmodel"
@@ -246,19 +246,19 @@
         ]
       },
       "concurrency_diag": {
-        "paidEntry": "deepseek-v4-flash",
-        "evidence": "h2hEval_20260828 并发题 v4-flash 35 > glm 31（同口径）。⚠️ 旧依据『hy3 并发盲评 36.5 白名单内最高』是 07-20 单次——08-21 逐字同题复测 hy3 只得 29（三臂最低），⛔ 不再用它给规则承重",
+        "paidEntry": "deepseek-v4.1-flash",
+        "evidence": "🔴 2026-09-10 起 T1 起步（SKILL ENTRY 并发两类改回 0）：v41FlashEval_20260910 roundA 并发题 cbV41 37.5 > volcFlash(v4-flash) 30.5（+7 分，4 朝向全胜；⚠️ 跨通道，已有 v4-pro 双臂校正）⇒ 跳过 T1 既贵又更差。📜 旧依据 h2hEval_20260828「并发题 v4-flash 35 > glm 31」比的是 glm，⛔ 没比过 v4.1；旧依据『hy3 并发盲评 36.5』是 07-20 单次，08-21 逐字同题复测只得 29（三臂最低），⛔ 不再承重。⚠️ 本字段此前一直写 deepseek-v4-flash（T2）三周没人发现 —— 2026-10-02 由 consistency §3p 对 SKILL ENTRY 的结构性比对抓出",
         "skipFreeEntries": []
       },
       "concurrency_impl": {
-        "paidEntry": "deepseek-v4-flash",
-        "evidence": "同 concurrency_diag；写并发原语实现比诊断更吃精细度",
+        "paidEntry": "deepseek-v4.1-flash",
+        "evidence": "同 concurrency_diag。⚠️ 那道并发题是「找 bug + 给修复代码」，纯「写并发原语」没有单独实测；原先「写实现比诊断更吃精细度」是推测，⛔ 无数据",
         "skipFreeEntries": []
       },
       "_taskTypeCodes": "⛔ classify() 必须产出本表里的代号。concurrency 要先判子类 → concurrency_diag / concurrency_impl，⛔ 不能产出裸的 'concurrency'（查表落空会退回 T1）。代号清单与 model-routing.md §6 表一一对应。",
-      "_failedTierCounting": "⛔ 计数口径：只数【付费阶梯内】做砸过的档数。T0 免费档做砸不计入（否则默认类会跳过 T1 的 glm-5.3-flash）；同一档重试不计入。"
+      "_failedTierCounting": "⛔ 计数口径：只数【付费阶梯内】做砸过的档数。T0 免费档做砸不计入（否则默认类会跳过 T1（deepseek-v4.1-flash））；同一档重试不计入。"
     },
-    "codebuddyDefaultModelNote": "🔴 2026-08-28 从 deepseek-v4-flash 改为 glm-5.3-flash（T1）。⛔ 这只是【默认起步档】——algorithm/perf/concurrency-实现 三类仍从 T2 的 deepseek-v4-flash 起步，见 entryTier。"
+    "codebuddyDefaultModelNote": "📜 2026-08-28 曾从 deepseek-v4-flash 改为 glm-5.3-flash（T1）；🔴 2026-09-10 起 T1 主落点换成 deepseek-v4.1-flash，cb 上因 v4.1 涨价（0.11x > glm 0.06x）改用同档 glm-5.3-flash。⛔ 这只是【默认起步档】——只有 algorithm / perf 两类从 T2 的 deepseek-v4-flash 起步（并发两类 09-10 起已回到 T1），见 entryTier。"
   },
   "freePool": {
     "_note": "⭐ T0 免费档登记表（用户 2026-09-29：新增 / 下线免费模型⛔不改挑选逻辑，只改数据：本表 + SKILL FREE_POOL；白名单型 provider（cb / qcn / openrouter-free）还要加 WHITELIST（⛔ 故意不让登记表绕过 P0），再补标题缩写 —— 漏哪项 consistency §3o 都会报）。按 priority 从小到大取第一个当前可用的。🔴 选择字段（upstream/model/priority/freeUntil/thinking/multimodal/avoidTaskTypes/cautionTaskTypes/retainsData/allowInSensitiveWorkspace）与 SKILL.md §2 的 FREE_POOL 逐项一致（consistency §3o）；creditRecord / verifyVia / quota / evalRef / note **只在这里**（用户或 agent 核完写进来，⛔ 不双写）。时间一律本地 Asia/Shanghai、不带时区。",
@@ -320,7 +320,7 @@
         "upstream": "qoderclicn",
         "model": "qfmodel",
         "priority": 3,
-        "freeUntil": "2026-09-30T23:59",
+        "freeUntil": null,
         "thinking": null,
         "multimodal": false,
         "avoidTaskTypes": [
@@ -332,12 +332,12 @@
         "allowInSensitiveWorkspace": true,
         "creditRecord": {
           "credit": 0.0,
-          "verifiedOn": "2026-09-24",
-          "source": "`qoderclicn -p -o json` 返回 total_credits=0（09-24 第二轮 6 格生成，⚠️ 在免费窗口内）"
+          "verifiedOn": "2026-10-02",
+          "source": "`qoderclicn -p -m Qwen3.8-Flash -o json` 实测 total_credits=0（⭐ 原定截止 09-30 之后；2.6s）；另有 Qoder CN 官方公告「活动延期：10-01 起继续免费，结束时间将提前在本页公告」（用户 10-02 转发截图）"
         },
-        "verifyVia": "`qoderclicn -p -m Qwen3.8-Flash -o json` 的 total_credits，或 Paseo list_models 的 Credit 列",
+        "verifyVia": "⭐ 首选：`qoderclicn -p -m Qwen3.8-Flash --tools '' -o json 'reply with exactly: PROBE_OK'` 的 `total_credits`（=0 免费；>0 已计费，CLI 直接给的实扣值，agent 自己就能核；probe-models.sh 已自动判）。公告页：Qoder CN 文档站「事件」→「Qwen3.8-Flash 限时免费使用」（URL 不在截图里，⛔ 未核）",
         "evalRef": "qwen38flashEval_20260924 → 🔴 round2_qoderSamples",
-        "note": "Qoder 免费版 Qwen3.8-Flash（用户告知免费至 09-30）。🔴 ⛔ 不等于百炼直连版：09-24 第二轮 Qoder×2 均分 28.3 / 30.5 vs 百炼版 34.5（11:1 p=0.006），答案短、快 3–5 倍。⏳ avoid=algorithm·perf 是 agent 提的，待用户认可：algorithm 按实测（LRU 19.5 / 23.2，其余臂 30–32），perf 无实测、与 hy3 同理按 algorithm 同类保守；Kafka 34.0 / 35.5 与其余臂同档 ⇒ ⛔ 不扩大到 architecture。没有思考档 ⇒ ⛔ 不传 thinkingOptionId。Paseo 走原生 1.1.62 ACP（mode=yolo）。"
+        "note": "Qoder 免费版 Qwen3.8-Flash。🔴 2026-10-02 官方公告：原定 09-30 23:59:59 的免费期延长，10-01 起继续免费，「结束时间将提前在本页公告」⇒ 截止未公布，freeUntil=None。⭐ 实测原定 09-30 之后 total_credits 仍为 0。⚠️ 仅 Qoder CN 个人用户（体验 / 专业 / 高级 / 旗舰版 + 会员卡，免费与试用用户均可）；**企业订阅（团队版 / 企业标准版 / 企业专属版）不适用**。官方注明活动期间用量大、高峰可能慢。🔴 免费一结束模型照样答得动、只是开始扣 Credits ⇒ freeUntil=None 必须自带失效条件：probe-models.sh 对它判 total_credits：>0 ⇒ 已计费、读不到（缺失 / 乱码）⇒ 无法确认免费（fail-closed），都冷却 24h。⚠️ 与百炼 qwen3.8-flash ⛔ 不是同一表现：09-24 第二轮 Qoder×2 均分 28.3 / 30.5 vs 百炼版 34.5（11:1 p=0.006），答案短、快 3–5 倍。avoid=algorithm·perf：algorithm 按实测（LRU 19.5 / 23.2，其余臂 30–32）；perf 无实测，推导：付费阶梯对 perf 跳过 T1 起步 T2，比 T1 还弱的免费模型更不该接（2026-10-02 由 agent 自行定下，非待决）；Kafka 34.0 / 35.5 同档 ⇒ ⛔ 不扩到 architecture。没有思考档 ⇒ ⛔ 不传 thinkingOptionId。Paseo 走原生 1.1.62 ACP（mode=yolo）。"
       }
     ]
   },
@@ -511,7 +511,7 @@
       ],
       "notAReason": [
         "❌「任务看起来很难/很重要/风险高」→ 两组实测（n=1、n=12）都表明模型档位不是质量关口；该提的是 thinking 档位（xhigh）和审查强度（异构审），⛔ 不是模型档位",
-        "❌「这是 algorithm / architecture 类，K3 分最高」→ 这两类各有更便宜的起步档：algorithm 从 deepseek-v4-flash(0.17x) 起、architecture 从 glm-5.3-flash(0.06x) 起，之后按【质量/成本升档】（本任务做砸过一轮）才升",
+        "❌「这是 algorithm / architecture 类，K3 分最高」→ 这两类各有更便宜的起步档：algorithm 从 deepseek-v4-flash(0.17x) 起、architecture 从 T1 deepseek-v4.1-flash 起（cb 上同档 glm-5.3-flash 0.06x），之后按【质量/成本升档】（本任务做砸过一轮）才升",
         "❌「反正只跑一次」→ 一次 K3 ≈ **9.5 次** deepseek-v4-flash ≈ **27 次** glm-5.3-flash",
         "❌「先用好的保险一点」→ 这就是「预防性升档」的原话，明令禁止"
       ],
@@ -766,7 +766,7 @@
       },
       "selectableByDefault": true,
       "dispatchRank": 3,
-      "dispatchNote": "⭐ T1 付费起点（2026-08-28 用户开启）。免费档被排除或到期后的默认落点，⭐ architecture 类也从这里起步（h2hEval_20260828 Kafka 36 > v4-flash 31）。⛔ algorithm / perf / concurrency-诊断 / concurrency-实现 四类跳过它，直接从 T2 起步。按【质量/成本升档】（做砸一轮）才升 T2。thinking 用 xhigh。",
+      "dispatchNote": "📜 2026-08-28 ~ 09-09 曾是 T1 付费起点。🔴 09-10 起 T1 主落点换成 deepseek-v4.1-flash，glm-5.3-flash 现在是 T1 的**同档替代**，也是 **cb 上的 T1 落点**（cb 的 v4.1 涨到 0.11x > glm 0.06x，09-24 起 cb 移出 v4.1 的池）。architecture 类从 T1 起步（h2hEval_20260828 Kafka glm 36 > v4-flash 31；T1 现为 v4.1-flash，glm 是它的同档替代）。⛔ 只有 algorithm / perf 两类跳过 T1 直接从 T2 起步（并发两类 09-10 起已回到 T1）。按【质量/成本升档】（做砸一轮）才升 T2。thinking 用 xhigh。",
       "costEffectiveness": "0.06x，比 deepseek-v4-flash(0.17x) 便宜 2.8 倍。⚠️ 不要用「总分÷费率」跨轮算性价比——本模型 08-21 轮 91 分、08-28 头对头 98 分，两个数不同源。可靠的结论只有：同口径两题与 v4-flash 打平、价格便宜 2.8 倍",
       "whyOpened": "🔴 2026-08-21 全表涨价后 deepseek-v4-flash 从 0.05x 涨到 0.17x，「DeepSeek 又强又便宜」的前提消失。glm-5.3-flash 0.06x 是新费率下最便宜的付费模型，便宜 2.8 倍。用户 2026-08-28 决定开启。",
       "familyNote": "🔴 属 GLM(智谱) 族 —— 用它实施时，异构评审⛔不得用 GLM 全族",
@@ -879,7 +879,7 @@
       ],
       "avoidFor": [],
       "dispatchRank": 4,
-      "dispatchNote": "⭐ T2 主力档 + DeepSeek 族首选。【质量/成本升档】：T1 做砸过一轮后接手（⚠️ **可用性换档⛔不受此约束**（见 walletPriority.availabilityEscalation）。）；⛔ algorithm / perf / concurrency-诊断 / concurrency-实现 **四类**直接从这里起步（h2hEval_20260828 这三类它领先）。⚠️ architecture 类 2026-08-28 改由 T1 的 glm-5.3-flash 起步（本轮 Kafka 31 < glm 36）。thinking 用 xhigh。",
+      "dispatchNote": "⭐ T2 主力档 + DeepSeek 族首选。【质量/成本升档】：T1 做砸过一轮后接手（⚠️ **可用性换档⛔不受此约束**（见 walletPriority.availabilityEscalation）。）；⛔ algorithm / perf **两类**直接从这里起步（📜 原先并发两类也在此列，🔴 09-10 起已回到 T1：v41FlashEval_20260910 并发题 v4.1 37.5 > 本模型 30.5）。⚠️ architecture 类 2026-08-28 起从 T1 起步（本轮 Kafka 31 < glm 36；📜 当时 T1 是 glm，09-10 起 T1 是 v4.1-flash）。thinking 用 xhigh。",
       "note": "三题均 32 分，是全部已测模型中最均衡的（无短板）。并发题正确识别'JS 单线程无需加锁'（Hy3 在 max 下此处翻车），且提出 Postgres READ COMMITTED 的 EvalPlanQual 机制论证条件 UPDATE 防超卖——评委确认该技术断言正确。⚠️ 原写『以 96 分 / 0.06x 全面取代 V4-Pro（86 分 / 0.13x）』——**该结论已于 2026-08-16 被 v4-pro 正式版重测推翻**（同轮 v4-pro 96 > flash 89），见 sameRoundEval_20260816 与 deepseek-v4-pro.statusNote。🔴 2026-08-21 涨价后它也不再是最省的落点，T2 定位靠的是 algorithm/并发两类的同口径领先，⛔ 不是性价比。",
       "cli": "opencode run --pure -m volcengine-coding/deepseek-v4-flash   # ⭐ 2026-08-20 起默认走 Coding Plan",
       "blindEvalAtThinking": {
@@ -895,7 +895,7 @@
         }
       },
       "whitelisted": true,
-      "sameRoundNote": "⚠️ 2026-08-16 同轮重测（重建 prompt，不与历史 96 直接可比）：flash 89 vs v4-pro 96。分项：LRU 25（明显落后，TTL 惰性清理把过期项仍计入 size/容量，违背题目语义）、并发 30、**Kafka 34（反超 v4-pro 的 31，架构题是它相对 v4-pro 的强项）**。🔴 ⚠️ 这个『Kafka 强项』只在与 v4-pro 之间成立——2026-08-28 头对头里 glm-5.3-flash 在同一题拿 36、反超 flash 的 31，所以 architecture 类的付费起步档已改为 glm-5.3-flash。⛔ 不要把『A 强于 B』推广成『A 强于所有更便宜的』。",
+      "sameRoundNote": "⚠️ 2026-08-16 同轮重测（重建 prompt，不与历史 96 直接可比）：flash 89 vs v4-pro 96。分项：LRU 25（明显落后，TTL 惰性清理把过期项仍计入 size/容量，违背题目语义）、并发 30、**Kafka 34（反超 v4-pro 的 31，架构题是它相对 v4-pro 的强项）**。🔴 ⚠️ 这个『Kafka 强项』只在与 v4-pro 之间成立——2026-08-28 头对头里 glm-5.3-flash 在同一题拿 36、反超 flash 的 31，所以 architecture 类的付费起步档当时改为 glm-5.3-flash（📜 08-28 的结论；🔴 2026-09-10 更正：T1 主落点已换成 deepseek-v4.1-flash，architecture 现在从它起步，glm-5.3-flash 是 cb 上的同档落点）。⛔ 不要把『A 强于 B』推广成『A 强于所有更便宜的』。",
       "selectableByDefault": true,
       "costEffectiveness": "🔴 2026-08-21 涨价 0.05x→0.17x，「性价比全场最高」的立论不再成立。⛔ 不要用「总分÷费率」跨轮算性价比去和别的模型比——它的 89 分出自 08-16 轮、glm-5.3-flash 的 91 分出自 08-21 轮，两个数不同源。唯一同口径的结论来自 h2hEval_20260828：并发+Kafka 两题 66 vs glm 的 67 打平，而 glm 便宜 2.8 倍。",
       "eval_h2h_20260828": {
@@ -1588,7 +1588,7 @@
           "credit": 0.0
         }
       },
-      "note": "T0 免费池 priority 3（见 freePool），免费至 2026-09-30。🔴 ⛔ 与百炼 qwen3.8-flash 不是同一表现（09-24 第二轮 p=0.006）⇒ ⛔ 不能互相代测。无思考档。"
+      "note": "T0 免费池 priority 3（见 freePool），截止未公布（Qoder CN 2026-10-02 官方公告延期，10-01 起继续免费）。🔴 ⛔ 与百炼 qwen3.8-flash 不是同一表现（09-24 第二轮 p=0.006）⇒ ⛔ 不能互相代测。无思考档。"
     }
   },
   "claudeModels": {
@@ -3110,7 +3110,16 @@
   "🔴 hy3Extended_20261001": {
     "what": "CodeBuddy & 混元联合项目团队 2026-09-30 官方公告：hy3 限免延期至 2026-10-31 23:59；hy4-preview 改为夜间（23:00-次日8:00）限免延至 10-31（已用过的用户），或首次开启后 14 天每日免费额度（10-10 23:59 前首次开启的新用户）。",
     "source": "用户 2026-10-01 转发 CodeBuddy 公众号截图（标题「Hy4 preview 夜间限免、Hy3 限免延期至10月31日」）",
-    "appliedTo": "SKILL.md FREE_POOL hy3.freeUntil / models.hy3.promo.end 均已同步改为 2026-10-31T23:59；qfmodel（Qoder 家的促销，与本公告无关）⛔ 未受影响，仍是 09-30",
+    "appliedTo": "SKILL.md FREE_POOL hy3.freeUntil / models.hy3.promo.end 均已同步改为 2026-10-31T23:59。qfmodel（Qoder 家，另一家公告）⛔ 与本公告无关 —— 它自己的延期见 🔴 qfmodelExtended_20261002",
     "hy4PreviewStatus": "⛔ 仍未纳入 FREE_POOL —— 09-15 排除理由是【不稳定/碰墙，Paseo 抓不到错误】，与免费窗口长短无关，本次公告不改变该判断；若要重新启用需用户另行决定"
+  },
+  "🔴 qfmodelExtended_20261002": {
+    "what": "Qoder CN 官方事件页「Qwen3.8-Flash 限时免费使用」：2026-09-18 10:00 起面向所有新老个人用户免费，计费系数 0.1× → 0.0×；原定 09-30 23:59:59 结束，现已延长，10-01 起继续免费，「结束时间将提前在本页公告」（本文时间均为北京时间 UTC+8）。",
+    "eligibility": "Qoder CN 个人用户（体验版 / 专业版 / 高级版 / 旗舰版 + 会员卡用户，免费与试用期用户均可）；企业订阅用户（团队版、企业标准版、企业专属版）不适用。自动生效、无需领取，Credits 余额为 0 也可用。",
+    "caveat": "官方注明活动期间 Qwen3.8-Flash 用量大，高峰时段可能响应较慢。",
+    "source": "用户 2026-10-02 转发 Qoder CN 文档站截图（URL 不在截图里，未核）",
+    "verifiedByAgent": "2026-10-02 `qoderclicn -p -m Qwen3.8-Flash -o json` 实测：success / is_error=false / total_credits=0 / 2638ms —— ⭐ 原定截止 09-30 之后仍免费",
+    "appliedTo": "SKILL.md FREE_POOL qfmodel.freeUntil 改为 None（截止未公布，与 Space Bunny 同口径）；⚠️ 同时给 None 条目补上失效条件：probe-models.sh 对 qfmodel 判 total_credits>0、对 openrouter-* 判 usage.cost>0 ⇒ 已计费",
+    "whyNeedInvalidationCheck": "官方只说结束时间会在公告页提前通知，agent 读不到；免费一结束，模型照样答得动、只是开始扣费 ⇒ 光靠「探活通过」会一直当免费用（同 09-11「答得动 ≠ 还免费」）。同一缺口上一批对 Space Bunny 也存在（freeUntil=None 却无计费探测），一并补了（OpenRouter 响应自带 usage.cost，已实测为 0）。"
   }
 }

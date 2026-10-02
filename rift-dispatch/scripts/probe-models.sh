@@ -84,8 +84,10 @@ probe_cb() {   # $1=model ；cb CLI 不给状态码 ⇒ 只能判正文
 }
 
 probe_http() { # $1=provider $2=model ；直连端点 ⇒ 真实状态码
-  python3 - "$1" "$2" "$PI_CFG" <<'PY'
+  python3 - "$1" "$2" "$PI_CFG" "$S" <<'PY'
 import json, sys, urllib.request, urllib.error
+sys.path.insert(0, sys.argv[4])
+from billing import classify                      # 免费条目「已计费」判定的唯一口径（三态、fail-closed）
 prov, mid, cfg = sys.argv[1], sys.argv[2], sys.argv[3]
 import subprocess, datetime
 try:
@@ -105,7 +107,19 @@ req = urllib.request.Request(p['baseUrl'].rstrip('/') + '/chat/completions',
         headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'})
 try:
     with urllib.request.urlopen(req, timeout=60) as r:
-        print("OK|HTTP 200 回显 " + str(json.loads(r.read()).get('model')) + "|")
+        ok = json.loads(r.read())
+        if prov.startswith('openrouter'):
+            # 🔴 免费条目 freeUntil=None（截止未公布）的失效条件：免费一结束，模型照样 200、只是开始扣费 ⇒ 光看 200 会一直当免费用。
+            #    证据 = 响应自带的实扣费用 usage.cost（credits）。⭐ 三态 + fail-closed：读不到也不能当免费（r4 审查）
+            kind, cost = classify((ok.get('usage') or {}).get('cost'))
+            if kind == 'billed':
+                print(f"FAILM|已开始计费：usage.cost={cost:g}（免费期应已结束 ⇒ 核对 OpenRouter 模型页，更新 FREE_POOL / catalog 该条目）|+24h")
+            elif kind == 'unknown':
+                print("FAILM|无法确认免费状态：响应里 usage.cost 缺失 / 非数字（OpenRouter 响应格式变了？）⇒ 免费条目读不到计费证据，按「免费结束」处理|+24h")
+            else:
+                print("OK|HTTP 200 回显 " + str(ok.get('model')) + " · cost=0|")
+        else:
+            print("OK|HTTP 200 回显 " + str(ok.get('model')) + "|")      # 火山 / 百炼没有 usage.cost 语义（包月套餐）⇒ 不判
 except urllib.error.HTTPError as e:
     try:    m = str((json.loads(e.read().decode(errors='replace')).get('error') or {}).get('message', ''))[:150]
     except Exception: m = ''
@@ -134,11 +148,18 @@ PY
 }
 
 probe_qcn() {  # $1=model ；qcn CLI `-p -o json`，判 is_error + 正文。⚠️ 带超时并杀进程组（MEMORY：只杀子进程=没超时）
-  python3 - "$1" "$PROBE_DIR" "${RIFT_PROBE_QCN_TIMEOUT:-120}" <<'PY'
+  python3 - "$1" "$PROBE_DIR" "${RIFT_PROBE_QCN_TIMEOUT:-120}" "$S" <<'PY'
 import json, os, re, signal, subprocess, sys
 mid, cwd, limit = sys.argv[1], sys.argv[2], int(sys.argv[3])
-CLI_NAME = {'qfmodel': 'Qwen3.8-Flash'}     # 🔴 Paseo 的 model id ≠ CLI 的 -m 名（09-24 bench 实测 -m Qwen3.8-Flash）
-p = subprocess.Popen(['qoderclicn', '-p', '-m', CLI_NAME.get(mid, mid), '--tools', '', '-o', 'json',
+sys.path.insert(0, sys.argv[4])
+from billing import classify                      # 免费条目「已计费」判定的唯一口径（三态、fail-closed）
+# 🔴 Paseo 的 model id → (CLI 的 -m 名, 是否免费池条目)。
+#    · 名字：Paseo id ≠ CLI 名（09-24 bench 实测 -m Qwen3.8-Flash）
+#    · 免费标记：只有免费条目才把 total_credits>0 当成「免费期结束」—— qmodel_38max 本来就按 0.5x 计费，⛔ 不能被误判
+#    ⚠️ 与 SKILL FREE_POOL 的 qoderclicn 条目必须一致（consistency-check §3o ⑬ 比对）
+QCN = {'qfmodel': ('Qwen3.8-Flash', True)}
+cli_name, expect_free = QCN.get(mid, (mid, False))
+p = subprocess.Popen(['qoderclicn', '-p', '-m', cli_name, '--tools', '', '-o', 'json',
                       'reply with exactly: PROBE_OK'], cwd=cwd, stdin=subprocess.DEVNULL,
                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, start_new_session=True)
 try:
@@ -150,8 +171,16 @@ try:
 except Exception:
     print("FAIL|" + out.replace('\n', ' ').replace('|', '/')[:170] + "|"); sys.exit()
 res = str(d.get('result') or '')
+kind, tcv = classify(d.get('total_credits'))
 if not d.get('is_error') and res:
-    print("OK|返回 JSON · " + res[:40].replace('|', '/') + "|"); sys.exit()
+    # 🔴 免费条目 freeUntil=None（Qoder CN 10-01 公告：结束时间只在公告页提前通知）的失效条件：
+    #    免费一结束模型照样答得动、只是开始扣 Credits ⇒ 光看「答得动」会一直当免费用。total_credits 是 CLI 直接给的实扣值。
+    #    ⭐ 三态 + fail-closed：读不到（缺失 / 乱码）也不能当免费（r4 审查：原先只认 number，缺字段就放行）
+    if expect_free and kind == 'billed':
+        print(f"FAILM|已开始计费：total_credits={tcv:g}（免费期应已结束 ⇒ 核对 Qoder CN 事件页，更新 FREE_POOL / catalog 的 qfmodel）|+24h"); sys.exit()
+    if expect_free and kind == 'unknown':
+        print("FAILM|无法确认免费状态：total_credits 缺失 / 非数字（CLI 输出格式变了？）⇒ 免费条目读不到计费证据，按「免费结束」处理|+24h"); sys.exit()
+    print("OK|返回 JSON · " + res[:40].replace('|', '/') + (f" · credits={tcv:g}" if kind != 'unknown' else "") + "|"); sys.exit()
 brief = res.replace('\n', ' ').replace('|', '/')[:170]
 if re.search(r'429|额度|quota|rate.?limit|频率|too many', res, re.I):
     print(f"FAILM|{brief}|+1h")                   # 额度 ⇒ 模型级 + 冷却（⚠️ qcn 的额度报错原文未在真实环境见过，关键词是推测）

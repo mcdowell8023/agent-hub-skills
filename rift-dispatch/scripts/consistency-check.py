@@ -15,7 +15,7 @@
 2. 断言查【性质】⛔ 别查实现字符串（查 `'args.model or args.provider' in S`，一重构就假失败）
 3. ⛔ 别硬编码 `~/.claude/skills/...` —— 那是软链副本，换台机器 clone 就验错对象
 """
-import json, re, sys, pathlib
+import ast, json, re, sys, pathlib
 
 B = pathlib.Path(__file__).resolve().parent.parent      # 🔴 相对自身定位，⛔ 不硬编码
 d = json.load(open(B/'model-catalog.json'))
@@ -188,12 +188,28 @@ RESIDUE = [
    'T0 已是 FREE_POOL 登记表（三条），⛔ 别再写「T0 只有 hy3」—— 要讲历史就带上时间'),
   (re.compile(r'官方 ?API|deepseek/\*'), ('手动', '已不是自动兜底', '不在自动降级链'),
    '`deepseek/*` ⛔ 已不是自动兜底，⛔ 不许再写「永远兜底/前面拿不到才用」'),
+  # ⭐ 2026-10-02：并发两类的付费起步档自 09-10 起是 T1（SKILL ENTRY，§3p 已对 catalog entryTier / routing §6 两张表做结构性比对）。
+  #    §3p 够不着自由文本 —— r4 审查在 catalog 的 4 个说明字段里翻出「并发仍从 T2 起步」（entryTier._note、codebuddyDefaultModelNote、
+  #    glm / v4-flash 的 dispatchNote）。⇒ 反残留：只认「仍写 / 仍从 / 直接从 T2」「N 类 … 起步 / 跳过」这类**陈述现行规则**的措辞；
+  #    ⚠️ 限定语只收明确的过去时标记（📜 / 原先 / 曾写），⛔ 不收「09-10 起」—— 那类说明里恰恰常带日期（我自己写的那条陈旧 _note 就带着）。
+  (re.compile(r'(concurrency|并发)[^\n|]{0,60}(仍写|仍从|仍是|还是|直接从)[^\n|]{0,12}T2'
+              r'|concurrency[^\n|]{0,40}(三类|四类)[^\n|]{0,40}(起步|跳过)'), ('📜', '原先', '曾写'),
+   '并发两类的付费起步档自 09-10 起是 T1（SKILL ENTRY）；⛔ 别再写「仍从 / 直接从 T2 起步」，要讲历史就带上「📜 / 原先」', 'strict'),
+  # ⭐ 同一批：T1 主落点 09-10 起是 deepseek-v4.1-flash，glm-5.3-flash 只是同档替代 / cb 上的 T1 落点
+  #    ⚠️ r5 审查：第一版要求 `T1`…`glm-5.3-flash`…`起` 三个词夹在一起，catalog 里「architecture 从 glm-5.3-flash(0.06x) 起」
+  #       「architecture 类的付费起步档已改为 glm-5.3-flash」两种句式都放过去了 ⇒ 放宽成「architecture 附近的 glm-5.3-flash + 起/起步/起点」
+  (re.compile(r'architecture[^\n|]{0,60}glm-5\.3-flash[^\n|]{0,16}(起|起步|起点)'
+              r'|architecture[^\n|]{0,40}(付费起步档|起步档)[^\n|]{0,16}glm-5\.3-flash'),
+   ('cb 上', '同档', '📜', '原先', '曾', '更正'),
+   'architecture 的 T1 起步是 deepseek-v4.1-flash（cb 上才是同档 glm-5.3-flash），⛔ 别再写「从 glm-5.3-flash 起」；要讲历史就带「📜 / 更正」', 'strict'),
   # ⭐ 2026-09-29 审查 r3：entryTier.skipFreeEntries 已改成 FREE_POOL.avoidTaskTypes 的只读镜像，
   #    ⛔ 不再是独立数据源 —— 「entryTier 是唯一真源」这句若不带限定，会让人以为改这里就能改免费池排除规则
   (re.compile(r'entryTier[^\n]{0,40}唯一真源|唯一真源[^\n]{0,40}entryTier'), ('分字段', '镜像', 'FREE_POOL'),
    'entryTier 的 paidEntry 仍是权威，但 skipFreeEntries 只是 FREE_POOL avoidTaskTypes 的镜像，⛔ 不要笼统写「唯一真源」'),
 ]
-for topic, musts, why in RESIDUE:
+for _entry_ in RESIDUE:
+    topic, musts, why = _entry_[:3]
+    strict = len(_entry_) > 3 and _entry_[3] == 'strict'      # strict ⇒ 不吃 DESCRIPTIVE 整行豁免（r5 审查：陈旧说法恰好带「不受此约束」就整行溜走）
     musts = (musts,) if isinstance(musts, str) else musts
     for fn, txt in CUR.items():
         lines = txt.splitlines()
@@ -201,7 +217,7 @@ for topic, musts, why in RESIDUE:
             if not topic.search(line): continue
             if any(q in line for q in musts): continue
             if HISTORICAL.search(line): continue        # ⛔ 历史存档不算当前规则
-            if DESCRIPTIVE.search(line): continue       # ⛔ 描述旧 bug ≠ 立规则
+            if not strict and DESCRIPTIVE.search(line): continue       # ⛔ 描述旧 bug ≠ 立规则
             if topic.pattern.startswith('官方') and not ROLE.search(line): continue   # ⛔ 价格对比不算
             # ⚠️ **JSON ⛔ 不给「相邻行补限定」的宽限** —— 每行是一个自洽字段，
             #    而 JSON 里字段挨得极密，旁边随便一行带上限定语就会把真残留放过去
@@ -590,6 +606,40 @@ _def_ids = re.findall(r"\S+", _def.group(1)) if _def else []
 _want = [f"{x['upstream']}/{x['model']}" for x in SK_FP]
 chk(_def_ids[:len(_want)] == _want,
     f"⛔ probe-models.sh DEFAULT 前 {len(_want)} 项 {_def_ids[:len(_want)]} ≠ FREE_POOL 按 priority {_want}")
+# ⑬ 🔴 freeUntil=None（截止未公布）的条目必须自带「已计费」探测 —— 豁免自带失效条件（09-11「答得动 ≠ 还免费」）
+#    官方说「结束时间将提前在公告页公布」，agent 不会去读那个页面；免费一结束模型照样答得动，只是开始扣费
+#    ⇒ 探活一路绿、一直被当免费用。直接证据：qcn CLI JSON 的 total_credits；OpenRouter 响应的 usage.cost。
+#    cb 没有费用字段 ⇒ cb 条目⛔不许写 None（要么写明确截止日，要么先给探活加上探测）。
+def _code_only(text):
+    """去掉整行注释与行尾注释（`#` 前的引号配平才算注释；粗略，足够挡「注释里留关键字」）。⛔ 不是完整的 bash / python 解析器。"""
+    out = []
+    for ln in text.splitlines():
+        if ln.lstrip().startswith('#'):
+            continue
+        cut = next((m.start() for m in re.finditer('#', ln)
+                    if ln[:m.start()].count("'") % 2 == 0 and ln[:m.start()].count('"') % 2 == 0), None)
+        out.append(ln if cut is None else ln[:cut])
+    return '\n'.join(out)
+_PC = _code_only(_P)
+# upstream（前缀）→ 探活脚本【代码】里必须同时出现的令牌：读哪个字段 / 已计费分支的输出 / 走统一判定函数
+#   ⚠️ r4 审查：只查「文本里出现 total_credits」，把已计费分支注释掉、关键字留在注释里就能过 ⇒ 改成只看非注释代码，
+#      且要求已计费分支的 FAILM 输出本身还在。⚠️ 仍是静态检查：行为由 probe-models-test.sh 钉住（注入验证里两者各有用例）。
+_DETECT = {'qoderclicn':  ('total_credits', '已开始计费：total_credits=', '无法确认免费状态：total_credits', 'classify('),
+           'openrouter':  ("'cost'",        '已开始计费：usage.cost=',    '无法确认免费状态：响应里 usage.cost', 'classify(')}
+for x in SK_FP:
+    if x['freeUntil'] is None:
+        _toks = next((t for pre, t in _DETECT.items() if x['upstream'].startswith(pre)), None)
+        _miss = [t for t in (_toks or ()) if t not in _PC]
+        chk(_toks is not None and not _miss,
+            f"⛔ {x['upstream']}/{x['model']} freeUntil=None（截止未公布），但探活脚本的【代码】里没有完整的「已计费」探测"
+            f"（缺 {_miss or '整个 upstream 的探测'}）—— 免费结束后它照样答得动、只是开始扣费 ⇒ 要么给 probe-models.sh 加探测，要么写明确截止日")
+_qm = re.search(r"^QCN\s*=\s*(\{[^}]*\})", _P, re.M)
+_qcn = ast.literal_eval(_qm.group(1)) if _qm else None
+chk(_qcn is not None, "⛔ probe-models.sh 里找不到 QCN 映射（Paseo id → (CLI 名, 是否免费条目)）")
+if _qcn is not None:
+    _qfree = {k for k, (_, fr) in _qcn.items() if fr}
+    _fpq = {x['model'] for x in SK_FP if x['upstream'] == 'qoderclicn'}
+    chk(_qfree == _fpq, f"⛔ probe-models.sh QCN 里标「免费」的 {sorted(_qfree)} ≠ FREE_POOL 的 qoderclicn 条目 {sorted(_fpq)} ⇒ 新免费条目没有计费探测")
 # ⑪ catalog 里的旧免费链（审查 r2：反残留正则只拦散文，catalog 的数值 / 布尔字段拦不住）⇒ 结构性比对
 _ladder_ids = re.findall(r"\('([a-z0-9._\-]+)',", re.search(r"LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
 _et = d.get('dispatchDefaults', {}).get('entryTier', {})
@@ -657,6 +707,48 @@ for x in SK_FP:
     if x['freeUntil']:
         warn(_DT.now() <= _DT.fromisoformat(x['freeUntil']),
              f"免费条目 {u}/{m} 已过 freeUntil={x['freeUntil']} —— 该延期就更新、该下线就删条目")
+
+# ── 3p. 🔴 各任务类型的「付费起步档」：SKILL 的 ENTRY + LADDER（可执行的权威）⇒ catalog entryTier / routing §6 两张表 ──
+#    起因（2026-10-02）：09-10 并发两类从 T2 改回 T1（ENTRY 只剩 algorithm/perf），SKILL 与 pipeline-test 都跟着改了，
+#    可 catalog.entryTier.concurrency_* 与 routing §6 两张表一直写着 T2 —— 三周没人发现：这几处是散文 / 数据字段，没有任何机器比对它们。
+#    （同一形状：09-29 r3 抓到的「qfmodel avoid 漏写 perf」。）
+_em = re.search(r"^ENTRY\s*=\s*(\{[^}]*\})", S, re.M)
+_entry = ast.literal_eval(_em.group(1)) if _em else None
+chk(_entry is not None, "SKILL 里找不到 ENTRY 字面量")
+if _entry is not None:
+    _L = re.findall(r"\('([a-z0-9._\-]+)',", re.search(r"LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
+    def _tier_of(code):             # 付费起步档编号 1..4（ENTRY 缺省 0 ⇒ T1）
+        return _entry.get(code, 0) + 1
+    _n_cat = 0
+    for code, v in d.get('dispatchDefaults', {}).get('entryTier', {}).items():       # ① catalog entryTier
+        if not isinstance(v, dict) or 'paidEntry' not in v: continue
+        _n_cat += 1
+        chk(v['paidEntry'] == _L[_tier_of(code) - 1],
+            f"⛔ catalog entryTier.{code}.paidEntry={v['paidEntry']!r} ≠ SKILL ENTRY/LADDER 推出的 T{_tier_of(code)}={_L[_tier_of(code) - 1]!r}")
+    chk(_n_cat >= 5, f"⛔ 只解析到 {_n_cat} 条 entryTier —— 守卫空转")
+    _s6 = re.search(r"## 6\. 任务分类 → 落点.*?(?=\n## 7\.)", R, re.S)                  # ② routing §6 两张表
+    chk(_s6 is not None, "routing 找不到 §6")
+    if _s6:
+        _n_main = _n_split = 0
+        for row in _s6.group(0).splitlines():
+            if not row.startswith('|'): continue
+            cols = [c.strip() for c in row.strip().strip('|').split('|')]
+            cm = re.search(r'`([a-z_]+)`', cols[0])
+            code = cm.group(1) if cm else ('default' if cols[0] == '默认' else None)
+            if code is None: continue
+            if len(cols) == 3:                                    # 主表：代号 | 识别关键词 | 落点
+                tm = re.search(r'→\s*\*{0,2}T([1-4])', cols[2])
+                if tm:
+                    _n_main += 1
+                    chk(int(tm.group(1)) == _tier_of(code),
+                        f"⛔ routing §6 主表 `{code}` 落点写 T{tm.group(1)}，SKILL ENTRY 推出 T{_tier_of(code)}")
+            elif len(cols) == 4:                                  # 拆分表：代号 | 跳过哪些免费条目 | 付费起步档 | 依据
+                tm = re.search(r'\*\*T([1-4])\*\*', cols[2])
+                if tm:
+                    _n_split += 1
+                    chk(int(tm.group(1)) == _tier_of(code),
+                        f"⛔ routing §6 拆分表 `{code}` 付费起步档写 T{tm.group(1)}，SKILL ENTRY 推出 T{_tier_of(code)}")
+        chk(_n_main >= 8 and _n_split >= 6, f"⛔ routing §6 只解析到主表 {_n_main} 行 / 拆分表 {_n_split} 行 —— 守卫空转")
 
 # ── 4. 🔴 伪代码结构：单一线性管线 ──
 body = re.search(r"## 2\. 决策流程.*?```python\n(.*?)\n```", S, re.S).group(1)

@@ -70,6 +70,8 @@ bash $S/cb-probe.sh hy3                              # 兼容 shim：只探 cb
 | OpenRouter `401` | key 缺失 / 格式错（**通道级**，⛔ 不是额度） | 跳过这一条、试下一个免费条目，并**报告用户**查钥匙串 `openrouter` 条目（⛔ 打印时只报「有没有 / 长度」）；⛔ 不写冷却（等不好）。⚠️ 旧写法「停」会让一把坏 key 卡死整个派发 |
 | 探活脚本报 `SKIP`（pi 配置里没有该 provider） | 探不了 | 按**不可用**处理（⛔ 不是「全部可用」）；Hub 等没配 OpenRouter 的机器上属预期 |
 | qcn `is_error` + 429 / 额度字样 | 额度（⚠️ 推测，原文未见过） | 换下一个；冷却 +1h |
+| 🔴 qcn JSON `total_credits` > 0（仅免费条目）/ OpenRouter 响应 `usage.cost` > 0 | **免费期已结束**（⭐ 直接证据；⛔ 不是「答得动」——免费结束后模型照样答，只是开始扣费） | 模型级；冷却 24h；**报告用户**更新 FREE_POOL + catalog 该条目（写明确截止日或删条目）。⚠️ 探这一次本身会花 ~0.1 credits。cb 没有费用字段 ⇒ hy3 靠 `freeUntil` + 复核，⛔ 不许写 None |
+| 🔴 同上两个字段**读不到**（缺失 / 非数字 / 乱码，`scripts/billing.py` 判 unknown） | **无法确认免费**（⛔ fail-closed：这字段是 None 条目唯一的失效证据，读不到 = 没有证据） | 同样模型级 + 冷却 24h；报告用户核 CLI / API 输出格式是不是变了。代价是少一个免费选项（回落付费 T1，便宜） |
 | ACP「Empty response」 | 客户端版本问题 | 先查 Paseo 的 provider 命令是不是钉了旧版本（09-28 qcn 钉在 1.0.30 就是这个形态） |
 | `pi -p` 零 CPU、零连接、零输出 | stdin 挂死，⛔ 不是模型挂了 | 查有没有 `< /dev/null`（§3.2b） |
 
@@ -104,7 +106,7 @@ n=1 时「全部失败」就是「这一个失败」，⛔ 推不出通道有问
 |---|---|---|
 | `stealth/space-bunny-alpha` | ⚠️ **截止未公布**（OpenRouter 09-23 上架的隐身预览模型，随时可能下线） | ✅ 2026-09-29 探活通过 |
 | `hy3` | 🔴🔴 **二次延长至 `2026-10-31 23:59`**（CodeBuddy&混元官方 2026-09-30 公告，用户 10-01 转发截图；此前记的是「09-30 止」，09-15 之前更早记的是「08-31 止」） | ✅ 2026-10-01 探活通过 |
-| `qfmodel` | `2026-09-30`（用户告知；Qoder 版 Qwen3.8-Flash） | ✅ 2026-09-29 探活通过 |
+| `qfmodel` | ⚠️ **截止未公布**（Qoder CN 官方公告：原定 09-30 的免费期已延长，10-01 起继续免费，「结束时间将提前在本页公告」——⛔ agent 不会读那个页面，靠探活里的 `total_credits` 兜）。仅限个人用户，**企业订阅不适用**；高峰可能慢 | ✅ 2026-10-02 实测（原定 09-30 之后）`total_credits=0` |
 | ~~`hy4-preview`~~ | `08-28 ~ 09-10` 已过期 | 🔴 **2026-09-15 用户弃用：不稳定** ⇒ ⛔ 已移出 T0，不再考虑 |
 | ~~`hy3-x`~~ | ⛔ 本来就不是免费档（**0.05x**）。⚠️ 09-24 起它比 cb 上的 T1 落点 glm-5.3-flash(0.06x) 还便宜一点，但⛔**不同档**（同轮 08-21 盲评 hy3 84 < glm 91，差距远大于位置偏好 2.5）⇒ 先选档位再挑便宜，轮不到它 | 🔴 **无派发角色** ⇒ ⛔ 不考虑 |
 
@@ -195,7 +197,7 @@ WHITELIST = {                                   # P0，routing §1
   #    标题会写 `cb-dspF4` 而实际跑的是 `dspF4.1`，**标题在说谎**，
   #    正好击穿 §3.1 标题规范存在的意义。⇒ ⛔ 必须从白名单移除，不能只加注释。
   'qoderclicn':       ['qmodel_38max',
-                       'qfmodel'],               # ⭐ 2026-09-29 T0 免费池 priority 3（Qwen3.8-Flash，免费至 09-30）
+                       'qfmodel'],               # ⭐ 2026-09-29 T0 免费池 priority 3（Qwen3.8-Flash，免费，截止未公布）
   # ⭐ 2026-09-29 OpenRouter 免费隐身模型 —— 🔴 **白名单型**，⛔ 不进 EXEMPT。
   #    理由：OpenRouter 同一把 key 能调 347 个模型（大多收费），models.json 里这个 provider 虽只注册了它一个，
   #    ⇒ 派发侧仍要有「只许这一个」的硬闸，就是这张白名单。
@@ -366,13 +368,18 @@ FREE_POOL = [
    # ⚠️ avoid 三项就是旧的全局排除清单 —— 那张清单**本来就是给 hy3 定的**（07-20 / 08-21 盲评）
    # ⚠️ 多模态 ⇒ cb 会切到付费多模态模型，免费不成立
   {'upstream': 'qoderclicn', 'model': 'qfmodel', 'priority': 3,
-   'freeUntil': '2026-09-30T23:59', 'thinking': None, 'multimodal': False,  # ⚠️ Qoder 家的促销，与 hy3 的 CodeBuddy 公告无关，⛔ 未随之延期
+   'freeUntil': None, 'thinking': None, 'multimodal': False,
+   # 🔴 2026-10-02 Qoder CN 官方公告：原定 09-30 23:59:59 的免费期延长，10-01 起继续免费，「结束时间将提前在本页公告」
+   #    ⇒ 截止未公布（与 Space Bunny 同口径）。⭐ 实测原定 09-30 之后 `total_credits` 仍为 0。
+   #    ⚠️ None = 视为开着，⛔ 所以它必须自带失效条件：probe-models.sh 的 QCN 映射对它判 total_credits>0 ⇒ 已计费 ⇒ 冷却 24h
+   #       （consistency §3o ⑬ 强制：freeUntil=None 的条目没有计费探测就报错）。
    'avoidTaskTypes': {'algorithm', 'perf'}, 'cautionTaskTypes': set(),
    'retainsData': None, 'allowInSensitiveWorkspace': True},
-   # ⭐ Qoder 免费版 Qwen3.8-Flash（用户告知免费至 09-30）。🔴 **⛔ 不等于百炼直连版**：
+   # ⭐ Qoder 免费版 Qwen3.8-Flash（仅 Qoder CN 个人用户；企业订阅用户不适用）。🔴 **⛔ 不等于百炼直连版**：
    #    09-24 第二轮 Qoder×2 均分 28.3 / 30.5 vs 百炼版 34.5（11:1 p=0.006）——答案短、快 3–5 倍，疑似默认思考更低
-   # ⏳ avoid algorithm 是 agent 按实测提的（LRU 19.5 / 23.2，其余臂 30–32），**待用户认可**；
-   #    perf 从来没有实测 ⇒ 与 hy3 同一理由按 algorithm 同类保守处理（审查 r2 指出只挡 algorithm 会让 perf 落到它）；
+   # avoid algorithm：按实测（LRU 19.5 / 23.2，其余臂 30–32）。
+   # avoid perf：⭐ 2026-10-02 agent 自行定下（⛔ 非待决，改回只需删这一项）—— perf 无任何模型的实测；推导：付费阶梯对 perf 跳过 T1、
+   #    从 T2 起步（见 ENTRY），比 T1 还弱的免费模型更不该接（审查 r2 也指出只挡 algorithm 会让 perf 落到它）；
    #    架构题（Kafka 34.0 / 35.5）与其余臂同档 ⇒ ⛔ 不扩大到 architecture
 ]
 # 🔴 没有思考档的模型 ⇒ 收尾 thinking 置 None、build_settings ⛔ 不写 thinkingOptionId
@@ -1028,6 +1035,9 @@ print_summary()                                      # §7
 ### 📌 派发路径用例 —— 🔴 **这张表有可执行测试**
 
 ⛔ 别只照着人眼自查：`scripts/pipeline-test.py` 会**直接执行 §2 的伪代码**跑这些用例并断言落点。
+🔴 **改了本 skill 任何一处，六项校验都要跑**（`S=scripts`）：`python3 $S/pipeline-test.py` · `python3 $S/coverage-check.py`（§2 每行都要被用例走到）·
+`python3 $S/consistency-check.py`（SKILL ⇔ catalog ⇔ routing 结构性比对）· `bash $S/cooldown-test.sh` · `bash $S/probe-models-test.sh`（本地假端点，⛔ 不打真服务）·
+`python3 $S/billing-test.py`。「绿」不等于「还在测目标规则」——改了测试夹具里的日期 / 阈值，要对该规则做一次注入验证（见 MEMORY feedback-prove-the-detector-detects）。
 改了 §2 就跑它（连同 `scripts/consistency-check.py`）。
 ✅ 已验证它能抓住 5 类真实破坏：channel 写死 · 入口档改错 · 审查换模型 · 丢 `pi/` 前缀 · 新增未赋值变量。
 
@@ -1544,7 +1554,7 @@ ssh hub "paseo run --detach \
   Agent:  {short_id} — {title}          # 🔴 title 必须已带 · {渠道}-{模型缩写}（§3.1 标题规范）
   Model:  {provider}/{model} · thinking: {thinking（为 None 时写「不适用（该模型无思考档）」；显式给过 --thinking 则追加「，已忽略 --thinking X」）}{requires_output_validation 时追加 " · 🔴 必须校验产出"}
 {落在 T0 免费条目时追加一行 —— ⛔ 不许省略：
-  ⭐ 免费档 priority {n}：{model}（{freeUntil 为 None ⇒ 「截止未公布，预览期随时可能下线」；否则「免费至 {freeUntil}」}）
+  ⭐ 免费档 priority {n}：{model}（{freeUntil 为 None ⇒ 「截止未公布，随时可能结束 / 下线」；否则「免费至 {freeUntil}」}）
      跳过的免费条目：{free_skipped 逐条「model（原因）」；为空就不写}}
 {free_cautions 非空时，整块加在这里 —— ⛔ 不许省略：
   ⚠️ {model} 做 {task_type} 有已知弱点（见 FREE_POOL 该条目注释）—— 只提醒不排除（用户 D3）。

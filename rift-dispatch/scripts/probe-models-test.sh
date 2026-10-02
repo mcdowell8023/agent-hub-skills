@@ -26,7 +26,10 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.headers.get('Authorization') != 'Bearer testkey':
             return self._send(401, {'error': {'message': 'bad key'}})
         m = body['model']
-        if m.endswith('ok-model'):        return self._send(200, {'model': m})
+        if m.endswith('ok-model'):        return self._send(200, {'model': m, 'usage': {'cost': 0}})
+        if m.endswith('billed-model'):    return self._send(200, {'model': m, 'usage': {'cost': 0.002}})
+        if m.endswith('nocost-model'):    return self._send(200, {'model': m})                       # 响应里没有 usage
+        if m.endswith('strcost-model'):   return self._send(200, {'model': m, 'usage': {'cost': '0.002'}})   # 费用是字符串
         if m.endswith('quota-model'):     return self._send(429, {'error': {'message': 'rate limited'}}, {'X-RateLimit-Reset': '$RESET_MS'})
         if m.endswith('quota-noreset'):   return self._send(429, {'error': {'message': 'rate limited'}})
         if m.endswith('broke-model'):     return self._send(402, {'error': {'message': 'negative balance'}})
@@ -64,11 +67,15 @@ echo '[{"type":"result","result":"PROBE_OK"}]'
 SH
 cat > "$T/bin/qoderclicn" <<'SH'
 #!/usr/bin/env bash
-# 假 qcn：记录收到的 -m，FAKE_QCN=quota 时返回额度错误
+# 假 qcn：记录收到的 -m；FAKE_QCN=quota 额度错误 / hang 挂住 / billed 已计费（total_credits>0）/ nocredits 旧版无该字段
 for a in "$@"; do [ "$prev" = "-m" ] && echo "$a" > "$TMPDIR/qcn-model"; prev="$a"; done
 if [ "${FAKE_QCN:-}" = "hang" ]; then sleep 4242 & sleep 4243; fi
 if [ "${FAKE_QCN:-}" = "quota" ]; then echo '{"is_error": true, "result": "429 Too Many Requests: 今日免费额度已用完"}'; exit 1; fi
-echo '{"is_error": false, "result": "PROBE_OK"}'
+if [ "${FAKE_QCN:-}" = "billed" ]; then echo '{"is_error": false, "result": "PROBE_OK", "total_credits": 0.1}'; exit 0; fi
+if [ "${FAKE_QCN:-}" = "nocredits" ]; then echo '{"is_error": false, "result": "PROBE_OK"}'; exit 0; fi
+if [ "${FAKE_QCN:-}" = "strbilled" ]; then echo '{"is_error": false, "result": "PROBE_OK", "total_credits": "0.1"}'; exit 0; fi
+if [ "${FAKE_QCN:-}" = "garbage" ]; then echo '{"is_error": false, "result": "PROBE_OK", "total_credits": "n/a"}'; exit 0; fi
+echo '{"is_error": false, "result": "PROBE_OK", "total_credits": 0}'
 SH
 cat > "$T/bin/pi" <<'SH'
 #!/usr/bin/env bash
@@ -169,6 +176,50 @@ out=$(bash "$P" bailian-token-plan/other-model)
 echo "$out" | grep -q '查 key' && ok || bad "401 应提示查 key：$out"
 bash "$S/cooldown.sh" get bailian-token-plan other-model >/dev/null; rc=$?
 [ "$rc" -eq 1 ] && ok || bad "401 ⛔ 不该写冷却"
+
+# 18. 🔴 freeUntil=None 的条目必须自带「已计费」探测（2026-10-02 Qoder 延期、截止未公布：免费一结束模型照样答得动、只是开始扣费）
+out=$(bash "$P" --force qoderclicn/qfmodel); rc=$?
+{ [ "$rc" -eq 0 ] && echo "$out" | grep -q 'credits=0'; } && ok || bad "qcn total_credits=0 应 ✅ 且回显 credits=0（rc=${rc}）：$out"
+out=$(FAKE_QCN=billed bash "$P" --force qoderclicn/qfmodel); rc=$?
+{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '已开始计费' && echo "$out" | grep -q '〔模型级〕'; } && ok \
+  || bad "qcn total_credits>0 应判已计费（模型级、非 0 退出）（rc=${rc}）：$out"
+got=$(cd_get qoderclicn qfmodel)
+want=$(python3 -c "import datetime;print((datetime.datetime.now()+datetime.timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M'))")
+[ "$got" = "$want" ] && ok || bad "已计费应冷却 24h=${want}（实际 ${got}）"
+# 🔴 r4 审查：freeUntil=None 条目的**唯一**失效证据就是这个字段 ⇒ 读不到（缺失 / 字符串乱码）不能当免费（fail-closed）
+#    代价：少一个免费选项（回落付费 T1，便宜）；收益：不会因 CLI 输出格式变了而静默扣费
+out=$(FAKE_QCN=nocredits bash "$P" --force qoderclicn/qfmodel); rc=$?
+{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '无法确认' && echo "$out" | grep -q '〔模型级〕'; } && ok \
+  || bad "免费条目缺 total_credits 应判「无法确认」（模型级、非 0 退出）（rc=${rc}）：$out"
+out=$(FAKE_QCN=garbage bash "$P" --force qoderclicn/qfmodel); rc=$?
+{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '无法确认'; } && ok || bad "total_credits 是乱码字符串应判「无法确认」（rc=${rc}）：$out"
+out=$(FAKE_QCN=strbilled bash "$P" --force qoderclicn/qfmodel); rc=$?
+{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '已开始计费'; } && ok || bad "total_credits=\"0.1\"（字符串）应判已计费（rc=${rc}）：$out"
+got=$(cd_get qoderclicn qfmodel)
+want=$(python3 -c "import datetime;print((datetime.datetime.now()+datetime.timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M'))")
+[ "$got" = "$want" ] && ok || bad "无法确认 / 已计费都应冷却 24h=${want}（实际 ${got}）"
+# 非免费 qcn 型号缺字段是正常的，⛔ 不许被 fail-closed 误伤
+out=$(FAKE_QCN=nocredits bash "$P" --force qoderclicn/qmodel_38max); rc=$?
+{ [ "$rc" -eq 0 ] && echo "$out" | grep -q '✅ qoderclicn'; } && ok || bad "非免费 qcn 型号缺 total_credits 不该被判无法确认（rc=${rc}）：$out"
+# 非免费条目：qmodel_38max 本来就按 0.5x 计费，total_credits>0 是正常的，⛔ 不许被当成「免费期结束」
+out=$(FAKE_QCN=billed bash "$P" --force qoderclicn/qmodel_38max); rc=$?
+{ [ "$rc" -eq 0 ] && echo "$out" | grep -q '✅ qoderclicn'; } && ok || bad "非免费 qcn 型号有 total_credits 是正常的（rc=${rc}）：$out"
+# OpenRouter：响应里 usage.cost > 0 ⇒ 已计费
+out=$(bash "$P" --force openrouter-free/stealth/ok-model)
+echo "$out" | grep -q 'cost=0' && ok || bad "OpenRouter 200 应回显 cost=0：$out"
+out=$(bash "$P" --force openrouter-free/stealth/billed-model); rc=$?
+{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '已开始计费' && echo "$out" | grep -q '〔模型级〕'; } && ok \
+  || bad "OpenRouter usage.cost>0 应判已计费（rc=${rc}）：$out"
+[ -n "$(cd_get openrouter-free stealth/billed-model)" ] && ok || bad "OpenRouter 已计费应写冷却"
+out=$(bash "$P" --force openrouter-free/stealth/nocost-model); rc=$?
+{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '无法确认' && echo "$out" | grep -q '〔模型级〕'; } && ok \
+  || bad "OpenRouter 响应缺 usage.cost 应判「无法确认」（模型级、非 0 退出）（rc=${rc}）：$out"
+[ -n "$(cd_get openrouter-free stealth/nocost-model)" ] && ok || bad "OpenRouter 无法确认也应写冷却"
+out=$(bash "$P" --force openrouter-free/stealth/strcost-model); rc=$?
+{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '已开始计费'; } && ok || bad "usage.cost=\"0.002\"（字符串）应判已计费（rc=${rc}）：$out"
+# 火山没有 usage.cost 语义：⛔ 不许被 OpenRouter 的判据误伤（假端点对 ok-model 也回 cost=0，这里只确认 ✅ 不变）
+out=$(bash "$P" --force volcengine-coding/ok-model); rc=$?
+{ [ "$rc" -eq 0 ] && echo "$out" | grep -q '✅ volcengine-coding'; } && ok || bad "火山探活不该受影响（rc=${rc}）：$out"
 
 # 11. 🔴 隔离性：整场测试⛔一次都不许调到 pi（openrouter-free 必须走直连，才拿得到真实状态码）
 [ ! -s "$T/pi-calls" ] && ok || bad "测试调到了 pi：$(cat "$T/pi-calls")"
