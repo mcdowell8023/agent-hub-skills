@@ -1,5 +1,5 @@
 {
-  "version": "6.42.3",
+  "version": "6.43.0",
   "lastUpdated": "2026-10-02",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn / openrouter-free)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
@@ -9,7 +9,8 @@
       "hy3-x",
       "glm-5.3-flash",
       "deepseek-v4.1-flash",
-      "kimi-k3-1"
+      "kimi-k3-1",
+      "space-bunny"
     ],
     "qoderclicn": [
       "qmodel_38max",
@@ -290,7 +291,7 @@
           "D2 在 ~/wb 公司目录下**也不跳过**（服务方可能留存 prompt，用户知情并决定）",
           "D3 concurrency_impl 只提醒、不排除"
         ],
-        "note": "OpenRouter 上架 2026-09-23（created 字段）；1M 上下文，输入 text / image / video；预览期隐身模型，截止未公布、随时可能下线（404 ⇒ 按下线处理）。实测 150–400s/题，偏慢。pi 里走自定义 provider `openrouter-free`（只注册这一个模型，⛔ 没合并进内置 openrouter —— 那会带出 347 个收费模型）。"
+        "note": "OpenRouter 上架 2026-09-23（created 字段）；1M 上下文，输入 text / image / video；预览期隐身模型，截止未公布、随时可能下线（404 ⇒ 按下线处理）。实测 150–400s/题，偏慢。pi 里走自定义 provider `openrouter-free`（只注册这一个模型，⛔ 没合并进内置 openrouter —— 那会带出 347 个收费模型）。 🔗 同一模型（大概率）在 CodeBuddy 内置为付费路由 `space-bunny`（x0.03，折扣至 10-07）——见 🔴 spaceBunnyCb_20261002；⛔ 那条未在 cb 路由评测、不自动选、不进免费池。"
       },
       {
         "upstream": "codebuddy-code",
@@ -312,7 +313,7 @@
           "verifiedOn": "2026-09-24",
           "source": "cb /model 面板截图 0.00x（⚠️ 在免费窗口内核的 ⇒ 不算过期后的复核）"
         },
-        "verifyVia": "cb `/model` 面板（⛔ agent 拿不到：--help 只给型号清单、rawUsage 只有 token 数、问模型答「不知道」）⇒ 只能请用户看面板",
+        "verifyVia": "⭐ 首选：`codebuddy -p --model hy3 --output-format json --tools '' 'reply with exactly: OK'`，读返回里 providerData.rawUsage.credit（=0 免费；agent 自己就能核，2026-10-02 实测 hy3=0，见 🔴 cbRawUsageCredit_20261002）；其次 cb `/model` 面板读数。⛔ 模型自述无效（实测答「不知道」）",
         "evalRef": "sameRoundEval_20260816 · hy4Eval_20260821",
         "note": "免费期二次延长至 2026-10-31 23:59（CodeBuddy&混元官方 2026-09-30 公告，用户 10-01 转发；此前是 09-30 止）；每日赠额，耗尽表现为排队 / 不回复（cb 429 正文带重置时间）。avoid 三项就是旧的全局排除清单 —— 那张清单本来就是给 hy3 定的。多模态会被 cb 切到付费模型。"
       },
@@ -1556,7 +1557,7 @@
           "credit": 0.0
         }
       },
-      "note": "T0 免费池 priority 1（见 freePool）。上架 2026-09-23，截止未公布。",
+      "note": "T0 免费池 priority 1（见 freePool）。上架 2026-09-23，截止未公布。 🔗 cb 内置同名付费路由 space-bunny（身份证据见 models['space-bunny']）。",
       "blindEval": {
         "lru": 32.25,
         "bug": 30.0,
@@ -1589,6 +1590,39 @@
         }
       },
       "note": "T0 免费池 priority 3（见 freePool），截止未公布（Qoder CN 2026-10-02 官方公告延期，10-01 起继续免费）。🔴 ⛔ 与百炼 qwen3.8-flash 不是同一表现（09-24 第二轮 p=0.006）⇒ ⛔ 不能互相代测。无思考档。"
+    },
+    "space-bunny": {
+      "label": "Space-Bunny（CodeBuddy 内置，匿名 Flash 大模型）",
+      "provider": "codebuddy-code",
+      "contextWindow": 1000000,
+      "input": [
+        "text",
+        "image",
+        "video"
+      ],
+      "credit": 0.03,
+      "providers": {
+        "codebuddy-code": {
+          "modelId": "space-bunny",
+          "credit": 0.03,
+          "discountUntil": "2026-10-07",
+          "note": "x0.03 是限时折扣价（10-02 ~ 10-07），折后价未知；见 cbCreditRates_20261002"
+        }
+      },
+      "selectableByDefault": false,
+      "dispatchRank": 99,
+      "dispatchNote": "⭐ 2026-10-02 起显式可派（cb 白名单）；⛔ 不进任何自动池（WALLET_PREF / TIER_PEERS / LADDER / FREE_POOL）：①cb 路由上没评测过——OpenRouter 版的 12 格盲评不能直接继承（同名模型换路由表现显著不同有前车之鉴：Qoder 版 Qwen3.8-Flash vs 百炼版 11:1 p=0.006）；②限时折扣 10-07 到期、折后价未知；③火山包月套餐上的 T1（v4.1-flash）边际成本更低、实测同档。🔴 通过 Paseo 派它**当前会静默跑成 hy3**（见 paseoCbSilentDowngrade），SKILL §2 第 6 段有前置守卫（fail-closed）。",
+      "identityWithOpenRouterAlpha": {
+        "verdict": "大概率同一模型 / 同一家：tokenizer 与 OpenRouter 的 stealth/space-bunny-alpha 不可区分 + 同名 + 同规格 + 推理开头同款电报体",
+        "⚠️ notProven": "权重同一性无法证明；cb 版叫 space-bunny（无 alpha 后缀），可能是后续版本 ⇒ ⛔ 表现不能默认等同",
+        "tokenizerFingerprint": "差分法（prompt_tokens − 同路由基线 p0，抵消 cb 注入的 ≈2.35 万 token 常数）：cb vs OpenRouter = 119/72/100/153 vs 119/71/99/152（差 0 或 ±1）；正对照（同一个 glm-5.3-flash，cb vs 火山直连）= +1/+1/+1，说明 ±1 是 cb 路由自带伪影；负对照（Space Bunny vs GLM）中文差 11、emoji 差 19 token，方法分得开不同家族；稳定性（cb p0 两次 = 23570）通过",
+        "reasoningStyle": "同一 prompt 下两条路由的推理第一句逐字相同：「We need answer exactly OK.」（数据见 spaceBunnyCb_20261002.evidenceNumbers.reasoningOpening；软证据，非身份证明）",
+        "data": "脱敏数字在 spaceBunnyCb_20261002.evidenceNumbers；原始输出在 ~/AgentWorkspace/tmp/space-bunny-identity-20261002/（7 天后清理，含注入的全局规则，⛔ 不入库）"
+      },
+      "evalOnThisRoute": null,
+      "multimodalNote": "官方公告与 OpenRouter 元数据都写原生支持图像 / 视频输入；⚠️ 未在 cb 路由上实测。若将来要给多模态任务配付费落点，这是候选，⛔ 先评测",
+      "retainsData": null,
+      "retainsDataNote": "未知（匿名模型）。⚠️ cb 的 `-p` 每次请求都会注入全局规则 + memory：实测 3 块共约 5.5 万字符 ≈ 2.35 万 token，来自 9 个文件（~/.claude/CLAUDE.md · RTK.md · rules/global/ 下 6 个 · ~/.codebuddy/CODEBUDDY.md）⇒ 这些内容会随请求发给模型方。只用布尔值核了 Dufs 口令串与 OpenRouter key 前缀两项，都不在注入内容里（⛔ 不代表穷尽）"
     }
   },
   "claudeModels": {
@@ -2581,7 +2615,8 @@
       "deepseek-v4.1-flash": "dspF4.1",
       "kimi-k3-1": "k3.1",
       "stealth/space-bunny-alpha": "sbA0923",
-      "qfmodel": "qwF3.8"
+      "qfmodel": "qwF3.8",
+      "space-bunny": "sb1002"
     },
     "🔴 rules": [
       "⛔ **缩写必须含版本号** —— dspF4 / glmF5.3 / k3.2 / gpt5.5。⛔ 不许写成 dsp / glm / kimi。",
@@ -2593,7 +2628,8 @@
     "🔴 noVersionlessAliases": "🔴 ⛔ **不许把无版本别名当派发落点** —— `glm-latest` 这类名字**按定义就带不出版本**，而本规范的全部意义就是标题里能看出版本。⇒ 派发前必须先解析成具体型号再派。⚠️ 已知解析：火山 `glm-latest` / `glm-5.2` → **`glm-5.3`**（2026-09 实测别名表）。⚠️ 对比：`hy4-preview` 可以派 —— `preview` 是它真实 id 的一部分，缩写 `hy4` 仍带版本。",
     "🔴 staleVersionAlias": "🔴🔴 **陈旧版本别名比无版本别名更危险** —— `deepseek-v4-flash`(cb) 带着版本号却指向 v4.1 ⇒ 标题写 `cb-dspF4` 而实跑 `dspF4.1`，**标题在说谎**，正好击穿本规范存在的意义。⇒ ⛔ 这类别名必须从白名单**移除**，⛔ 不能只加注释。判据：**假 id 的 400 报错会附服务端权威清单**，不在清单里但请求不报错 = 别名。",
     "🔴 snapshotIdsNeedOwnAbbr": "🔴 **带快照后缀的 id 必须有自己的缩写** —— 2026-09-11 之前 `deepseek-v4-flash-0731` 与 `deepseek-v4-flash` **共用 `dspF4`**，`-0813` 与 `deepseek-v4-pro` 共用 `dspP4`。而实测证明它们**不是同一个被服务的模型** ⇒ 标题 `百炼-dspF4` 会让人以为跟 `火山C-dspF4` 是同一个模型、只是换了钱包 —— **标题说谎**，正是这套规范要防的东西。⇒ 改成 `dspF4@0731` / `dspP4@0813`。",
-    "_freePoolAbbrNote": "sbA0923 = Space Bunny Alpha + OpenRouter 上架日期 09-23（它没有版本号，⛔ 用日期占版本位）；qfmodel 与百炼 qwen3.8-flash 同缩写 qwF3.8，靠渠道前缀 qcn / 百炼 区分（§3f 只禁同渠道撞名）"
+    "_freePoolAbbrNote": "sbA0923 = Space Bunny Alpha + OpenRouter 上架日期 09-23（它没有版本号，⛔ 用日期占版本位）；qfmodel 与百炼 qwen3.8-flash 同缩写 qwF3.8，靠渠道前缀 qcn / 百炼 区分（§3f 只禁同渠道撞名）",
+    "_spaceBunnyCbAbbrNote": "cb 版 space-bunny 缩写 sb1002（1002 = cb 接入日期占版本位——它没有版本号）；⛔ 与 OpenRouter 版 sbA0923 故意不同：两条路由同名但**表现未证实一致**，标题里必须分得出是哪条"
   },
   "poolQuotaState": {
     "_note": "⚠️ **运行时状态，⛔ 不是规则** —— 会过期。判据永远是**实际探活**。",
@@ -2982,6 +3018,85 @@
     ],
     "⭐ cheapestPaidInTier": "⭐ T1 档在 cb 上最便宜的是 **glm-5.3-flash 0.06x**。hy3-x(0.05x) 更便宜但⛔不同档（同轮 08-21 盲评 hy3 84 < glm 91）⇒ 先选档位再挑便宜，轮不到它。"
   },
+  "cbCreditRates_20261002": {
+    "_source": "用户 2026-10-02 转发 CodeBuddy 公告原文：「Space-Bunny 【space-bunny】 (x0.03 credits)」，2026-10-02 至 10-07 限时折扣；+ cb 服务端权威清单（假 id 的 400 正文，本机 2.160.0 与 Paseo 钉的 2.106.1 一致，共 17 个）。",
+    "rates": {
+      "hy4-preview": {
+        "label": "Hy4 preview",
+        "credit": 0.29
+      },
+      "hy3": {
+        "label": "Hy3",
+        "credit": 0.0
+      },
+      "hy3-x": {
+        "label": "Hy3",
+        "credit": 0.05
+      },
+      "space-bunny": {
+        "label": "Space-Bunny",
+        "credit": 0.03,
+        "discountUntil": "2026-10-07",
+        "note": "限时折扣期间价（官方公告：2026-10-02 至 10-07 间可享限时折扣，日粒度；本仓库按当天 23:59 截止、本地时区、闭区间处理）。⚠️ 折后价未知。credit 是倍率；实扣见 🔴 spaceBunnyCb_20261002.evidenceNumbers：冷缓存 0.13–0.14（3 次，含钉死的 2.106.1）、暖缓存 0.03，同条件 glm-5.3-flash（0.06x）冷 0.29、暖 0.08–0.11。⚠️ 实扣还受未命中 token 数与输出 token 数影响，⛔ 不是简单的「倍率 × token」公式（我曾写过一个两点吻合的公式，已撤回：glm 暖缓存三次未命中 96/113/185 token 却是 0.11/0.08/0.09，不单调）"
+      },
+      "deepseek-v4.1-flash": {
+        "label": "Deepseek-V4.1-Flash",
+        "credit": 0.11
+      },
+      "glm-5.3": {
+        "label": "GLM-5.3",
+        "credit": 0.79
+      },
+      "glm-5.3-flash": {
+        "label": "GLM-5.3-Flash",
+        "credit": 0.06
+      },
+      "glm-5.2": {
+        "label": "GLM-5.2",
+        "credit": 0.79
+      },
+      "glm-5.1": {
+        "label": "GLM-5.1",
+        "credit": 0.79
+      },
+      "glm-5v-turbo": {
+        "label": "GLM-5v-Turbo",
+        "credit": 0.71
+      },
+      "minimax-m3": {
+        "label": "MiniMax-M3",
+        "credit": 0.25
+      },
+      "minimax-m2.7": {
+        "label": "MiniMax-M2.7",
+        "credit": 0.19
+      },
+      "kimi-k3-1": {
+        "label": "Kimi-K3",
+        "credit": 1.62
+      },
+      "kimi-k2.8-preview": {
+        "label": "Kimi-K2.8-Preview",
+        "credit": 0.77
+      },
+      "kimi-k2.7": {
+        "label": "Kimi-K2.7-Code",
+        "credit": 0.57
+      },
+      "kimi-k2.6": {
+        "label": "Kimi-K2.6",
+        "credit": 0.52
+      },
+      "deepseek-v4-pro": {
+        "label": "Deepseek-V4-Pro",
+        "credit": 0.51
+      }
+    },
+    "🔴 changesVs20260924": [
+      "🆕 space-bunny 0.03（限时折扣 10-02 ~ 10-07，折后价未知）",
+      "其余 16 个沿用 09-24 快照：Paseo 缓存的 list_models 与之逐个一致（⚠️ 缓存时点未知），本次实测只核对了 hy3（credit=0）· glm-5.3-flash · space-bunny 三个"
+    ]
+  },
   "🔴 ladderT3Change_20260910": {
     "change": "T3 `deepseek-v4-pro`(0.51x) → **`qwen3.8-max`** @ `pi/bailian-token-plan`",
     "why": "用户 2026-09-10 禁用 v4-pro。",
@@ -3033,10 +3148,10 @@
     "🔴 judgeByProbe": "🔴 **判据是探活，⛔ 不是面板上的 x0.00** —— 那是**价格**，免费期结束或当日赠额耗尽后价格仍可能显示 0，表现为**排队/不回复**而不是报错。",
     "nextChange": "⚠️ **09-11 起** hy4 应当停止赠额 ⇒ T0 落空，默认落点变成 T1 `deepseek-v4.1-flash`。⭐ §2 的 T0 分支本来就先 `promo_active()` + `probe_ok()`，⇒ **会自愈**，⛔ 不需要按日期硬改。",
     "🔴 predictionFalsified_20260911": "🔴 **我写的预测被证伪** —— 昨天记「09-11 起 hy4 应当停止赠额」，2026-09-11 实测三个免费 id **照样秒回**：`hy4-preview` 7s · `hy3` 4s · `hy3-x` 3s。⇒ 要么**免费期延期了**（cb 有前例：hy3 那次「限时免费活动再次延长」），要么**开始计费了**。⚠️ 「答得动」⛔ 不等于「还免费」—— 这两件事我昨天在同一句话里混过一次。",
-    "⛔ rateNotObtainableByAgent": "⛔ **费率 agent 拿不到**（2026-09-11 试了三条路）：`codebuddy --help` 只给 15 个型号清单、`providerData.rawUsage` 只有 token 计数、问模型自己答「不知道」；`codebuddy models` 不是子命令（会被当成 prompt，还顺手读了当前目录）。⇒ 只在 cb 的 `/model` 面板里 ⇒ **这一项只能问用户**。",
-    "⭐ handlingWhenWindowExpired": "⭐ 窗口过期后的处理：**要求费率复核**，⛔ 两头都不赌。① 日期到了就直接跳过 ⇒ 白付 T1 的钱，而 0.00x 可能还在；② 闭着眼继续用 ⇒ 若已计费、费率未知，可能比 T1 还贵。⇒ 未复核则按 T1 起步，但把仍探活通过的型号记进 `t0_free_unverified`，**§7 必须提示「本可省下 T1 的钱，请核一下面板」**，⛔ 不静默丢掉这个机会。复核过（catalog 里该型号 credit 带当期日期）⇒ T0 照常可用。",
+    "⛔ rateNotObtainableByAgent": "📜【2026-10-02 已被推翻 —— 见 🔴 cbRawUsageCredit_20261002：cb 返回里有 rawUsage.credit】⛔ **费率 agent 拿不到**（2026-09-11 试了三条路）：`codebuddy --help` 只给 15 个型号清单、`providerData.rawUsage` 只有 token 计数、问模型自己答「不知道」；`codebuddy models` 不是子命令（会被当成 prompt，还顺手读了当前目录）。⇒ 只在 cb 的 `/model` 面板里 ⇒ **这一项只能问用户**。",
+    "⭐ handlingWhenWindowExpired": "⭐ 窗口过期后的处理：**要求费率复核**，⛔ 两头都不赌。① 日期到了就直接跳过 ⇒ 白付 T1 的钱，而 0.00x 可能还在；② 闭着眼继续用 ⇒ 若已计费、费率未知，可能比 T1 还贵。⇒ 未复核则按 T1 起步，但把仍探活通过的型号记进 `t0_free_unverified`，**§7 必须提示「本可省下 T1 的钱，请核一下面板」**（📜 2026-10-02 起核实不必再靠面板：cb 读 rawUsage.credit，见 cbRawUsageCredit_20261002），⛔ 不静默丢掉这个机会。复核过（catalog 里该型号 credit 带当期日期）⇒ T0 照常可用。",
     "🔴 gateBugFound_20260911": "🔴 **复核闸门原先漏了一个条件** —— 原名 `rate_reverified` 只判「核实过且够新」，⛔ **没判「核实结果是不是仍为 0」**。⇒ 用户核出 hy4 已计费（比如 0.5x）并**如实写进 catalog** 后，闸门返回 True ⇒ 把一个比 T1(0.03x) 贵 **16 倍**的模型当免费档用。⭐ 最坏的是：这个后果由「用户做了正确的事（去核实）」触发。⇒ 改名 **`t0_still_free`** —— 名字必须说出真正的谓词，⛔ 不是「有没有核过」。⇒ 判据 = 核实日期够新 **且** `credit == 0.0`。⚠️ 核实结果为已计费时进 `t0_now_billed`，§7 报告 T0 已关闭；**若它的倍率低于 T1，那是【定档】问题，要走盲评**，⛔ 不因为「它以前是免费档」就继续当 T0 用。",
-    "⏳ awaitingUserRate": "⏳ **等用户给数**：hy4-preview / hy3 / hy3-x 当前在 cb `/model` 面板上的倍率。用户 2026-09-11 反馈「hy4 好像开始收费了」，但这是 agent 拿不到的信息。⇒ 拿到后写成 `{'credit': x, 'verifiedOn': 'YYYY-MM-DD'}`；credit≠0 时 T0 自动关闭。⚠️ 在此之前**决策已经是安全的**：窗口过期 + 未核实 ⇒ 本来就走 T1，⛔ 不会误用。",
+    "⏳ awaitingUserRate": "📜【2026-10-02 部分作废：「agent 拿不到」已被推翻——cb 返回里有 rawUsage.credit，见 🔴 cbRawUsageCredit_20261002】⏳ **等用户给数**：hy4-preview / hy3 / hy3-x 当前在 cb `/model` 面板上的倍率。用户 2026-09-11 反馈「hy4 好像开始收费了」，但这是 agent 拿不到的信息。⇒ 拿到后写成 `{'credit': x, 'verifiedOn': 'YYYY-MM-DD'}`；credit≠0 时 T0 自动关闭。⚠️ 在此之前**决策已经是安全的**：窗口过期 + 未核实 ⇒ 本来就走 T1，⛔ 不会误用。",
     "🔴 hy3Extended_20260915": "🔴 **`hy3` 免费延长至 `2026-09-30 23:59`**（用户 2026-09-15 告知）—— 此前记的是「08-31 止」，⇒ 旧数据会让 `promo_active('hy3')` 返回 False、**白白跳过一个还免费的档**、多付 T1 的 0.03x。⚠️ **hy3 与 hy4 是两条独立窗口** —— 本次延长只覆盖 hy3，hy4 的 `08-28~09-10` 仍是过期状态、费率未核 ⇒ 继续走 `t0_still_free` 那条路。✅ 2026-09-15 探活：hy3 9s · hy4-preview 6s · hy3-x 6s，三个都秒回。"
   },
   "⚠️ suspectedAlias_20260910": {
@@ -3121,5 +3236,208 @@
     "verifiedByAgent": "2026-10-02 `qoderclicn -p -m Qwen3.8-Flash -o json` 实测：success / is_error=false / total_credits=0 / 2638ms —— ⭐ 原定截止 09-30 之后仍免费",
     "appliedTo": "SKILL.md FREE_POOL qfmodel.freeUntil 改为 None（截止未公布，与 Space Bunny 同口径）；⚠️ 同时给 None 条目补上失效条件：probe-models.sh 对 qfmodel 判 total_credits>0、对 openrouter-* 判 usage.cost>0 ⇒ 已计费",
     "whyNeedInvalidationCheck": "官方只说结束时间会在公告页提前通知，agent 读不到；免费一结束，模型照样答得动、只是开始扣费 ⇒ 光靠「探活通过」会一直当免费用（同 09-11「答得动 ≠ 还免费」）。同一缺口上一批对 Space Bunny 也存在（freeUntil=None 却无计费探测），一并补了（OpenRouter 响应自带 usage.cost，已实测为 0）。"
+  },
+  "🔴 spaceBunnyCb_20261002": {
+    "what": "CodeBuddy & WorkBuddy 国内独家接入匿名 Flash 大模型 Space Bunny（id `space-bunny`）：极速推理、强编码、原生文本 / 图像 / 视频输入、思考深度可调、上下文 1M；2026-10-02 至 10-07 限时折扣，面板价 x0.03 credits。",
+    "source": "用户 2026-10-02 转发的 CodeBuddy 公告原文",
+    "verifiedByAgent": {
+      "existsOnAccount": "cb 服务端权威清单（假 id 的 400 正文）共 17 个，space-bunny 排第 4；本机 2.160.0 与 Paseo 钉的 2.106.1 逐个一致（evidence/cb-server-model-list-*.txt）",
+      "cliCallWorks": "`codebuddy -p --model space-bunny` 返回 model / requestModelId = space-bunny，API 约 5 秒；钉死的 2.106.1 同样正常",
+      "credit": "返回 JSON 的 providerData.rawUsage.credit：space-bunny 冷缓存 0.13–0.14 / 暖缓存 0.03；同条件 glm-5.3-flash 冷 0.29 / 暖 0.08–0.11；hy3 = 0（数字与缓存命中量见 evidenceNumbers）",
+      "identity": "见 models['space-bunny'].identityWithOpenRouterAlpha"
+    },
+    "decision": "白名单放行（显式可派），⛔ 不进自动路径、⛔ 不进 FREE_POOL（它收费）。理由与再评估条件见 models['space-bunny'].dispatchNote。若要让它成为 cb 上的 T1 同档落点或 OpenRouter 版的付费后备，先在 cb 路由上做一轮同口径盲评（同 09-29 方法），且要等折扣期过后核实折后价。",
+    "reopenWhen": [
+      "10-08 后核对折后价（consistency 会在 discountUntil 过期后报警告）",
+      "OpenRouter 版下线（404）而用户仍想用它 ⇒ cb 版大概率是同一模型的延续（⚠️ 权重同一性未证实，表现需先在 cb 路由上评测）"
+    ],
+    "evidenceNumbers": {
+      "_provenance": "下面全部是**脱敏的数字**，来自本机取证脚本（identity.py / collect-evidence.py）；原始输出位置：~/AgentWorkspace/tmp/space-bunny-identity-20261002/（raw/ 与 evidence/；⚠️ 在 tmp，7 天后会被清理；cb 的原始输出含注入的全局规则，⛔ 不入库）",
+      "tokenizerFingerprint": {
+        "prompts": {
+          "p0": "'x' + 固定后缀（基线）",
+          "p1": "英文一句 ×12",
+          "p2": "中文一句 ×3",
+          "p3": "TypeScript 代码",
+          "p4": "emoji / 多语种 ×4"
+        },
+        "promptTokens": {
+          "OR/space-bunny-alpha": {
+            "p0": 163,
+            "p1": 282,
+            "p2": 234,
+            "p3": 262,
+            "p4": 315
+          },
+          "CB/space-bunny": {
+            "p0": 23570,
+            "p1": 23689,
+            "p2": 23642,
+            "p3": 23670,
+            "p4": 23723,
+            "p0-repeat": 23570
+          },
+          "VOLC/glm-5.3-flash": {
+            "p0": 19,
+            "p2": 101,
+            "p3": 118,
+            "p4": 190
+          },
+          "CB/glm-5.3-flash": {
+            "p0": 24973,
+            "p2": 25056,
+            "p3": 25073,
+            "p4": 25145
+          }
+        },
+        "deltasVsP0": {
+          "OR/space-bunny-alpha": {
+            "p1": 119,
+            "p2": 71,
+            "p3": 99,
+            "p4": 152
+          },
+          "CB/space-bunny": {
+            "p1": 119,
+            "p2": 72,
+            "p3": 100,
+            "p4": 153
+          },
+          "VOLC/glm-5.3-flash": {
+            "p2": 82,
+            "p3": 99,
+            "p4": 171
+          },
+          "CB/glm-5.3-flash": {
+            "p2": 83,
+            "p3": 100,
+            "p4": 172
+          }
+        },
+        "reading": "cb vs OR 差 0/±1；正对照（同一 glm，cb vs 火山）同样是 +1；负对照（OR bunny vs 火山 glm）p2 差 11、p4 差 19；稳定性：cb p0 两次都是 23570",
+        "⚠️ limits": "只有 4 个 prompt；tokenizer 相同只是「同一模型」的必要条件，⛔ 不是充分条件（同一家族的不同型号常共用 tokenizer）"
+      },
+      "credits": {
+        "cb/space-bunny 2.160.0 冷 A": {
+          "credit": 0.13,
+          "cache_hit": 3216,
+          "cache_miss": 20379,
+          "completion_tokens": 28
+        },
+        "cb/space-bunny 2.160.0 暖 A": {
+          "credit": 0.03,
+          "cache_hit": 23593,
+          "cache_miss": 2,
+          "completion_tokens": 16
+        },
+        "cb/space-bunny 2.160.0 冷 B": {
+          "credit": 0.14,
+          "cache_hit": 143,
+          "cache_miss": 23454,
+          "completion_tokens": 29
+        },
+        "cb/space-bunny 2.106.1 冷": {
+          "credit": 0.14,
+          "cache_hit": 127,
+          "cache_miss": 23778,
+          "completion_tokens": 9
+        },
+        "cb/glm-5.3-flash 冷": {
+          "credit": 0.29,
+          "cache_hit": 0,
+          "cache_miss": 25004,
+          "completion_tokens": 62
+        },
+        "cb/glm-5.3-flash 暖 ×3": {
+          "credit": [
+            0.11,
+            0.08,
+            0.09
+          ],
+          "cache_miss": [
+            96,
+            113,
+            185
+          ]
+        },
+        "cb/hy3": {
+          "credit": 0,
+          "cache_hit": 576,
+          "cache_miss": 23773,
+          "completion_tokens": 17
+        },
+        "_how": "冷缓存用 `--append-system-prompt <随机串>` 击穿（⇒ 可稳定复现）；同一随机串再调一次即暖缓存"
+      },
+      "serverModelList": {
+        "2.160.0": {
+          "count": 17,
+          "space_bunny_position": 4
+        },
+        "2.106.1": {
+          "count": 17,
+          "space_bunny_position": 4
+        }
+      },
+      "paseo": {
+        "list_models(codebuddy-code)": "16 个，没有 space-bunny；与 cb 服务端 17 个清单相比恰好少 space-bunny 一个（集合相等，见审计）；默认型号 hy3（isDefault=true）⇒ 静默降级的落点就是默认型号",
+        "create_agent codebuddy-code/space-bunny": {
+          "snapshot.model": "space-bunny",
+          "runtimeInfo.model": "hy3"
+        },
+        "create_agent codebuddy-code/__nope-model-xyz__": {
+          "snapshot.model": "__nope-model-xyz__",
+          "runtimeInfo.model": "hy3"
+        },
+        "_provenance": "evidence/paseo-silent-downgrade.json 与 evidence/paseo-list-models-codebuddy.json（两个测试 agent 归档后仍可经 get_agent_status 读到，status=closed）；原件位置 ~/AgentWorkspace/tmp/space-bunny-identity-20261002/，7 天后清理"
+      },
+      "cbInjection": {
+        "block_chars": [
+          13397,
+          41837,
+          53
+        ],
+        "total_chars": 55289,
+        "files": 9,
+        "knownSecretStringsPresent": {
+          "Dufs 口令串": false,
+          "OpenRouter key 前缀 sk-or-": false
+        },
+        "_note": "只查了这两项，⛔ 不代表穷尽"
+      },
+      "reasoningOpening": {
+        "same prompt p0": {
+          "cb": "We need answer exactly OK. No tools.",
+          "OR": "We need answer exactly OK."
+        },
+        "same prompt p2": {
+          "cb": "We need answer exactly OK.",
+          "OR": "We need answer exactly OK. User asks Chinese repeated, then explicit exact. Must comply."
+        },
+        "reading": "同一 prompt 下两条路由的推理**第一句逐字相同**；这是软证据（风格），⛔ 不是身份证明"
+      }
+    }
+  },
+  "🔴 paseoCbSilentDowngrade_20261002": {
+    "what": "Paseo 的 codebuddy-code provider 对「它缓存的模型清单里没有的型号」**静默跑默认型号 hy3**，不报错。",
+    "evidence": [
+      "Paseo list_models(codebuddy-code) 返回 16 个，没有 space-bunny；cb 服务端清单是 17 个",
+      "create_agent codebuddy-code/space-bunny：snapshot.model='space-bunny'（请求值），runtimeInfo.model='hy3'（实际运行值）",
+      "create_agent codebuddy-code/__nope-model-xyz__（假 id）：同样 snapshot.model=假 id、runtimeInfo.model='hy3' ⇒ 通用机制，不是 space-bunny 特例",
+      "钉死的 cb 2.106.1 直接 `-p --model space-bunny` 完全正常（model 回显 space-bunny）⇒ 根因在 Paseo 缓存的清单 / ACP 层，⛔ 不在 cb CLI 版本"
+    ],
+    "impact": "标题 / 账单 / 评测结论标的是 A，实际跑的是 B —— 正是 SKILL §3.1 警告过的「请求值 ≠ 运行值」（模式 2：id 存在但服务不了，请求照录、运行时降级）",
+    "guard": "SKILL §2 第 6 段：走 Paseo 且落在 cb 时，先问 paseo_lists_model(upstream, model)，没有就停（pipeline-test 里「Paseo 清单缺…」系列用例）；CLI 通道不受影响",
+    "fixPaths": [
+      "走 CLI（`codebuddy -p`，实测正常）",
+      "让用户刷新 Paseo（重启 daemon 以刷新缓存；⚠️ 未验证）",
+      "~/.paseo/config.json 的 cb provider 有 `additionalModels` 字段，疑似可登记该型号（⚠️ 未验证，且需重启 Paseo）"
+    ],
+    "notDone": "没动用户的 Paseo 配置：自动路径从不选 space-bunny，守卫已防住静默降级，无紧迫性；刷新 / 登记属于用户环境的改动"
+  },
+  "🔴 cbRawUsageCredit_20261002": {
+    "what": "cb `-p --output-format json` 的返回里带**实扣费用**：providerData.rawUsage.credit（同一份还有 prompt_tokens / cache_hit / cache_miss）。",
+    "evidence": "2026-10-02 实测（数字与缓存命中量见 spaceBunnyCb_20261002.evidenceNumbers.credits）：hy3 = 0；space-bunny 冷 0.13–0.14 / 暖 0.03；glm-5.3-flash 冷 0.29 / 暖 0.08–0.11；本机 2.160.0 与 Paseo 钉的 2.106.1 都有该字段",
+    "🔴 supersedes": "推翻 2026-09-11 的「费率 agent 拿不到：rawUsage 只有 token 计数」（🔴 freeTierStatus_20260910.rateNotObtainableByAgent）以及我 09-29 写进 FREE_POOL / SKILL 的「cb 没有费用字段」。",
+    "⚠️ caveat": "credit 随缓存命中浮动，只能当「有没有扣费」的证据，⛔ 不当费率；探活脚本目前**没有**读取它 ⇒ cb 条目仍⛔不许写 freeUntil=None（consistency §3o ⑬ 照旧拦）。把它接进探活（hy3 过期后自动核、cb 条目可写 None）是可做的后续，本次未做。"
   }
 }

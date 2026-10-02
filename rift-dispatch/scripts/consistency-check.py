@@ -609,7 +609,8 @@ chk(_def_ids[:len(_want)] == _want,
 # ⑬ 🔴 freeUntil=None（截止未公布）的条目必须自带「已计费」探测 —— 豁免自带失效条件（09-11「答得动 ≠ 还免费」）
 #    官方说「结束时间将提前在公告页公布」，agent 不会去读那个页面；免费一结束模型照样答得动，只是开始扣费
 #    ⇒ 探活一路绿、一直被当免费用。直接证据：qcn CLI JSON 的 total_credits；OpenRouter 响应的 usage.cost。
-#    cb 没有费用字段 ⇒ cb 条目⛔不许写 None（要么写明确截止日，要么先给探活加上探测）。
+#    cb 返回里其实有 rawUsage.credit（2026-10-02 实测，推翻了我之前写的「cb 没有费用字段」），但探活脚本**还没读它**
+#    ⇒ cb 条目⛔不许写 None（要么写明确截止日，要么先把 rawUsage.credit 接进探活再放开）。
 def _code_only(text):
     """去掉整行注释与行尾注释（`#` 前的引号配平才算注释；粗略，足够挡「注释里留关键字」）。⛔ 不是完整的 bash / python 解析器。"""
     out = []
@@ -640,6 +641,23 @@ if _qcn is not None:
     _qfree = {k for k, (_, fr) in _qcn.items() if fr}
     _fpq = {x['model'] for x in SK_FP if x['upstream'] == 'qoderclicn'}
     chk(_qfree == _fpq, f"⛔ probe-models.sh QCN 里标「免费」的 {sorted(_qfree)} ≠ FREE_POOL 的 qoderclicn 条目 {sorted(_fpq)} ⇒ 新免费条目没有计费探测")
+# ⑭ 🔴 cb 白名单里的每个型号都必须在**最新一份**费率快照里有价（2026-10-02）：cb 按 credits 计费，是真金白银；
+#    「加白名单忘了记价」会让一个没有价格依据的型号变成可派发（新增 space-bunny 时这条是**先写的守卫**，加白名单当场变红）。
+_cr = {k: v for k, v in d.items() if re.fullmatch(r'cbCreditRates_\d{8}', k)}
+chk(bool(_cr), "catalog 没有 cbCreditRates_YYYYMMDD 费率快照")
+if _cr:
+    _cr_latest = max(_cr)
+    _cr_rates = _cr[_cr_latest].get('rates', {})
+    _unpriced = sorted(m for m in d['whitelist'].get('codebuddy-code', []) if m not in _cr_rates)
+    chk(not _unpriced, f"⛔ cb 白名单里这些型号在最新费率快照 {_cr_latest} 里没有价格: {_unpriced}")
+    # ⑮ 限时折扣到期提醒（⚠️ 只警告，⛔ 不致红）：折扣一过价格就失效，这里的数字不能一直当现价读
+    for _m, _r in _cr_rates.items():
+        _du = _r.get('discountUntil') if isinstance(_r, dict) else None
+        if _du:
+            # 官方公告是日粒度（「10 月 2 日至 10 月 7 日」）⇒ 约定：discountUntil 当天 23:59 截止，本机本地时区，闭区间。
+            #   ⚠️ 若将来字段带时间 / 时区，这里的拼接会坏，到时要改成完整 ISO 时间
+            warn(_DT.now() <= _DT.fromisoformat(_du + 'T23:59'),
+                 f"cb 型号 {_m} 的限时折扣已过 discountUntil={_du}（{_cr_latest} 快照）—— 折后价未知，核对 /model 面板或探活返回的 rawUsage.credit 后更新快照")
 # ⑪ catalog 里的旧免费链（审查 r2：反残留正则只拦散文，catalog 的数值 / 布尔字段拦不住）⇒ 结构性比对
 _ladder_ids = re.findall(r"\('([a-z0-9._\-]+)',", re.search(r"LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
 _et = d.get('dispatchDefaults', {}).get('entryTier', {})

@@ -22,6 +22,7 @@ class ConflictFreeReview(Exception): pass   # 0909: --free 撞 review 硬例外
 class ReviewProviderConflict(Exception): pass  # 0909 第 6 轮: review 的 provider 被显式改成非 Copilot
 class NoLanding(Exception): pass            # 0909: 本档在所有池+同档替代里都没有可用落点
 class BlockedModel(Exception): pass         # 0909: 用户点名屏蔽的型号
+class PaseoUnlisted(Exception): pass        # 1002: Paseo 的 cb provider 清单里没有该型号 ⇒ 会静默降级成 hy3
 class Result:
     def __init__(s): s.agent_id, s.run_id = 'ag-1', 'run-1'
 
@@ -103,6 +104,14 @@ def run_case(c):
         'report_review_provider_conflict_and_stop': lambda *a: (_ for _ in ()).throw(ReviewProviderConflict()),
         'report_no_landing_and_stop': lambda m=None: (_ for _ in ()).throw(NoLanding()),
         'report_blocked_model_and_stop': lambda *a: (_ for _ in ()).throw(BlockedModel()),
+        # 🔴 2026-10-02 Paseo 的 cb provider 对「清单里没有的型号」静默跑默认型号 hy3（空 id / 假 id 实测两次，runtimeInfo.model=hy3）
+        #    paseo_unlisted=… 表示「Paseo 的 list_models 里没有这些落点」
+        #    三态：True=清单里有 / False=确实没登记 / None=拉清单本身失败（超时 / 报错），无法确认
+        'paseo_lists_model': lambda u, m: (None if f'{u}/{m}' in set(c.get('paseo_list_error', ()))
+                                           else f'{u}/{m}' not in set(c.get('paseo_unlisted', ()))),
+        # ⭐ 记下停止时报给用户的是「确实没登记」还是「无法确认清单」（r7 审查：fail-closed 只写在散文里，§2 测不红）
+        'report_paseo_unlisted_model_and_stop': lambda u, m, unconfirmed=False: (
+            PASEO_REPORT.append((f'{u}/{m}', unconfirmed)) or (_ for _ in ()).throw(PaseoUnlisted())),
         # ⭐ 第 4 个参数是 free_skipped —— 显式 provider 的免费条目都不可用时，停的原因要先说清楚这一层（审查 r2）
         'report_provider_model_mismatch_and_stop': lambda *a: (
             FREE_REPORT.extend((f'{u}/{m}', sorted(r)) for u, m, r in (a[3] if len(a) > 3 else ()))
@@ -126,6 +135,7 @@ def run_case(c):
 PROBES = []          # 🔴 记录 first_available 探过哪些落点（供 no_probe 断言）
 FREE_PROBES = []     # 🔴 记录 T0 的 probe_ok 探过哪些免费落点（供 free_probes 断言）
 FREE_REPORT = []     # 🔴 --free 拿不到时报给用户的逐条原因（供 free_report 断言）
+PASEO_REPORT = []    # 🔴 Paseo 前置守卫停下时报给用户的 (落点, 是否「无法确认清单」)（供 paseo_report 断言）
 # 🔴 T0 登记表化后已删除的旋钮 —— 用例里再出现就是**静默失效**（桩不读它，断言照样可能碰巧通过）⇒ 直接判错
 REMOVED_KNOBS = {'blockers': "改用 free_off=True / cooldowns / multimodal / 条目自己的 avoidTaskTypes",
                  'promo_ok': "改用 when=<freeUntil 之后的时间>（窗口由条目 freeUntil 推）"}
@@ -495,6 +505,37 @@ CASES = [
       provider='codebuddy-code', model='deepseek-v4.1-flash', task_type='core',
       want=dict(upstream='codebuddy-code', model='deepseek-v4.1-flash',
                 requires_output_validation=True, tier_substitutions=[])),
+ # ── 2026-10-02 cb 内置 `space-bunny`（付费 x0.03，折扣至 10-07）──
+ #    ⛔ 只进白名单（显式可派），⛔ 不进任何自动池：cb 路由上没评测过（Qoder 版 Qwen3.8-Flash 与百炼版同名却显著更弱的前车之鉴）
+ dict(n='显式 cb + space-bunny ⇒ 放行（白名单），Paseo 已登记时走 paseo', provider='codebuddy-code', model='space-bunny',
+      task_type='core',
+      want=dict(upstream='codebuddy-code', model='space-bunny', provider='codebuddy-code', channel='paseo',
+                availability_escalations=[], tier_substitutions=[])),
+ dict(n='只给 --model space-bunny（无 provider）⇒ 按白名单落 cb', model='space-bunny', task_type='core',
+      want=dict(upstream='codebuddy-code', model='space-bunny', channel='paseo')),
+ # 🔴 Paseo 的 cb provider 对清单里没有的型号**静默降级成 hy3**（10-02 实测 ×2：真 id space-bunny、假 id 都是 runtimeInfo.model=hy3）
+ #    ⇒ 标题 / 账单 / 评测结论标的是 A，实际跑的是 B。必须在派发前拦下，⛔ 不能只靠「创建后核 runtimeInfo」（那条靠人记得）
+ dict(n='Paseo 清单缺 space-bunny ⇒ 走 Paseo 的派发必须停（⛔ 否则静默跑成 hy3）', provider='codebuddy-code',
+      model='space-bunny', task_type='core', paseo_unlisted={'codebuddy-code/space-bunny'}, paseo_stop=True,
+      paseo_report=[('codebuddy-code/space-bunny', False)]),
+ # 🔴 r7 审查：fail-closed（拉清单失败也要停）原先只写在 SKILL §3.1 的散文里，§2 伪代码与测试都没有对应 ⇒ 老毛病「规则只写在散文里」
+ dict(n='Paseo 拉清单失败（超时 / 报错）⇒ 也必须停（fail-closed），且报告标「无法确认清单」而非「确实没登记」',
+      provider='codebuddy-code', model='space-bunny', task_type='core', paseo_list_error={'codebuddy-code/space-bunny'},
+      paseo_stop=True, paseo_report=[('codebuddy-code/space-bunny', True)]),
+ dict(n='走 CLI 时不查 Paseo 清单 ⇒ 拉清单失败也不影响（作用域只在走 Paseo 且落 cb）',
+      provider='codebuddy-code', model='space-bunny', task_type='core', force_cli=True, paseo_list_error={'codebuddy-code/space-bunny'},
+      want=dict(upstream='codebuddy-code', model='space-bunny', channel='cli')),
+ dict(n='Paseo 清单缺 space-bunny 但走 CLI ⇒ 放行（CLI 路径实测正常，钉死的 2.106.1 也正常）', provider='codebuddy-code',
+      model='space-bunny', task_type='core', force_cli=True, paseo_unlisted={'codebuddy-code/space-bunny'},
+      want=dict(upstream='codebuddy-code', model='space-bunny', channel='cli')),
+ dict(n='T0 落 hy3 时 Paseo 清单也缺 hy3 ⇒ 同样必须停（守卫对 cb 落点一视同仁，⛔ 不只管 space-bunny）', task_type='core',
+      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)}, paseo_unlisted={HY3}, paseo_stop=True, paseo_report=[(HY3, False)]),
+ dict(n='守卫只管 cb：火山显式落点即使「未登记」也不拦', provider='volcengine-coding', model='deepseek-v4-flash',
+      task_type='core', paseo_unlisted={'volcengine-coding/deepseek-v4-flash'},
+      want=dict(upstream='volcengine-coding', model='deepseek-v4-flash', channel='paseo')),
+ # ⛔ 自动路径不选 space-bunny：显式 cb 不给 model ⇒ 仍是同档 glm（既有用例已钉；这里再钉「默认类任务」不会落到它）
+ dict(n='默认任务（免费池不可用）⇒ 仍落 T1 火山 v4.1，⛔ 不落 cb/space-bunny', task_type='core', free_off=True,
+      want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash')),
  # 🔴 审查时机门控（2026-09-11）—— 契约：exit 79 = 轮不到，其余一律 fail-open
  #    起因：0910 一条会话每修一小块就派一次全量审查，11 个 agent / ≥7 次全量全白烧
  #    （审查产物带 REVIEW_HEAD / REVIEW_DIFF_SHA256 锚点，代码一改就作废）。
@@ -716,7 +757,7 @@ CASES = [
 
 fails = []
 for c in CASES:
-    PROBES.clear(); FREE_PROBES.clear(); FREE_REPORT.clear()
+    PROBES.clear(); FREE_PROBES.clear(); FREE_REPORT.clear(); PASEO_REPORT.clear()
     _stale = sorted(set(c) & set(REMOVED_KNOBS))
     if _stale:
         fails.append(f"{c['n']}: 🔴 用了已删除的旋钮 {_stale} —— " + '；'.join(REMOVED_KNOBS[k] for k in _stale))
@@ -730,6 +771,8 @@ for c in CASES:
         if c.get('conflict_free_review'): fails.append(f"{c['n']}: 期望 free×review 冲突，实际 {got}"); continue
         if c.get('review_provider_conflict'): fails.append(f"{c['n']}: 期望 review provider 冲突，实际 {got}"); continue
         if c.get('blocked_model'): fails.append(f"{c['n']}: 期望被屏蔽，实际 {got}"); continue
+        if c.get('paseo_stop'):
+            fails.append(f"{c['n']}: 期望「Paseo 清单缺该型号 ⇒ 停止」，实际落到 {got.get('upstream')}/{got.get('model')} ({got.get('channel')})"); continue
         if c.get('no_landing'):
             fails.append(f"{c['n']}: 期望明确报「无可用落点」并停止，实际落到 {got.get('upstream')}/{got.get('model')}"); continue
         for k, v in c['want'].items():
@@ -751,6 +794,8 @@ for c in CASES:
         if not c.get('conflict_free_review'): fails.append(f"{c['n']}: 意外报 free×review 冲突")
     except ReviewProviderConflict:
         if not c.get('review_provider_conflict'): fails.append(f"{c['n']}: 意外报 review provider 冲突")
+    except PaseoUnlisted:
+        if not c.get('paseo_stop'): fails.append(f"{c['n']}: 🔴 意外判为「Paseo 清单缺该型号」")
     except NoLanding:
         if not c.get('no_landing'): fails.append(f"{c['n']}: 🔴 意外报『无可用落点』——本档应当有落点")
     except BlockedModel:
@@ -764,6 +809,8 @@ for c in CASES:
         fails.append(f"{c['n']}: T0 探活 期望 {c['free_probes']} 实际 {FREE_PROBES}")
     if 'probes' in c and PROBES != c['probes']:
         fails.append(f"{c['n']}: first_available 探活 期望 {c['probes']} 实际 {PROBES}")
+    if 'paseo_report' in c and PASEO_REPORT != c['paseo_report']:
+        fails.append(f"{c['n']}: Paseo 守卫报告 期望 {c['paseo_report']} 实际 {PASEO_REPORT}")
     if 'free_report' in c and FREE_REPORT != c['free_report']:
         fails.append(f"{c['n']}: --free 逐条原因 期望 {c['free_report']} 实际 {FREE_REPORT}")
 

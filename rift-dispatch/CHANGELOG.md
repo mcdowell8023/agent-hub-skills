@@ -382,6 +382,10 @@ hy4-preview / hy3 / hy3-x 在 cb `/model` 面板上**现在的倍率**。
 问模型自己答「不知道」。（`codebuddy models` 不是子命令，会被当成 prompt，还顺手读了当前目录。）
 ⇒ 只在 cb 的 `/model` 面板里 ⇒ **这一项只能问用户**，已写进 catalog 免得下次再试一遍。
 
+> 🔴 **2026-10-02 更正：上面这段结论是错的。** cb `-p --output-format json` 的返回里带实扣费用 `providerData.rawUsage.credit`
+> （本机 2.160.0 与 Paseo 钉的 2.106.1 都有；hy3 实测 = 0，space-bunny 冷缓存 0.13–0.14 / 暖缓存 0.03）。当年「rawUsage 只有 token 计数」的判断为何得出，已无从查证。
+> 影响：此前据此写下的「cb 没有费用字段 / 费率 agent 拿不到」（SKILL、catalog、一致性脚本注释）已一并订正，见 catalog `cbRawUsageCredit_20261002`。
+
 ### ⚠️ 第一版逻辑写错，用例当场抓到
 
 `continue` 写成了**无条件**的 ⇒ 「已复核」也照样跳过 T0。

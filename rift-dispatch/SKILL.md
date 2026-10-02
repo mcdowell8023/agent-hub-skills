@@ -70,8 +70,9 @@ bash $S/cb-probe.sh hy3                              # 兼容 shim：只探 cb
 | OpenRouter `401` | key 缺失 / 格式错（**通道级**，⛔ 不是额度） | 跳过这一条、试下一个免费条目，并**报告用户**查钥匙串 `openrouter` 条目（⛔ 打印时只报「有没有 / 长度」）；⛔ 不写冷却（等不好）。⚠️ 旧写法「停」会让一把坏 key 卡死整个派发 |
 | 探活脚本报 `SKIP`（pi 配置里没有该 provider） | 探不了 | 按**不可用**处理（⛔ 不是「全部可用」）；Hub 等没配 OpenRouter 的机器上属预期 |
 | qcn `is_error` + 429 / 额度字样 | 额度（⚠️ 推测，原文未见过） | 换下一个；冷却 +1h |
-| 🔴 qcn JSON `total_credits` > 0（仅免费条目）/ OpenRouter 响应 `usage.cost` > 0 | **免费期已结束**（⭐ 直接证据；⛔ 不是「答得动」——免费结束后模型照样答，只是开始扣费） | 模型级；冷却 24h；**报告用户**更新 FREE_POOL + catalog 该条目（写明确截止日或删条目）。⚠️ 探这一次本身会花 ~0.1 credits。cb 没有费用字段 ⇒ hy3 靠 `freeUntil` + 复核，⛔ 不许写 None |
+| 🔴 qcn JSON `total_credits` > 0（仅免费条目）/ OpenRouter 响应 `usage.cost` > 0 | **免费期已结束**（⭐ 直接证据；⛔ 不是「答得动」——免费结束后模型照样答，只是开始扣费） | 模型级；冷却 24h；**报告用户**更新 FREE_POOL + catalog 该条目（写明确截止日或删条目）。⚠️ 探这一次本身会花 ~0.1 credits。cb 的 `rawUsage.credit` 是同类直接证据（10-02 实测 hy3=0），但探活脚本**尚未读取它** ⇒ cb 条目仍⛔不许写 None；hy3 靠 `freeUntil` + 复核 |
 | 🔴 同上两个字段**读不到**（缺失 / 非数字 / 乱码，`scripts/billing.py` 判 unknown） | **无法确认免费**（⛔ fail-closed：这字段是 None 条目唯一的失效证据，读不到 = 没有证据） | 同样模型级 + 冷却 24h；报告用户核 CLI / API 输出格式是不是变了。代价是少一个免费选项（回落付费 T1，便宜） |
+| 🔴 Paseo 创建的 cb agent，`runtimeInfo.model` ≠ 请求的型号（10-02 实测：未登记型号静默落 `hy3`） | 请求值 ≠ 运行值 | **立刻归档**，⛔ 不用其产出、⛔ 不按它标的型号记账 / 记评测；先查 `list_models` 里有没有该 id（§3.1） |
 | ACP「Empty response」 | 客户端版本问题 | 先查 Paseo 的 provider 命令是不是钉了旧版本（09-28 qcn 钉在 1.0.30 就是这个形态） |
 | `pi -p` 零 CPU、零连接、零输出 | stdin 挂死，⛔ 不是模型挂了 | 查有没有 `< /dev/null`（§3.2b） |
 
@@ -185,7 +186,8 @@ WHITELIST = {                                   # P0，routing §1
                        'deepseek-v4.1-flash',    # ⚠️ 2026-09-24 起⛔不再是 cb 的 T1 自动落点——
                        # 涨到 **0.11x**（0.06x→0.03x→0.11x，用户截图实测），反超 glm-5.3-flash(0.06x)。
                        # 仍在白名单内⇒可显式 --model 派发，只是不再自动选中（见 WALLET_PREF 同名条目）。
-                       'kimi-k3-1'],
+                       'kimi-k3-1',
+                       'space-bunny'],           # ⭐ 2026-10-02 cb 内置（付费 x0.03，折扣至 10-07）。⛔ 只进白名单（显式可派），不进任何自动池
   # 🔴 2026-09-10 用户停用 `deepseek-v4-pro`：⛔ agent 不得自行派发（见 BLOCKED_MODELS）。
   # 🔴 **2026-09-10 换代**：cb 上 `deepseek-v4-flash` → `deepseek-v4.1-flash`，
   #    `kimi-k3-2` → `kimi-k3-1`。⛔ 旧 id 已从白名单**移除**。
@@ -354,6 +356,8 @@ FREE_POOL = [
    # 🔴 D3（用户）：并发实现题 30.0 偏弱（扣余额漏乘数量、字段 snake/camel 不一致）⇒ **只提醒不排除**
    # 🔴 D2（用户）：服务方可能留存 prompt，用户知情并决定 ~/wb 下**也不跳过**
    # ⚠️ 预览期隐身模型，截止未公布、随时可能下线（404 ⇒ 按冷却 / 下线处理）；实测 150–400s/题，偏慢
+   # 🔗 2026-10-02 CodeBuddy 内置了同名付费路由 `space-bunny`（x0.03，折扣至 10-07；大概率同一模型，tokenizer 指纹不可区分）：
+   #    ⛔ 它**不是**免费条目、⛔ 不自动选（cb 路由没评测过）；只在 cb 白名单里供显式点名。OpenRouter 版下线时它大概率是同一模型的延续（⚠️ 权重同一性未证实，表现要先在 cb 路由评测；见 catalog spaceBunnyCb_20261002）
   {'upstream': 'codebuddy-code', 'model': 'hy3', 'priority': 2,
    'freeUntil': '2026-10-31T23:59', 'thinking': 'max', 'multimodal': False,
    'avoidTaskTypes': {'algorithm', 'perf', 'architecture'}, 'cautionTaskTypes': set(),
@@ -567,8 +571,10 @@ def promo_active(e):
 
 def t0_still_free(e, dt=now()):
     """🔴 判据 = catalog 里该条目的 creditRecord.credit **仍为 0**，且核实发生在**窗口之后**、日期**足够新**。
-       ⛔ 不接受：模型自述（实测答「不知道」）· `rawUsage`（只有 token 数）· `--help`（只有型号清单）。
-       ⚠️ 费率 agent 多半拿不到（cb 只在 `/model` 面板）⇒ **由用户按条目的 verifyVia 核并写进 catalog**。
+       ⛔ 不接受：模型自述（实测答「不知道」）· `--help`（只有型号清单）。
+       ✅ 直接证据：cb `-p` JSON 的 `providerData.rawUsage.credit`（实扣，hy3 实测 0）· OpenRouter 响应 `usage.cost` · 用户给的 /model 面板读数。
+       ⚠️ 09-11 起我记的「rawUsage 只有 token 数、费率 agent 拿不到」已被 2026-10-02 实测推翻（本机 2.160.0 与 Paseo 钉的 2.106.1 都带 credit）。
+       ⇒ 复核按条目的 verifyVia 做（可由 agent 自己跑），结果写进 catalog 的 creditRecord。
        ⚠️ 只在 promo_active(e) 为假时调用 ⇒ 此处 freeUntil 必非 None。"""
     rec = catalog_credit_record(e['upstream'], e['model'])   # {'credit': float, 'verifiedOn': 'YYYY-MM-DD'} 或 None
     if not rec or rec.get('verifiedOn') is None:
@@ -983,6 +989,17 @@ if upstream == 'claude':
 #    且不写 availability_escalations ⇒ **静默质量回退**。
 # ⭐ 现在可用性只有【一套】真源：§5 的 first_available + 同档替代 + 向上升档 + LAST_RESORT。
 #    ⛔ 不要再在收尾里加第二套判断 —— 两套信号会互相矛盾。
+# 🔴 Paseo 的 cb provider 对「它缓存的清单里没有的型号」**静默降级成默认型号 hy3**（2026-10-02 实测 ×2：真 id `space-bunny`、假 id 都是
+#    snapshot.model=请求值、runtimeInfo.model=hy3，且不报错）⇒ 标题 / 账单 / 评测结论标的是 A、实际跑的是 B。
+#    ⚠️ 根因在 Paseo 缓存的模型清单（本次比 cb 服务端少 1 个），⛔ 不在 cb CLI（钉死的 2.106.1 直接 `-p` 跑 space-bunny 完全正常）
+#       ⇒ 只在【走 Paseo 且落在 cb】时判；CLI 通道不受影响。
+#    ⭐ 这是「创建后核 runtimeInfo.model」（§3.1）的**前置版**：那条靠人记得，这条由代码拦。
+_listed = paseo_lists_model(upstream, model) if (channel == 'paseo' and upstream == 'codebuddy-code') else True
+#   三态：True=清单里有 / False=确实没登记 / None=拉清单本身失败（超时 / 报错），**无法确认**
+if _listed is not True:                      # 🔴 fail-closed：False 与 None 都停（⛔ 不能写成 `_listed is False`，那样拉不到清单就放行了）
+    report_paseo_unlisted_model_and_stop(upstream, model, unconfirmed=(_listed is None))
+    #   ⚠️ unconfirmed=True ⇒ 报告必须写「无法确认 Paseo 清单」，⛔ 不要和「确实没登记」混成一句话（r7 审查）
+    #   出路见 §3.1：走 CLI / 让用户刷新 Paseo，⛔ 不要硬派
 provider = normalize_provider(upstream, channel)
 thinking = (None if model in NO_THINKING_MODELS             # 🔴 没有思考档 ⇒ ⛔ 不传（显式 --thinking 也作废，§7 回显）
             else clamp_to_supported(model, thinking or default_thinking(model)))  # §3.2e，⛔ 只降不升
@@ -1059,6 +1076,10 @@ print_summary()                                      # §7
 | T1 三池都拿不到 | → 同档替代 `glm-5.3-flash`（火山两套餐 / cb 三池），⛔ 不升 T2 |
 | 🔴 显式 `--provider codebuddy-code`，不给 model，落到 T1 | → `codebuddy-code` + **`glm-5.3-flash`**（同档换落点，`tier_substitutions` 留痕）—— 09-24 cb 的 v4.1 涨到 0.11x，已移出其池 |
 | 显式 `--provider codebuddy-code --model deepseek-v4.1-flash` | ✅ 照派（仍在白名单）—— 用户点名就尊重，价差用户自负 |
+| ⭐ 显式 `--provider codebuddy-code --model space-bunny`（Paseo 清单已登记） | ✅ 放行（10-02 起在 cb 白名单）→ `codebuddy-code` + `space-bunny` @ `xhigh`。⛔ **不进任何自动池**：cb 路由没评测过、折扣 10-07 到期、折后价未知 |
+| 同上，但 **Paseo 清单缺 `space-bunny`**（现状） | ⛔ **停止并报告**（`report_paseo_unlisted_model_and_stop`）—— 否则 Paseo 静默跑成 hy3。走 CLI（`codebuddy -p`）则放行 |
+| cb 路径任何落点（含 T0 的 `hy3`）而 Paseo 清单缺它 | ⛔ 同样停 —— 守卫对 cb 落点一视同仁，⛔ 不只管 `space-bunny` |
+| 走 Paseo 且落 cb，但**拉 Paseo 清单本身失败** | ⛔ 同样停（fail-closed），报告写「**无法确认清单**」；走 CLI 则不受影响（CLI 不查清单） |
 | 默认任务，免费档已跳过，**2 次付费档**做砸（T1、T2 均失败） | → T3 `qwen3.8-max` @ `pi/bailian-token-plan`（⚠️ 只此一池） |
 | T3 那**一个池拿不到** | → **可用性升档**到 T4 `kimi-k3-1`（⛔ 只许向上），并在 §7 报告。⛔ 本档已无同档替代 |
 | ⛔ 显式 `--model deepseek-v4-pro` | → **停止并报告**（`report_blocked_model_and_stop`）—— 用户 2026-09-10 禁用，⛔ agent 不得自行派发 |
@@ -1173,6 +1194,17 @@ mcp__paseo__get_agent_status({ agentId })
 
 ⛔ **不要用 `list_agents` 的 `model` 字段验** —— 模式 2 下它是请求值不是运行值。
 🔴 白名单里 `kimi-k3-1` 与 `qmodel_38max` 都**没实测过 runtimeInfo**，派完务必核一次。
+
+🔴🔴 **2026-10-02 实例（cb 的 `space-bunny`）：Paseo 对「它缓存的清单里没有的型号」静默跑 hy3，不报错。**
+`create_agent codebuddy-code/space-bunny` → `snapshot.model='space-bunny'`、`runtimeInfo.model='hy3'`；换成假 id 同样落 hy3 ⇒ 通用机制。
+根因是 **Paseo 缓存的清单比 cb 服务端少 1 个**（16 vs 17），⛔ 不在 cb CLI：钉死的 2.106.1 直接 `codebuddy -p --model space-bunny` 完全正常。
+⇒ §2 第 6 段加了**前置守卫** `paseo_lists_model(upstream, model)`（只管「走 Paseo 且落在 cb」），没有就停。实现：
+`mcp__paseo__list_models({provider:'codebuddy-code'})` 里有没有该 id。⚠️ 「没有」≠「账号不能用」——只表示 Paseo 会降级。
+⚠️ **失败语义（fail-closed，§2 伪代码里就是 `_listed is not True`，pipeline-test 有用例钉着）**：`paseo_lists_model` 是三态——
+`True` 清单里有 / `False` 确实没登记 / `None` 拉清单本身失败（超时 / 报错）。后两者都停，但 `None` 时报告里必须写明是**「无法确认 Paseo 清单」**，
+⛔ 不要和「确实没登记」混成一句话，也⛔ 不要因为拉不到清单就放行（放行 = 赌它没被静默降级）。
+出路：① 走 CLI（`codebuddy -p`，§3.2c-bis，实测正常）② 让用户刷新 Paseo（重启 daemon 刷新缓存；⚠️ 未验证）
+③ `~/.paseo/config.json` 的 cb provider 有 `additionalModels` 字段，疑似可登记（⚠️ 未验证，且需重启 Paseo）。⛔ 不要硬派。
 
 #### ⛔ 收割前先确认 `lastStatus`
 
@@ -1556,6 +1588,10 @@ ssh hub "paseo run --detach \
 {落在 T0 免费条目时追加一行 —— ⛔ 不许省略：
   ⭐ 免费档 priority {n}：{model}（{freeUntil 为 None ⇒ 「截止未公布，随时可能结束 / 下线」；否则「免费至 {freeUntil}」}）
      跳过的免费条目：{free_skipped 逐条「model（原因）」；为空就不写}}
+{落点的 catalog `retainsData` 为 True 或未知（None）时，追加一行 —— ⛔ 不许省略（尤其显式点名匿名模型时）：
+  ⚠️ 数据外发：该模型服务方可能留存 prompt。在公司目录（~/wb）下显式点名它之前，先确认这是你要的。}
+{上一条成立【且】落点 upstream 是 `codebuddy-code` 时，再追加一行（⛔ 不是所有 cb 落点都加：hy3 的 retainsData 为 False，不触发）：
+  ⚠️ 走 cb 时每次请求还会附带全局规则 + memory（实测约 5.5 万字符 ≈ 2.35 万 token，见 catalog spaceBunnyCb_20261002）。}
 {free_cautions 非空时，整块加在这里 —— ⛔ 不许省略：
   ⚠️ {model} 做 {task_type} 有已知弱点（见 FREE_POOL 该条目注释）—— 只提醒不排除（用户 D3）。
      收割时重点核：扣减是否乘了数量、字段命名风格是否前后一致。}
@@ -1566,7 +1602,7 @@ ssh hub "paseo run --detach \
 {t0_free_unverified 非空时，整块加在这里 —— ⛔ 不许省略：
   ⚠️ 免费档 {列出型号} **窗口已过但仍探活通过** —— 费率未核实。
      若它仍是 0，本次派发本可省下这一次 T1 的费用。
-     ⇒ 请按 catalog `freePool` 该条目的 `verifyVia` 核（cb 只在 `/model` 面板；OpenRouter 公开 models API 自己就能查），
+     ⇒ 请按 catalog `freePool` 该条目的 `verifyVia` 核（cb 读 `rawUsage.credit`；OpenRouter 读 `usage.cost` / 公开 models API；都是 agent 自己就能查的），
        把 `{'credit': x, 'verifiedOn': 'YYYY-MM-DD'}` 写进该条目的 `creditRecord`。
      ⚠️ 核实记录**超过 7 天即失效**，且⛔**窗口内核的不算**（只证明促销价是 0）。}{降档时追加 " → {effective_thinking}（该模型无 {thinking} 档）"}
 {tier_substitutions 非空时，整块加在这里 —— ⛔ 不许省略：

@@ -53,7 +53,8 @@ ALL=("${DEFAULT[@]}"
      volcengine-coding/deepseek-v4-flash
      volcengine-agent-plan/deepseek-v4-flash
      bailian-token-plan/qwen3.8-max
-     codebuddy-code/kimi-k3-1)   # ⚠️ cb/glm 已在 DEFAULT 里，别重复
+     codebuddy-code/kimi-k3-1
+     codebuddy-code/space-bunny)   # ⚠️ cb/glm 已在 DEFAULT 里，别重复；space-bunny 2026-10-02 起在 cb 白名单（收费，探一次 ≈0.03~0.14 credits）
 
 FORCE=0; _args=()
 for a in "$@"; do [ "$a" = "--force" ] && FORCE=1 || _args+=("$a"); done   # ⭐ --force 放哪都认

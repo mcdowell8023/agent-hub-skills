@@ -46,6 +46,11 @@ T4  极致档   cb/kimi-k3-1         @xhigh  1.62x   🔴 红线，见 §3.3（�
 
 ### 免费档时间线
 
+> 🔗 **同一模型在 cb 上的付费路由（2026-10-02）**：CodeBuddy 内置了 `space-bunny`（x0.03，限时折扣 10-02 ~ 10-07，折后价未知），
+> 与下面 priority 1 的 OpenRouter Space Bunny **大概率同一模型**（tokenizer 指纹不可区分，权重同一性未证实）。
+> ⛔ 它不是免费条目、⛔ 不自动选——cb 路由没评测过（Qoder 版 Qwen3.8-Flash 与百炼版同名却显著更弱的前车之鉴），
+> 只在 cb 白名单里供**显式点名**；OpenRouter 版下线（404）时它大概率是同一模型的延续（⚠️ 权重同一性未证实，表现需先在 cb 路由评测）。详见 §1 表与 catalog `spaceBunnyCb_20261002`。
+
 ```
 stealth/space-bunny-alpha  OpenRouter 2026-09-23 上架，截止未公布（预览期，随时可能下线）⇒ T0 priority 1
 hy3                        免费期二次延长至 2026-10-31 23:59（CodeBuddy&混元官方 2026-09-30 公告，用户 10-01 转发；
@@ -99,6 +104,7 @@ consistency §3o ⑬ 强制每个 None 条目都带这类探测，且只认探�
 | 火山两套餐 | `deepseek-v4-flash` | 包月 | T2 主力档，DeepSeek 族首选（⛔ cb 那份是陈旧别名，已移出白名单） |
 | `bailian-token-plan` | `qwen3.8-max` | 包月 | T3 升档（⚠️ 只此一池） |
 | `codebuddy-code` | `kimi-k3-1` | **🔴 1.62x** | T4 极致档，⛔ 见 §3.3 红线 |
+| `codebuddy-code` | **`space-bunny`** | **0.03x**（⚠️ 限时折扣 10-02 ~ 10-07，折后价未知） | ⭐ 2026-10-02 起**显式可派**；⛔ 不进任何自动池。CodeBuddy 内置的匿名 Flash 模型（1M 上下文，文本 / 图像 / 视频输入），与 OpenRouter 的免费 Space Bunny **大概率同一模型**（tokenizer 指纹不可区分，权重同一性未证实）。🔴 **经 Paseo 派它当前会静默跑成 hy3**，见 §8 |
 | ~~五家~~ | ~~`deepseek-v4-pro`~~ | — | ⛔ **全局禁用**（用户 2026-09-10，`BLOCKED_MODELS_ANY_PROVIDER`） |
 | `qoderclicn` | `qmodel_38max` | 0.50x | cb 整体断供时的降级落点，不主动选 |
 | ~~`jdcloud-joyagent`~~ | ~~两个 DeepSeek~~ | — | ⛔ **2026-09-09 停用**（额度用尽），配置已归档，见 §3.4 |
@@ -801,6 +807,12 @@ review 已迁到 Copilot：开发实施类 + 大审查 → Paseo；短任务 / �
 ⛔ **连 claude 都不可用才停止并报告**（`report_no_landing_and_stop`）。
 
 其它 provider 的专项处理：
+
+  🔴 codebuddy-code 经 Paseo 派一个「Paseo 清单里没有」的型号（2026-10-02 实测）
+    ├─ Paseo 不报错，**静默跑默认型号 hy3**：`snapshot.model` 是请求值、`runtimeInfo.model` 才是实际值（真 id `space-bunny` 与假 id 都复现）
+    ├─ 根因是 Paseo 缓存的清单比 cb 服务端少 1 个，⛔ 不在 cb CLI（钉死的 2.106.1 直接 `-p` 跑 space-bunny 正常）
+    ├─ SKILL §2 第 6 段有前置守卫：走 Paseo 且落在 cb 时先问 `paseo_lists_model`，没有就停
+    └─ 出路：走 CLI `codebuddy -p` · 让用户刷新 Paseo · ⛔ 不要硬派（也⛔不要事后用它的产出）
 
   qoderclicn 限额 / refresh timeout
     ├─ 先重试 1 次（等 5-10 秒）——`Timed out refreshing Qoder CLI CN after 60000ms`
