@@ -388,15 +388,20 @@ if m:
             chk(False, f"⛔ `{mid}` 与基名 `{m3.group('base')}` 共用缩写 `{abbr}` ⇒ 标题分不出是哪个模型")
 
     # 🔴 §3m 「同档换落点」分支的**豁免失效条件**
-    #    SKILL 里那三行打了 `# pragma: unreachable-by-config`，理由是：
+    #    SKILL 里那几行打过 `# pragma: unreachable-by-config`，理由是：
     #    每个 TIER_PEERS 的 provider **都已在该模型的 WALLET_PREF 池里** ⇒ 分支构造不出来。
     #    这条一旦不成立（= 分支重新可达），必须**删掉豁免并补用例**，⛔ 不许让豁免静默留着。
     # ⚠️ 只认**挂在代码行上**的标记（行首第一个非空字符不是 `#`）⛔ 不认散文里的提及。
     #    2026-09-24 实测：豁免撤掉后，注释里一句「它曾被标 `pragma: …`」的历史说明
     #    就让本守卫误报「必须删掉 pragma」—— 判字面不判性质（与同会话 MEMORY 索引子串误判同形）。
     #    ⭐ 与 coverage-check 的口径在「可发射行」上一致：纯注释行本来就不参与覆盖率。
+    # 🔴 2026-10-06 修：本守卫原先的闸门是「§2 里**任何**代码行带 pragma」⇒ 一旦别处新加豁免
+    #    （如 §3m-bis 的 free_cautions 行），它就会被无端唤醒，去报一个与它无关的旧条件
+    #    （实测：deepseek-v4.1-flash 的 peer `codebuddy-code` 已不在其池里 ⇒ 误报）。⇒ 改为**按自己的行**上闸。
     _BODY = re.search(r"## 2\. 决策流程.*?```python\n(.*?)\n```", S, re.S).group(1)
-    if re.search(r'^[ \t]*[^#\s][^\n]*#\s*pragma: unreachable-by-config', _BODY, re.M):
+    _SM_LINES = [l for l in _BODY.splitlines()
+                 if ('tier_substitutions.append' in l or '_alt = next(' in l)]
+    if any('# pragma: unreachable-by-config' in l for l in _SM_LINES):
         _wp = re.search(r"WALLET_PREF = \{(.*?)\n\}", S, re.S).group(1)
         def _pairs(block):
             out = {}
@@ -410,6 +415,29 @@ if m:
                 f"⛔ `{_model}` 的 peer provider {_extra} 不在它的 WALLET_PREF 池里 ⇒ "
                 f"「同档换落点」分支**重新可达** ⇒ 必须删掉 SKILL 里的 "
                 f"`# pragma: unreachable-by-config` 并补用例")
+
+    # 🔴 §3m-bis 「免费落点能力提醒」分支的**豁免失效条件**（2026-10-06 加）
+    #    起因：唯一带非空 `cautionTaskTypes` 的免费条目（Space Bunny 的 D3 `concurrency_impl`）已下线，
+    #    现役 hy3 / qfmodel 的 `cautionTaskTypes` 都是空集 ⇒ SKILL 里 `free_cautions.append(...)` 那行
+    #    构造不出来，打了 `# pragma: unreachable-by-config`。⚠️ 一旦有免费条目的 cautionTaskTypes 非空，
+    #    该分支**重新可达** ⇒ 必须删掉那行的 pragma 并补用例，⛔ 不许让豁免静默腐烂。
+    # ⚠️ 与 §3m 同口径：只认挂在 `free_cautions.append` 代码行上的标记；且解析 FREE_POOL 时**剔除注释行**
+    #    （378-387 行那段 📜 说明里就字面写着 `{'upstream': 'openrouter-free', …}`，不剔会把幽灵条目算进来）。
+    _PRAGMA = '# pragma: unreachable-by-config'
+    if any('free_cautions.append' in _l and _PRAGMA in _l for _l in _BODY.splitlines()):
+        _fp = re.search(r"FREE_POOL = \[(.*?)\n\]", S, re.S)
+        _src = "\n".join(_l for _l in (_fp.group(1) if _fp else '').splitlines()
+                         if not _l.strip().startswith('#'))
+        _hits = []
+        for _seg in _src.split("{'upstream':")[1:]:
+            _mm = re.search(r"'model':\s*'([^']+)'", _seg)
+            _cm = re.search(r"'cautionTaskTypes':\s*\{([^}]*)\}", _seg)
+            if _mm and _cm and _cm.group(1).strip():
+                _hits.append(_mm.group(1))
+        chk(not _hits,
+            f"⛔ 免费条目 {sorted(_hits)} 的 `cautionTaskTypes` 非空 ⇒ 「免费落点能力提醒」分支"
+            f"**重新可达** ⇒ 必须删掉 SKILL 里 `free_cautions.append` 那行的 "
+            f"`# pragma: unreachable-by-config` 并补 pipeline-test 用例")
 
     # 🔴 §3n routing §0「派发链唯一真源」必须与 SKILL 实际执行的 LADDER / T0 一致
     #    起因（2026-09-24 异构审 gpt-5.5 FAIL）：routing §0 停在 09-10 前整两周 —— T0 仍是 hy4-preview、

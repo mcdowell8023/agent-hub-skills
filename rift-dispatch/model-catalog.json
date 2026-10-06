@@ -1,8 +1,8 @@
 {
-  "version": "6.45.0",
+  "version": "6.46.0",
   "lastUpdated": "2026-10-06",
   "whitelist": {
-    "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn / openrouter-free)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
+    "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
     "codebuddy-code": [
       "hy4-preview",
       "hy3",
@@ -15,9 +15,6 @@
     "qoderclicn": [
       "qmodel_38max",
       "qfmodel"
-    ],
-    "openrouter-free": [
-      "stealth/space-bunny-alpha"
     ],
     "exempt": {
       "_note": "🔴 键是 **split_provider() 拆出的 upstream 名，⛔ 不带 `pi/` 前缀** —— 校验写作 `upstream in EXEMPT`，加前缀会对不上。🔴 ⛔ 顶层 `pi` 不在本表：它是**宿主**不是钱包，豁免它会让 `pi/jdcloud-joyagent/GLM-5.2` 绕过京东白名单。⚠️ `jdcloud-joyagent` 也⛔不在本表——它有自己的白名单（只准两个 DeepSeek）。⚠️ 本表必须与 SKILL.md 的 `EXEMPT_PROVIDERS` 逐项一致。",
@@ -255,7 +252,7 @@
       "supersededBy": "🔴 walletPriority.discountWindows（2026-09-09）：百炼 22:00-08:00、codebuddy 工作日 09-12/14-18 之外全部时段。⭐ 只在【档位内选落点】介入，⛔ 不参与选档位 ⇒ 与上面的不变量不冲突。"
     },
     "escalation": {
-      "rule": "T0 免费池 FREE_POOL（stealth/space-bunny-alpha → hy3 → qfmodel，逐条按条目判）→ T1 deepseek-v4.1-flash → T2 deepseek-v4-flash → T3 qwen3.8-max → T4 kimi-k3-1 →（仅可用性耗尽）LAST_RESORT claude-sonnet-5",
+      "rule": "T0 免费池 FREE_POOL（hy3 → qfmodel，逐条按条目判；📜 原 priority 1 的 stealth/space-bunny-alpha 于 2026-10-06 因模型 404 下线而删除）→ T1 deepseek-v4.1-flash → T2 deepseek-v4-flash → T3 qwen3.8-max → T4 kimi-k3-1 →（仅可用性耗尽）LAST_RESORT claude-sonnet-5",
       "toK3Condition": "⛔ 【质量/成本升档】：要 v4-pro 也做砸才升 K3。⚠️ **可用性换档⛔不受此约束** —— T3 池 + 同档替代全不可用时可升 T4（见 walletPriority.availabilityEscalation）。⛔ 不做预防性升档（2026-08-02 n=1 + 2026-08-06 n=12 两次实测支撑）。K3 是 v4-flash 的 9.5 倍、glm-5.3-flash 的 27 倍。",
       "k3Status": "✅ 2026-08-16 用户恢复启用，作为极致档 / 唯一升档目标。原 P5.4『0723 实测不可靠、定弃用、改派 M3』的结论失效（M3 也已关闭）。⚠️ 0723 观察到的现象保留为已知风险：反复空转、报进度就 idle、git 无产出 —— 派完必须核 git 是否真有 commit",
       "noFallbackForK3": "🔴 K3 撞限额时【白名单内】无替代（唯一 S 级，M3 已关闭）⇒ 2026-09-09 起走 **LAST_RESORT claude/claude-sonnet-5@max**（见 claudeModels.claude-sonnet-5.lastResort），⛔ 不再是「只能报告用户」；连它也拿不到才停止",
@@ -269,7 +266,7 @@
       "howItAppliesNow": "族偏好现在体现为：【质量/成本升档】 T1 做砸过一轮才升 T2 的 deepseek-v4-flash（⚠️ **可用性换档⛔不受此约束**（见 walletPriority.availabilityEscalation）。），⛔ 不跳去别的族。⛔ 不再体现为「一上来就用 DeepSeek」",
       "primary": "deepseek-v4.1-flash（T1 起步档，2026-09-10 起；cb 上用同档 glm-5.3-flash）",
       "deepseekRole": "deepseek-v4-flash = T2；deepseek-v4-pro = T3，⛔ 仅升档用",
-      "freeTierRelation": "T0 免费池（FREE_POOL：Space Bunny → hy3 → qfmodel，2026-09-29 起）仍压在所有付费档之前；三条都拿不到才进 T1。⛔ 不要自动落到 hy4-preview(0.29x) 或 hy3-x(0.05x)",
+      "freeTierRelation": "T0 免费池（FREE_POOL：hy3 → qfmodel，2026-09-29 起；📜 原 priority 1 的 Space Bunny 2026-10-06 下线删除）仍压在所有付费档之前；两条都拿不到才进 T1。⛔ 不要自动落到 hy4-preview(0.29x) 或 hy3-x(0.05x)",
       "supersedes": "本字段取代 2026-08-20「族内优先 deepseek-v4-flash」与「08-31 后 flash 自动接管第一顺位」两条"
     },
     "entryTier": {
@@ -317,41 +314,13 @@
     "codebuddyDefaultModelNote": "📜 2026-08-28 曾从 deepseek-v4-flash 改为 glm-5.3-flash（T1）；🔴 2026-09-10 起 T1 主落点换成 deepseek-v4.1-flash，cb 上因 v4.1 涨价（0.11x > glm 0.06x）改用同档 glm-5.3-flash。⛔ 这只是【默认起步档】——只有 algorithm / perf 两类从 T2 的 deepseek-v4-flash 起步（并发两类 09-10 起已回到 T1），见 entryTier。"
   },
   "freePool": {
-    "_note": "⭐ T0 免费档登记表（用户 2026-09-29：新增 / 下线免费模型⛔不改挑选逻辑，只改数据：本表 + SKILL FREE_POOL；白名单型 provider（cb / qcn / openrouter-free）还要加 WHITELIST（⛔ 故意不让登记表绕过 P0），再补标题缩写 —— 漏哪项 consistency §3o 都会报）。按 priority 从小到大取第一个当前可用的。🔴 选择字段（upstream/model/priority/freeUntil/thinking/multimodal/avoidTaskTypes/cautionTaskTypes/retainsData/allowInSensitiveWorkspace）与 SKILL.md §2 的 FREE_POOL 逐项一致（consistency §3o）；creditRecord / verifyVia / quota / evalRef / note **只在这里**（用户或 agent 核完写进来，⛔ 不双写）。时间一律本地 Asia/Shanghai、不带时区。",
+    "_note": "⭐ T0 免费档登记表（用户 2026-09-29：新增 / 下线免费模型⛔不改挑选逻辑，只改数据：本表 + SKILL FREE_POOL；白名单型 provider（cb / qcn）还要加 WHITELIST（⛔ 故意不让登记表绕过 P0），再补标题缩写 —— 漏哪项 consistency §3o 都会报）。按 priority 从小到大取第一个当前可用的。🔴 选择字段（upstream/model/priority/freeUntil/thinking/multimodal/avoidTaskTypes/cautionTaskTypes/retainsData/allowInSensitiveWorkspace）与 SKILL.md §2 的 FREE_POOL 逐项一致（consistency §3o）；creditRecord / verifyVia / quota / evalRef / note **只在这里**（用户或 agent 核完写进来，⛔ 不双写）。时间一律本地 Asia/Shanghai、不带时区。",
     "⚠️ recheckRule": "freeUntil 过后，只有 creditRecord.verifiedOn **晚于 freeUntil 当天**、距今 ≤7 天、且 credit==0 才继续当免费档用；窗口内核的记录只证明促销价是 0（2026-09-29 起）。",
     "entries": [
       {
-        "upstream": "openrouter-free",
-        "model": "stealth/space-bunny-alpha",
-        "priority": 1,
-        "freeUntil": null,
-        "thinking": "high",
-        "multimodal": true,
-        "avoidTaskTypes": [],
-        "cautionTaskTypes": [
-          "concurrency_impl"
-        ],
-        "retainsData": true,
-        "allowInSensitiveWorkspace": true,
-        "creditRecord": {
-          "credit": 0.0,
-          "verifiedOn": "2026-09-29",
-          "source": "OpenRouter 公开 /api/v1/models：pricing prompt=0 / completion=0"
-        },
-        "verifyVia": "curl -s https://openrouter.ai/api/v1/models（公开，无需 key）查该 id 的 pricing；⭐ 这一家 agent 自己就能核",
-        "quota": "OpenRouter 规则：购买 <10 credits 的账号，免费模型 20 次/分、50 次/天（UTC 0 点 = 北京 08:00 重置）。⚠️ 实测 3 次调用后 `GET /api/v1/key` 的 free_model_daily_requests 仍为 0 ⇒ 隐身模型是否计入该限额**未证实**。402 = 余额为负。",
-        "evalRef": "spaceBunnyEval_20260929",
-        "userDecisions": [
-          "D1 priority 1（高于 hy3 / qfmodel）",
-          "D2 在 ~/wb 公司目录下**也不跳过**（服务方可能留存 prompt，用户知情并决定）",
-          "D3 concurrency_impl 只提醒、不排除"
-        ],
-        "note": "OpenRouter 上架 2026-09-23（created 字段）；1M 上下文，输入 text / image / video；预览期隐身模型，截止未公布、随时可能下线（404 ⇒ 按下线处理）。实测 150–400s/题，偏慢。pi 里走自定义 provider `openrouter-free`（只注册这一个模型，⛔ 没合并进内置 openrouter —— 那会带出 347 个收费模型）。 🔗 同一模型（大概率）在 CodeBuddy 内置为付费路由 `space-bunny`（x0.03，折扣至 10-07）——见 🔴 spaceBunnyCb_20261002；⛔ 那条未在 cb 路由评测、不自动选、不进免费池。"
-      },
-      {
         "upstream": "codebuddy-code",
         "model": "hy3",
-        "priority": 2,
+        "priority": 1,
         "freeUntil": "2026-10-31T23:59",
         "thinking": "max",
         "multimodal": false,
@@ -375,7 +344,7 @@
       {
         "upstream": "qoderclicn",
         "model": "qfmodel",
-        "priority": 3,
+        "priority": 2,
         "freeUntil": null,
         "thinking": null,
         "multimodal": false,
@@ -1612,7 +1581,8 @@
           "credit": 0.0
         }
       },
-      "note": "T0 免费池 priority 1（见 freePool）。上架 2026-09-23，截止未公布。 🔗 cb 内置同名付费路由 space-bunny（身份证据见 models['space-bunny']）。",
+      "🔴 retired": "2026-10-06 已下线（用户 m07513 要求删除）：探活 `HTTP 404 No endpoints found for stealth/space-bunny-alpha`（通道本身是通的），且 OpenRouter 公开 /api/v1/models（464 个模型）里已无任何含 bunny / stealth 的 id ⇒ 已从 freePool.entries / whitelist / SKILL FREE_POOL 删除，pi 配置里的 openrouter-free provider 也已移除。📜 本节数据保留作历史（blindEval 等）。",
+      "note": "📜 历史：T0 免费池 priority 1（2026-09-29 ~ 2026-10-06）。上架 2026-09-23，截止从未公布。 🔗 cb 内置同名付费路由 space-bunny（身份证据见 models['space-bunny']）—— 那条**未下线**，仍在白名单里显式可派。",
       "blindEval": {
         "lru": 32.25,
         "bug": 30.0,
@@ -2685,8 +2655,8 @@
     "🔴 noVersionlessAliases": "🔴 ⛔ **不许把无版本别名当派发落点** —— `glm-latest` 这类名字**按定义就带不出版本**，而本规范的全部意义就是标题里能看出版本。⇒ 派发前必须先解析成具体型号再派。⚠️ 已知解析：火山 `glm-latest` / `glm-5.2` → **`glm-5.3`**（2026-09 实测别名表）。⚠️ 对比：`hy4-preview` 可以派 —— `preview` 是它真实 id 的一部分，缩写 `hy4` 仍带版本。",
     "🔴 staleVersionAlias": "🔴🔴 **陈旧版本别名比无版本别名更危险** —— `deepseek-v4-flash`(cb) 带着版本号却指向 v4.1 ⇒ 标题写 `cb-dspF4` 而实跑 `dspF4.1`，**标题在说谎**，正好击穿本规范存在的意义。⇒ ⛔ 这类别名必须从白名单**移除**，⛔ 不能只加注释。判据：**假 id 的 400 报错会附服务端权威清单**，不在清单里但请求不报错 = 别名。",
     "🔴 snapshotIdsNeedOwnAbbr": "🔴 **带快照后缀的 id 必须有自己的缩写** —— 2026-09-11 之前 `deepseek-v4-flash-0731` 与 `deepseek-v4-flash` **共用 `dspF4`**，`-0813` 与 `deepseek-v4-pro` 共用 `dspP4`。而实测证明它们**不是同一个被服务的模型** ⇒ 标题 `百炼-dspF4` 会让人以为跟 `火山C-dspF4` 是同一个模型、只是换了钱包 —— **标题说谎**，正是这套规范要防的东西。⇒ 改成 `dspF4@0731` / `dspP4@0813`。",
-    "_freePoolAbbrNote": "sbA0923 = Space Bunny Alpha + OpenRouter 上架日期 09-23（它没有版本号，⛔ 用日期占版本位）；qfmodel 与百炼 qwen3.8-flash 同缩写 qwF3.8，靠渠道前缀 qcn / 百炼 区分（§3f 只禁同渠道撞名）",
-    "_spaceBunnyCbAbbrNote": "cb 版 space-bunny 缩写 sb1002（1002 = cb 接入日期占版本位——它没有版本号）；⛔ 与 OpenRouter 版 sbA0923 故意不同：两条路由同名但**表现未证实一致**，标题里必须分得出是哪条"
+    "_freePoolAbbrNote": "📜 sbA0923 = Space Bunny Alpha + OpenRouter 上架日期 09-23（该模型 2026-10-06 已下线，缩写保留仅为让历史标题可读）（它没有版本号，⛔ 用日期占版本位）；qfmodel 与百炼 qwen3.8-flash 同缩写 qwF3.8，靠渠道前缀 qcn / 百炼 区分（§3f 只禁同渠道撞名）",
+    "_spaceBunnyCbAbbrNote": "cb 版 space-bunny 缩写 sb1002（1002 = cb 接入日期占版本位——它没有版本号）；⛔ 与 OpenRouter 版 sbA0923 故意不同：两条路由同名但**表现未证实一致**，标题里必须分得出是哪条（📜 OpenRouter 版 2026-10-06 已下线）"
   },
   "poolQuotaState": {
     "_note": "⚠️ **运行时状态，⛔ 不是规则** —— 会过期。判据永远是**实际探活**。",
@@ -2857,6 +2827,7 @@
     "🔴 round2_qoderSamples": "🔴 09-24 第二轮（百炼 flash / Qoder flash ×2 / v4.1-flash，12 格同轮）：均分 34.5 / **28.3 / 30.5** / 34.4（/40）。百炼 vs Qoder#1 **11:1 p=0.006**；Qoder#1 vs v4.1 **2:10 p=0.039** ⇒ ⛔ **Qoder 免费版 ≠ 百炼版的表现**（答案短 1/2~2/3、快 3–5 倍 ⇒ 疑似默认思考更低），⛔ 不能互相代测或合并样本。百炼 flash vs v4.1 复评仍打平（7:5）。"
   },
   "spaceBunnyEval_20260929": {
+    "📜 _status": "历史记录：被测的 T0 条目 stealth/space-bunny-alpha 于 2026-10-06 因 OpenRouter 下线（404）而删除；本评测数据保留作横向参考，⛔ 不要再据此派发该模型。",
     "_question": "OpenRouter 免费隐身模型 Space Bunny Alpha 能不能当 T0 免费档用（用户 2026-09-29 要求用三道评分题免费测一轮）",
     "_armToModel": {
       "orBunny": "stealth/space-bunny-alpha",
@@ -3291,7 +3262,7 @@
     "caveat": "官方注明活动期间 Qwen3.8-Flash 用量大，高峰时段可能响应较慢。",
     "source": "用户 2026-10-02 转发 Qoder CN 文档站截图（URL 不在截图里，未核）",
     "verifiedByAgent": "2026-10-02 `qoderclicn -p -m Qwen3.8-Flash -o json` 实测：success / is_error=false / total_credits=0 / 2638ms —— ⭐ 原定截止 09-30 之后仍免费",
-    "appliedTo": "SKILL.md FREE_POOL qfmodel.freeUntil 改为 None（截止未公布，与 Space Bunny 同口径）；⚠️ 同时给 None 条目补上失效条件：probe-models.sh 对 qfmodel 判 total_credits>0、对 openrouter-* 判 usage.cost>0 ⇒ 已计费",
+    "appliedTo": "SKILL.md FREE_POOL qfmodel.freeUntil 改为 None（截止未公布，与 Space Bunny 同口径；📜 OpenRouter 那条已于 2026-10-06 因模型下线删除）；⚠️ 同时给 None 条目补上失效条件：probe-models.sh 对 qfmodel 判 total_credits>0、对 openrouter-* 判 usage.cost>0 ⇒ 已计费",
     "whyNeedInvalidationCheck": "官方只说结束时间会在公告页提前通知，agent 读不到；免费一结束，模型照样答得动、只是开始扣费 ⇒ 光靠「探活通过」会一直当免费用（同 09-11「答得动 ≠ 还免费」）。同一缺口上一批对 Space Bunny 也存在（freeUntil=None 却无计费探测），一并补了（OpenRouter 响应自带 usage.cost，已实测为 0）。"
   },
   "🔴 spaceBunnyCb_20261002": {

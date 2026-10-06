@@ -1,5 +1,60 @@
 # Rift Dispatch — 变更记录
 
+## v11.13 (2026-10-06) — 下线 Space Bunny（OpenRouter）· 免费池剩 `hy3` / `qfmodel`
+
+**用户要求（原文，m07513）：「之前配置的 Space Bunny Alpha（OpenRouter 免费·隐身模型）已经不可用了吗？
+帮我测试下，如果不可用了，帮我删除了」**
+
+### 判定依据（两条独立证据）
+
+1. **探活** `probe-models.sh openrouter-free/stealth/space-bunny-alpha` ⇒ `❌ HTTP 404 模型不存在 / 已下线
+   No endpoints found for stealth/space-bunny-alpha. 〔模型级〕`（脚本同时判定「通道是通的」⇒ ⛔ 不是网络 / key 问题）。
+2. **上游清单** `curl -s https://openrouter.ai/api/v1/models`（**464** 个模型）里含 `bunny` / `stealth` 的 id = **0**
+   ⇒ 不是改名，是整条下架（隐身预览模型的预期形态）。
+
+### 改动（按 SKILL §1「下线一个免费模型只改数据」的口径）
+
+- **`FREE_POOL`**：删除 priority 1 那条 ⇒ 现役两条 `hy3`(1) / `qfmodel`(2)。`free_cautions` 分支随之构造不出来，
+  已打 `# pragma: unreachable-by-config`，并新增 **consistency-check §3m-bis** 守卫（免费条目的
+  `cautionTaskTypes` 一旦非空 ⇒ 报红要求删豁免并补用例）。
+- **`WHITELIST`**：删除 `'openrouter-free': ['stealth/space-bunny-alpha']` 整个键 ⇒ 显式 `--provider openrouter-free`
+  落「未知 provider」被拦（它从来不在 `EXEMPT_PROVIDERS` 里）；`PI_HOSTED` 移除该 provider。
+- **`model-catalog.json`**：`version` 6.45.0 → **6.46.0**；`freePool.entries` 删该条；`whitelist` 删该键；
+  `models['stealth/space-bunny-alpha']` 标 `🔴 retired` 并保留历史评测（`shortNames` 缩写保留，历史标题仍可读）。
+- **`model-routing.md`**：T0 链 `hy3`→① / `qfmodel`→②；白名单表删该行；§2.b 表删该模型行；多模态 / 并发提醒文字改口径。
+- **`scripts/probe-models.sh`**：`DEFAULT` 首行删除（consistency ⑩ 要求前 N 项逐字等于 FREE_POOL）；openrouter
+  直连探活代码路径**保留**（通用实现，便于将来重加）。
+- **`scripts/pipeline-test.py`**：T0 用例表重写（17 处定点替换）—— 默认落点改 `hy3`、冷却链改 `qfmodel`、
+  「显式 `--provider openrouter-free`」两条**反转**成 `block='unknown'`；并新增「显式 provider 拿不到、付费档也没有它
+  ⇒ `block='mismatch'`」补回错配分支的覆盖率。
+- **`scripts/cooldown-test.sh`**：第 4 项「带 `/` 的 model 存嵌套键」改借中性假 id `sample-provider nested/model-name`
+  （⛔ 别把断言一起删 —— 它测的是嵌套键语义）。
+- **用户侧 pi 配置**（本仓之外，已一并删除）：`~/.pi/agent/models.json` 整条 `openrouter-free` provider、
+  `models-store.json` 里同名模型对象、`settings.json` 默认值 `openrouter` / `stealth/space-bunny-alpha`
+  → `volcengine-coding` / `deepseek-v4.1-flash`；备份 `~/AgentWorkspace/cache/backups/pi-openrouter-free-removal-2026-10-06/`。
+
+### ⛔ 有意不动
+
+- **cb 的付费 `space-bunny` 路由**（x0.03，白名单里显式可派）—— 与 OpenRouter 版是两回事。
+- **钥匙串 `openrouter` 通用密码项**（凭据轮换按 m06899 ⛔ 不管；且可能被其它工具共用）。
+
+### 验证
+
+| 校验 | 结果 |
+| --- | --- |
+| `scripts/pipeline-test.py` | ✅ **146 / 146** |
+| `scripts/consistency-check.py` | ✅ rc=0 |
+| `scripts/coverage-check.py` | ✅ **100.0 %**（应覆盖 269 行 · 未覆盖 0 · 豁免 1） |
+| `scripts/cooldown-test.sh` | ✅ 19 / 0 |
+| `scripts/probe-models-test.sh` | ✅ 53 / 0 |
+| `scripts/billing-test.py` | ✅ 24 / 24 |
+
+**负向控制**（证明守卫不是摆设；各做一次「弄坏它」实验后复原）：
+① 把 `hy3` 的 `cautionTaskTypes` 改成 `{'concurrency_impl'}` ⇒ §3m-bis ❌ 报红；
+② 给 `tier_substitutions.append` 行加 pragma ⇒ §3m ❌ 报红「`deepseek-v4.1-flash` 的 peer provider
+`['codebuddy-code']` 不在它的 WALLET_PREF 池里」。②顺带暴露：§3m 原闸门（「§2 里任何代码行带 pragma」）
+会被无关的新豁免无端唤醒 ⇒ 本次改为**按自己的代码行上闸**。
+
 ## v11.12 (2026-10-06) — 审查默认迁 codex（CLI）· 屏蔽 copilot 全族 · 降级阶梯
 
 **用户决定（原文）：「评审换成 codex，限额度了就换个其他模型即可。」**

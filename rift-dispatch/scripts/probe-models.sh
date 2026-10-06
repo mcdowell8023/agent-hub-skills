@@ -40,9 +40,9 @@ PROBE_DIR="${TMPDIR:-/tmp}/rift-probe"; mkdir -p "$PROBE_DIR"
 
 S="$(cd "$(dirname "$0")" && pwd)"
 # 🔴 2026-09-24 同步：cb 已移出 T1 池（cb 上 T1 改落 glm）；火山 coding 09-23 已进池（此前漏写）
-# ⭐ 2026-09-29 T0 免费池三条按 priority 排在最前（与 SKILL FREE_POOL 同序）
-DEFAULT=(openrouter-free/stealth/space-bunny-alpha
-         codebuddy-code/hy3
+# ⭐ T0 免费池按 priority 排在最前（与 SKILL FREE_POOL 同序）
+#    📜 2026-10-06：原 priority 1 的 openrouter-free/stealth/space-bunny-alpha 已下线（404）并删除 ⇒ 现为两条
+DEFAULT=(codebuddy-code/hy3
          qoderclicn/qfmodel
          codex/codex
          volcengine-coding/deepseek-v4.1-flash

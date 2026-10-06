@@ -17,9 +17,9 @@
 
 ```
 T0  免费档   按 FREE_POOL 的 priority 取第一个可用的（⭐ 登记表驱动，新增 / 下线免费模型⛔不改逻辑，只改数据，2026-09-29）
-     ① or/stealth/space-bunny-alpha @high   0.00x   OpenRouter 隐身预览模型，截止未公布；⚠️ 并发实现类只提醒
-     ② cb/hy3 @max                          0.00x   免费至 **10-31** 23:59（10-01 官方二次延期，原 09-30）；avoid 算法 / 性能 / 架构
-     ③ qcn/qfmodel @none                    0.00x   Qoder 版 Qwen3.8-Flash，截止未公布（10-01 官方延期）；avoid 算法 / 性能；无思考档
+     ① cb/hy3 @max                          0.00x   免费至 **10-31** 23:59（10-01 官方二次延期，原 09-30）；avoid 算法 / 性能 / 架构
+     ② qcn/qfmodel @none                    0.00x   Qoder 版 Qwen3.8-Flash，截止未公布（10-01 官方延期）；avoid 算法 / 性能；无思考档
+     📜 原 ① 的 or/stealth/space-bunny-alpha 2026-10-06 因 OpenRouter 下线（404）已删除，⛔ 不再探测 / 派发
               ↓ 逐条按【该条目】判（§2）：冷却中 / 本任务无响应或做砸 / 接不了多模态 / 能力 avoid / 过期未复核 / 探活不过
 T1  低价档   deepseek-v4.1-flash  @xhigh          付费档起步 —— 🔴 三池轮换：火山 coding · 火山 agent-plan · 百炼
              🔴 cb 上改用同档 glm-5.3-flash（0.06x）—— 2026-09-24 cb 的 v4.1 涨到 0.11x，已移出其池
@@ -47,16 +47,17 @@ T4  极致档   cb/kimi-k3-1         @xhigh  1.62x   🔴 红线，见 §3.3（�
 ### 免费档时间线
 
 > 🔗 **同一模型在 cb 上的付费路由（2026-10-02）**：CodeBuddy 内置了 `space-bunny`（x0.03，限时折扣 10-02 ~ 10-07，折后价未知），
-> 与下面 priority 1 的 OpenRouter Space Bunny **大概率同一模型**（tokenizer 指纹不可区分，权重同一性未证实）。
+> 与 📜 **已下线的 OpenRouter Space Bunny**（原 T0 priority 1，2026-10-06 下线）**大概率同一模型**（tokenizer 指纹不可区分，权重同一性未证实）。
 > ⛔ 它不是免费条目、⛔ 不自动选——cb 路由没评测过（Qoder 版 Qwen3.8-Flash 与百炼版同名却显著更弱的前车之鉴），
-> 只在 cb 白名单里供**显式点名**；OpenRouter 版下线（404）时它大概率是同一模型的延续（⚠️ 权重同一性未证实，表现需先在 cb 路由评测）。详见 §1 表与 catalog `spaceBunnyCb_20261002`。
+> 只在 cb 白名单里供**显式点名**；OpenRouter 版已于 2026-10-06 下线（404）⇒ 它是否是同一模型的延续仍未证实，表现需先在 cb 路由评测。详见 §1 表与 catalog `spaceBunnyCb_20261002`。
 
 ```
-stealth/space-bunny-alpha  OpenRouter 2026-09-23 上架，截止未公布（预览期，随时可能下线）⇒ T0 priority 1
 hy3                        免费期二次延长至 2026-10-31 23:59（CodeBuddy&混元官方 2026-09-30 公告，用户 10-01 转发；
-                           此前 09-15 告知的是 09-30 止）⇒ T0 priority 2
+                           此前 09-15 告知的是 09-30 止）⇒ T0 priority 1
 qfmodel                    Qoder 版 Qwen3.8-Flash：原定 2026-09-30，Qoder CN 官方公告延期、10-01 起继续免费，
-                           「结束时间将提前在本页公告」⇒ 截止未公布（freeUntil=None）⇒ T0 priority 3
+                           「结束时间将提前在本页公告」⇒ 截止未公布（freeUntil=None）⇒ T0 priority 2
+stealth/space-bunny-alpha  🔴 2026-10-06 已下线（探活 HTTP 404 No endpoints found；OpenRouter 公开清单
+                           464 个模型里已无含 bunny / stealth 的 id）⇒ 条目已从 FREE_POOL / 白名单 / 探活默认表删除
                            🔴 靠探活的 total_credits 兜（>0 ⇒ 已计费）；仅个人用户，企业订阅不适用
 hy4-preview                08-28 ~ 09-10 免费期已过；🔴 2026-09-15 用户弃用（不稳定，「碰墙」形态的来源）
                            2026-09-24 面板显示 0.29x
@@ -64,7 +65,7 @@ hy4-preview                08-28 ~ 09-10 免费期已过；🔴 2026-09-15 用�
 hy3-x                      ⛔ 从来不是免费档（0.05x），无派发角色
 ```
 
-⚠️ **11-01 起若 hy3 不再延期 ⇒ 免费池只剩 Space Bunny + qfmodel**（两者都是截止未公布）；都结束 / 下线 ⇒ T0 清零，默认落点变成 T1。
+⚠️ **11-01 起若 hy3 不再延期 ⇒ 免费池只剩 qfmodel**（截止未公布）；它也结束 / 下线 ⇒ T0 清零，默认落点变成 T1。
 🔴 「截止未公布」⛔ 不等于永久免费：免费一结束，模型照样答得动、只是开始扣费 ⇒ 靠探活里的计费探测兜
 （qcn `total_credits` > 0 / OpenRouter `usage.cost` > 0 ⇒ 已计费 ⇒ 冷却 24h 并报告；⛔ 读不到这两个字段也按「无法确认免费」处理——fail-closed；
 consistency §3o ⑬ 强制每个 None 条目都带这类探测，且只认探活脚本的【非注释代码】）。
@@ -85,7 +86,7 @@ consistency §3o ⑬ 强制每个 None 条目都带这类探测，且只认探�
 
 ## 1. Provider 白名单（P0，优先级最高于一切）
 
-**对【白名单 provider】（`codebuddy-code` / `qoderclicn` / `openrouter-free`）：不在其清单里的 model id 一律禁止派发**，包括本文件其它表格里出现过的。冲突时以本表为准。
+**对【白名单 provider】（`codebuddy-code` / `qoderclicn`；📜 `openrouter-free` 随 Space Bunny 2026-10-06 下线一并移除）：不在其清单里的 model id 一律禁止派发**，包括本文件其它表格里出现过的。冲突时以本表为准。
 ⚠️ **豁免 provider** 走**另一套**校验 —— 它们不消耗 cb/qcn 额度，⛔ 不受本表约束。
 🔴 **校验对象是 `split_provider()` 之后的 upstream，⛔ 不是顶层 `pi`。**
 ⛔ `pi` 是**宿主**，把它当豁免会让 `pi/jdcloud-joyagent/...` 整条绕过 upstream 校验（0909 第 6 轮审查）。
@@ -94,9 +95,9 @@ consistency §3o ⑬ 强制每个 None 条目都带这类探测，且只认探�
 
 | Provider | model id | 费率 | 角色 |
 |---|---|---|---|
-| `openrouter-free` | **`stealth/space-bunny-alpha`** | **0** | ⭐ T0 免费池 priority 1（2026-09-29）。🔴 白名单型：同一把 key 能调 347 个模型（大多收费），⛔ 只放这一个 |
-| `codebuddy-code` | **`hy3`** | **0.00x** | ⭐ T0 免费池 priority 2（免费至 **10-31**，10-01 二次延期） |
-| `qoderclicn` | **`qfmodel`** | **0.00x** | ⭐ T0 免费池 priority 3（Qwen3.8-Flash，截止未公布，10-01 官方延期）。⚠️ ⛔ 不等于百炼版（09-24 第二轮显著更弱） |
+| `codebuddy-code` | **`hy3`** | **0.00x** | ⭐ T0 免费池 priority **1**（免费至 **10-31**，10-01 二次延期） |
+| `qoderclicn` | **`qfmodel`** | **0.00x** | ⭐ T0 免费池 priority **2**（Qwen3.8-Flash，截止未公布，10-01 官方延期）。⚠️ ⛔ 不等于百炼版（09-24 第二轮显著更弱） |
+| 📜 `openrouter-free` | ~~`stealth/space-bunny-alpha`~~ | 0 | 🔴 2026-10-06 已下线（404）⇒ 条目删除、provider 移出白名单与 `PI_HOSTED`；⛔ 不再探测 / 派发 |
 | `codebuddy-code` | `hy4-preview` | 0.29x（白天）/ 0.00x（夜间 23:00-08:00，10-01 官方延至 10-31） | ⚠️ 仍在白名单，但 09-15 起⛔不自动派（不稳定，与免费窗口无关） |
 | 火山两套餐 · 百炼 | **`deepseek-v4.1-flash`** | 包月 | 🔴 T1 主落点·三池轮换·必须校验产出 |
 | `codebuddy-code` | `deepseek-v4.1-flash` | **0.11x** | ⚠️ 仍在白名单（可显式点名），2026-09-24 起⛔不自动选 —— 贵过同档 glm |
@@ -167,7 +168,7 @@ consistency §3o ⑬ 强制每个 None 条目都带这类探测，且只认探�
 
 🔴 **2026-09-29 起全部按【条目】判**（`FREE_POOL`，SKILL §2）：某条命中 ⇒ **只跳过那一条**，接着试下一条；
 三条都拿不到才进付费阶梯。⛔ 不再有「跳过整个 T0」的全局清单 —— 那张清单本来只对 hy3 有依据，
-套在 Space Bunny 上会白白放弃一个与 T1 同档的免费落点；cb 撞 429 也⛔不该连带跳过 OpenRouter / Qoder。
+套在 Space Bunny 上会白白放弃一个与 T1 同档的免费落点；cb 撞 429 也⛔不该连带跳过 qfmodel。（📜 Space Bunny 2026-10-06 下线后，现役免费条目只剩 hy3 / qfmodel，规则不变。）
 ⚠️ ⛔ 这只决定「用不用某个免费落点」——**付费起步档另按 §6 / catalog `entryTier` 定**（`algorithm`/`perf` → T2，其余 T1）。
 
 ### 2.a 物理不可用 —— ⛔ `--free` 也不放宽
@@ -176,7 +177,7 @@ consistency §3o ⑬ 强制每个 None 条目都带这类探测，且只认探�
 
 | 条件（按该落点判） | 代号 | 依据 |
 |---|---|---|
-| 任务要图像 / 视频，而该条目 `multimodal=false` | `multimodal` | cb 官方 0802 公告：会切多模态模型并**正常计费**（Space Bunny 能免费接图 / 视频） |
+| 任务要图像 / 视频，而该条目 `multimodal=false` | `multimodal` | cb 官方 0802 公告：会切多模态模型并**正常计费**（📜 原 Space Bunny 能免费接图 / 视频，2026-10-06 下线后现役两条都 `multimodal=false`） |
 | 撞额度后仍在冷却期 | `quota_cooldown` | 冷却记录 `~/.cache/rift-dispatch/cooldown.json`（SKILL §2 失败信号表） |
 | 探活不过（排队 / 不回复 / 报错） | `probe_failed` | cb 官方 0802 公告：繁忙进排队，长任务会卡住 |
 | 该落点在本任务里反复无响应（≥2 次） | `no_response` | `dead_landings`，⛔ 不许原地无限重派 |
@@ -189,7 +190,6 @@ consistency §3o ⑬ 强制每个 None 条目都带这类探测，且只认探�
 
 | 条目 | avoid | 依据 |
 |---|---|---|
-| `stealth/space-bunny-alpha` | — | 09-29 三题 12 格同轮，与三个付费对照臂（T1 的 v4.1 / glm + T3 的 qwen3.8-max）逐格都 6:6（⚠️ 对照臂复用 09-24 答案重新评审）；并发题（诊断 + 修复代码）30.0 偏弱，失分在修复代码（扣余额漏乘数量、字段风格不一致）⇒ `concurrency_impl` **只提醒**（用户 09-29 D3） |
 | `hy3` | `algorithm` · `perf` · `architecture` | hy3 盲评 LRU **22 分**；perf 无实测支撑；catalog `avoidFor: architecture-deep` |
 | `qfmodel` | `algorithm` · `perf`（perf 是 10-02 agent 推导所定，⛔ 非待决） | 09-24 第二轮 Qoder 版 LRU 19.5 / 23.2（其余臂 30–32）；perf 无实测，与 hy3 同理按 algorithm 同类保守；Kafka 34.0 / 35.5 同档 ⇒ ⛔ 不扩到 architecture |
 
@@ -637,7 +637,7 @@ copilot 全族已死 ⇒ Paseo 侧没有可用审查 provider。若将来 Paseo 
 
 链条读法：**T0 免费池逐条试（§2 按条目判）→ 都拿不到则从下表的起步档进 → 按【质量/成本升档】（做砸一轮）才升下一档。**
 ⚠️ **可用性换档⛔不受此约束**：该档所有 provider 都拿不到时可向上换档（必须报告），见 §8。
-标 ⛔ 的行是 **hy3 / qfmodel 的能力短板**（⚠️ 09-29 起 Space Bunny 照常可接）；⚠️ **它们的付费起步档不一样**，见下方拆分表。
+标 ⛔ 的行是 **hy3 / qfmodel 的能力短板**；⚠️ **它们的付费起步档不一样**，见下方拆分表。
 
 | 代号 | 识别关键词 | 落点 |
 |---|---|---|
@@ -650,9 +650,9 @@ copilot 全族已死 ⇒ Paseo 侧没有可用审查 provider。若将来 Paseo 
 | `bugfix` | 报错/坏了/排查/定位根因 | T0 → T1 ⚠️ hy3 的「并发诊断 36.5 最高」是 07-20 单次，08-21 同题只有 29，见 §2 |
 | `kb` | 知识库/KB 整理/文档分类标签 | T0 → T1 |
 | `concurrency_diag` | 并发**诊断**：排查竞态/超卖/幂等问题 | T0 → T1（🔴 09-10 起；原 T2，见下方拆分表） |
-| `concurrency_impl` | **写**并发原语/锁/事务实现 | T0 → T1（同上；⚠️ Space Bunny 做它只提醒） |
+| `concurrency_impl` | **写**并发原语/锁/事务实现 | T0 → T1（同上） |
 | ⛔ `perf` | 性能/优化/O(n)/大数据量 | T0（跳过 hy3 / qfmodel）→ **T2** 起步 |
-| ⛔ `algorithm` | 算法/数据结构/精细编码 | T0（跳过 hy3 / qfmodel，⭐ Space Bunny 照常可接）→ **T2** 起步 |
+| ⛔ `algorithm` | 算法/数据结构/精细编码 | T0（跳过 hy3 / qfmodel）→ **T2** 起步 |
 | ⛔ `architecture` | 选型/拓扑/一致性方案/技术方案定稿 | T0（跳过 hy3）→ **T1** 起步 ← 🔴 2026-08-28 改（原 T2） |
 | `review` | review/审核/检查/交叉检查 | **硬例外**，不进本链。默认 `codex`（CLI，§5）—— 选出的组合照样过 validate() |
 
@@ -667,15 +667,16 @@ copilot 全族已死 ⇒ Paseo 侧没有可用审查 provider。若将来 Paseo 
 | `perf` | hy3 · qfmodel | **T2** v4-flash | ⚠️ 无 perf 实测，按 algorithm 同类保守处理 |
 | `architecture` | hy3 | **T1** deepseek-v4.1-flash | hy3 `avoidFor: architecture-deep` ⇒ 跳过 hy3；🔴 h2h Kafka **glm 36 > v4-flash 31** |
 | `concurrency_diag` | 无 | **T1** deepseek-v4.1-flash | 🔴 09-10 起：catalog `v41FlashEval_20260910` 并发题 v4.1 **37.5** > v4-flash 30.5（+7 分，4 朝向全胜）⇒ 跳过 T1 既贵又更差。📜 原依据「h2h 并发题 v4-flash 35 > glm 31」比的是 glm，⛔ 没比过 v4.1 |
-| `concurrency_impl` | 无（⚠️ Space Bunny 只提醒） | **T1** deepseek-v4.1-flash | 同上。⚠️ 那道并发题是「找 bug + 给修复代码」，纯「写并发原语」没有单独实测；原先「写实现比诊断更吃精细度」是推测，⛔ 无数据 |
+| `concurrency_impl` | 无 | **T1** deepseek-v4.1-flash | 同上。⚠️ 那道并发题是「找 bug + 给修复代码」，纯「写并发原语」没有单独实测；原先「写实现比诊断更吃精细度」是推测，⛔ 无数据 |
 
 🔴 **`architecture` 这条 2026-08-28 改了。** 旧规则写「T2 起步，因为 v4-flash 重测 Kafka 34 反超 v4-pro 的 31」——
 那句话说的是 **v4-flash 与 v4-pro** 的关系，⛔ 从头到尾没涉及 glm。
 头对头实测后 glm 在这题反超 5 分，所以架构类没有理由跳过更便宜的 T1。
 
-⚠️ **`concurrency` 仍要先判子类**——09-10 起两类的付费起步档相同（都是 T1），但 `concurrency_impl` 会触发免费池的
-`cautionTaskTypes`（Space Bunny 的提醒）；`classify()` 产出的是 `concurrency_diag` / `concurrency_impl`，
-⛔ 不是裸的 `concurrency`（裸值落空，付费起步档碰巧也是 T1，但免费池那条提醒就丢了）。
+⚠️ **`concurrency` 仍要先判子类**——09-10 起两类的付费起步档相同（都是 T1）；`classify()` 产出的是
+`concurrency_diag` / `concurrency_impl`，⛔ 不是裸的 `concurrency`（裸值落空，付费起步档碰巧也是 T1）。
+📜 原 `cautionTaskTypes` 提醒来自 Space Bunny 的 concurrency_impl 弱点（用户 09-29 D3）；该模型 2026-10-06 下线后
+现役两条免费条目的 `cautionTaskTypes` 都是空集 ⇒ 免费池不再产生提醒（字段与机制保留）。
 
 **多标签冲突裁决**：实现动词（"开发""写"）> 领域关键词（"并发""API"）> 修饰词（"优化""清理"）。
 
@@ -991,7 +992,7 @@ P2  审查硬例外（§5）                 模型**默认** codex（CLI；模�
         codex 撞额度 ⇒ 降级阶梯 qfmodel → hy3 → glm-5.3-flash（显式告知用户，⛔ 不许悄悄换）
 P3  ⚠️ Claude 模型可派不推荐         消耗订阅额度，建议留给主会话
 P4  运行环境约束                     --hub 时确认 provider 在 Hub 可用
-P5  免费档（§0 T0 + §2 按条目判）   FREE_POOL：Space Bunny（截止未公布）> hy3（免费至 10-31）> qfmodel（截止未公布）
+P5  免费档（§0 T0 + §2 按条目判）   FREE_POOL：hy3（免费至 10-31）> qfmodel（截止未公布）（📜 原 priority 1 的 Space Bunny 2026-10-06 下线）
 P6  任务类型 → 落点（§6）
 P7  成本优化                         同模型多 provider 时选最便宜的
 P8  Provider 降级（§8）

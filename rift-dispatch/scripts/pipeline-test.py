@@ -166,13 +166,16 @@ PASEO_REPORT = []    # 🔴 Paseo 前置守卫停下时报给用户的 (落点, 
 # 🔴 T0 登记表化后已删除的旋钮 —— 用例里再出现就是**静默失效**（桩不读它，断言照样可能碰巧通过）⇒ 直接判错
 REMOVED_KNOBS = {'blockers': "改用 free_off=True / cooldowns / multimodal / 条目自己的 avoidTaskTypes",
                  'promo_ok': "改用 when=<freeUntil 之后的时间>（窗口由条目 freeUntil 推）"}
-SPACE_BUNNY = 'openrouter-free/stealth/space-bunny-alpha'
+# 📜 2026-10-06：原 T0 priority 1 `openrouter-free/stealth/space-bunny-alpha` 已下线（404；OpenRouter
+#    公开清单 464 个模型里已无含 bunny / stealth 的 id）⇒ 已从 FREE_POOL / WHITELIST / PI_HOSTED / 探活默认表删除。
+#    常量留作「已退役 provider 必被拦」的反例（它同时已移出 EXEMPT_PROVIDERS）。
+RETIRED_FREE = 'openrouter-free'
 HY3, QFM = 'codebuddy-code/hy3', 'qoderclicn/qfmodel'
-# 🔴 三个免费条目里**只有 hy3 有确定截止**（10-31 23:59，CodeBuddy 10-01 公告二次延期）；
-#    Space Bunny（OpenRouter 预览期）与 qfmodel（Qoder CN 10-01 延期公告：「结束时间将提前在本页公告」）都是 freeUntil=None、永不过期。
-#    ⇒ 凡是要测「过期分支」的用例，必须把另外两条冷却掉，否则它们会被选中、测不到 hy3 的过期逻辑。
+# 🔴 现役两条免费条目里**只有 hy3 有确定截止**（10-31 23:59，CodeBuddy 10-01 公告二次延期）；
+#    qfmodel（Qoder CN 10-01 延期公告：「结束时间将提前在本页公告」）是 freeUntil=None、永不过期。
+#    ⇒ 凡是要测「hy3 过期分支」的用例，必须把 qfmodel 冷却掉，否则它会被选中、测不到 hy3 的过期逻辑。
 AFTER_EXPIRY = DT(2026, 11, 2, 15)   # hy3 已过期（10-31 23:59 之后）
-COOL_NON_HY3 = {SPACE_BUNNY: DT(2099, 1, 1), QFM: DT(2099, 1, 1)}   # 只留 hy3 参与 ⇒ 隔离出过期分支
+COOL_NON_HY3 = {QFM: DT(2099, 1, 1)}   # 只留 hy3 参与 ⇒ 隔离出过期分支
 
 CASES = [
  # 拦截类
@@ -224,14 +227,14 @@ CASES = [
  # 🔴 免费窗口已过但仍探活通过 ⇒ ⛔ 不当免费档用（费率未核），但**必须提示**
  #    实测背景：2026-09-11 记录的免费期已过，hy3 仍秒回 ⇒ 延期或已计费，两头都不能赌。
  # 🔴 2026-09-29 T0 登记表化：窗口由条目自己的 freeUntil 推（⛔ 不再桩 promo_active）⇒ 用 when 取到期之后；
- #    Space Bunny 截止未公布（freeUntil=None）永不过期 ⇒ 这组用例都要先把它冷却掉，才轮得到 hy3 / qfmodel。
+ #    qfmodel 截止未公布（freeUntil=None）永不过期 ⇒ 这组用例都要先把它冷却掉（COOL_NON_HY3），才轮到 hy3。
  dict(n='免费窗口过期但仍探活通过 ⇒ 落 T1 且提示费率待核', task_type='core', when=AFTER_EXPIRY,
       cooldowns=COOL_NON_HY3,
       want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash',
                 t0_free_unverified=['hy3'])),
  # ⭐ 窗口过后复核过费率（catalog 已更新）⇒ 照常当免费档用
  dict(n='费率已复核（窗口过后、3 天内）⇒ T0 照常可用', task_type='core', when=DT(2026, 11, 4, 15),
-      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+      cooldowns=COOL_NON_HY3,
       credit_records={HY3: {'credit': 0.0, 'verifiedOn': '2026-11-01'}},
       want=dict(upstream='codebuddy-code', model='hy3', thinking='max', t0_free_unverified=[])),
  # 🔴 2026-09-29 新增：**窗口内核的记录⛔不算过期后的复核** —— 它只证明「促销价是 0」。
@@ -273,7 +276,6 @@ CASES = [
  #    ⛔ 不是「做砸」⇒ ⛔ 不许走质量/成本升档去换模型族。
  # ⭐ 2026-09-29 免费池有三条 ⇒ hy3 反复无响应**只跳过它自己**，⛔ 不连带其它免费条目
  dict(n='hy3 连续无响应 2 次 ⇒ 只跳过 hy3，落下一个免费条目 qfmodel', task_type='core',
-      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
       extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
                        'model': 'hy3', 'shape': 'no_response', 'count': 2}],
       free_probes=[QFM],                         # 🔴 死落点⛔不许再探一次活
@@ -282,7 +284,7 @@ CASES = [
  #    的既有不变量回到轮换落火山 coding。⚠️ 与 09-10「⛔ 不要换 pi」字面冲突（见 SKILL §4 affinity 注释）。
  #    若用户选「留 cb 用 glm」，本条改断言 upstream='codebuddy-code', model='glm-5.3-flash'。
  dict(n='hy3 连续无响应 2 次 + 其它免费条目也不可用 ⇒ 转 T1（affinity=cb 在 T1 主池无作用点）',
-      task_type='core', cooldowns={SPACE_BUNNY: DT(2099, 1, 1), QFM: DT(2099, 1, 1)},
+      task_type='core', cooldowns={QFM: DT(2099, 1, 1)},
       extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
                        'model': 'hy3', 'shape': 'no_response', 'count': 2}],
       want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash')),
@@ -348,101 +350,105 @@ CASES = [
                    'volcengine-agent-plan/deepseek-v4.1-flash',
                    'bailian-token-plan/deepseek-v4.1-flash'},
       want=dict(upstream='volcengine-coding', model='glm-5.3-flash')),
- # ── T0 免费池（2026-09-29 登记表驱动）── 优先级：Space Bunny > hy3 > qfmodel（用户 09-29 定）
- dict(n='T0 默认落 priority 1：OpenRouter Space Bunny @high', task_type='core',
-      free_probes=[SPACE_BUNNY],
-      want=dict(upstream='openrouter-free', model='stealth/space-bunny-alpha', thinking='high',
-                provider='pi/openrouter-free', channel='paseo', free_cautions=[])),
- dict(n='Space Bunny 冷却中 ⇒ 落 priority 2：cb/hy3 @max（⛔ 冷却中的⛔不探活）', task_type='core',
-      cooldowns={SPACE_BUNNY: DT(2026, 9, 10, 18)},
+ # ── T0 免费池（2026-09-29 登记表驱动）── 优先级：hy3(1) > qfmodel(2)
+ #    📜 原 priority 1 的 OpenRouter Space Bunny 2026-10-06 下线（404）⇒ 条目已删
+ dict(n='T0 默认落 priority 1：cb/hy3 @max', task_type='core',
       free_probes=[HY3],
-      want=dict(upstream='codebuddy-code', model='hy3', thinking='max')),
- # ⭐ qfmodel 没有思考档 ⇒ thinking 必须是 None（⛔ 不许被收尾的 default_thinking 补成 xhigh）
- dict(n='Bunny + hy3 都冷却 ⇒ 落 priority 3：qcn/qfmodel，⛔ 不传 thinking', task_type='core',
-      cooldowns={SPACE_BUNNY: DT(2099, 1, 1), HY3: DT(2099, 1, 1)},
+      want=dict(upstream='codebuddy-code', model='hy3', thinking='max',
+                provider='codebuddy-code', channel='paseo', free_cautions=[])),
+ dict(n='hy3 冷却中 ⇒ 落 priority 2：qcn/qfmodel（⛔ 冷却中的⛔不探活）', task_type='core',
+      cooldowns={HY3: DT(2026, 9, 10, 18)},
+      free_probes=[QFM],
       want=dict(upstream='qoderclicn', model='qfmodel', provider='qoderclicn', thinking=None)),
+ # ⭐ qfmodel 没有思考档 ⇒ thinking 必须是 None（⛔ 不许被收尾的 default_thinking 补成 xhigh）
+ #    📜 原「第三条 priority 3 = Bunny」下线后免费池只剩两条 ⇒ 「两条都不可用」= 直接进付费阶梯
+ dict(n='hy3 + qfmodel 都冷却 ⇒ 免费池清零 ⇒ 进 T1（⛔ 不静默卡在 T0）', task_type='core',
+      cooldowns={HY3: DT(2099, 1, 1), QFM: DT(2099, 1, 1)},
+      want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash')),
  dict(n='qfmodel + 显式 --thinking high ⇒ 仍⛔不传（该模型没有思考档）', task_type='core',
-      thinking='high', cooldowns={SPACE_BUNNY: DT(2099, 1, 1), HY3: DT(2099, 1, 1)},
+      thinking='high', cooldowns={HY3: DT(2099, 1, 1)},   # ⚠️ hy3 现在是 priority 1，必须挡掉才轮到 qfmodel
       want=dict(model='qfmodel', thinking=None)),
  # ⭐ 冷却记录**已过期** ⇒ ⛔ 不算阻断
  # 🔴 审查 A ❌2：T0 选中的落点 ⛔ 不在 §5 再探第二次（否则第二次失败会直接停，不试下一个免费条目）
  dict(n='T0 选中后 ⛔ 不再探第二次', task_type='core',
-      unavailable={SPACE_BUNNY},              # 若 §5 再探就会 NoLanding —— 这条就是要证明它不会
-      free_probes=[SPACE_BUNNY], probes=[],
-      want=dict(model='stealth/space-bunny-alpha')),
+      unavailable={HY3},                      # 若 §5 再探就会 NoLanding —— 这条就是要证明它不会
+      free_probes=[HY3], probes=[],
+      want=dict(model='hy3')),
  # 🔴 审查 A ❌1：显式 --model 给了免费 / 白名单型号但⛔没给 provider ⇒ 按白名单找它的 provider，⛔ 不落成 cb/<它>
  dict(n='显式 --model qfmodel（无 provider）⇒ 落 qcn，⛔ 不当 cb 型号', task_type='core', model='qfmodel',
       want=dict(upstream='qoderclicn', model='qfmodel', thinking=None)),
- dict(n='显式 --model stealth/space-bunny-alpha（无 provider）⇒ 落 OpenRouter @high', task_type='core',
-      model='stealth/space-bunny-alpha',
-      want=dict(upstream='openrouter-free', provider='pi/openrouter-free', thinking='high')),
+ dict(n='显式 --model hy3（无 provider）⇒ 按白名单落 cb @max', task_type='core',
+      model='hy3',
+      want=dict(upstream='codebuddy-code', provider='codebuddy-code', thinking='max')),
  dict(n='显式 --model qmodel_38max（无 provider）⇒ 落 qcn（顺带修掉的旧同形）', task_type='core',
       model='qmodel_38max', want=dict(upstream='qoderclicn', model='qmodel_38max')),
  # ⭐ 反例：不在任何池、也不在任何白名单里的型号 ⇒ 仍合成 cb 落点 ⇒ 白名单拦（⛔ 不替用户猜 provider）
  dict(n='显式 --model 不在任何池/白名单（无 provider）⇒ 合成 cb ⇒ 白名单拦', task_type='core',
       model='grok-4.6', block='conflict'),
- dict(n='冷却已过期 ⇒ 照常落 Space Bunny', task_type='core',
-      cooldowns={SPACE_BUNNY: DT(2026, 9, 10, 14)},
-      want=dict(model='stealth/space-bunny-alpha')),
- dict(n='显式 --thinking low ⇒ Space Bunny 用 low（⛔ 不被条目默认 high 覆盖）', task_type='core',
-      thinking='low', want=dict(model='stealth/space-bunny-alpha', thinking='low')),
- # 🔴 2026-10-01 CodeBuddy 二次延期：hy3 → 10-31 23:59；Space Bunny / qfmodel 截止都未公布（freeUntil=None，永不过期）
- #    ⇒ hy3 到期后免费池里仍有这两条；Bunny 排在最前，所以这里落 Bunny
- dict(n='11-01 起 hy3 已到期 ⇒ Space Bunny（截止未公布）仍可用', task_type='core', when=DT(2026, 11, 1, 15),
-      want=dict(model='stealth/space-bunny-alpha', t0_free_unverified=[])),
- # ⭐ 正面回归：10-01 ~ 10-31 23:59（hy3 延期窗口内）⇒ hy3 仍正常当选，⛔ 不提前判过期
- #    这条直接验证「二次延期生效」——若 SKILL 的 freeUntil 没跟着改，这里会落 Space Bunny 而不是 hy3
- dict(n='10-15（hy3 在延期窗口内）⇒ 正常落 hy3（qfmodel 排在它后面，⛔ 不抢位）', task_type='core',
-      when=DT(2026, 10, 15, 15), cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},   # ⚠️ 必须挡掉优先级更高的 Bunny，否则测不到 hy3
+ dict(n='冷却已过期 ⇒ 照常落 hy3', task_type='core',
+      cooldowns={HY3: DT(2026, 9, 10, 14)},
+      want=dict(model='hy3')),
+ dict(n='显式 --thinking low ⇒ hy3 用 low（⛔ 不被条目默认 max 覆盖）', task_type='core',
+      thinking='low', want=dict(model='hy3', thinking='low')),
+ # 🔴 2026-10-01 CodeBuddy 二次延期：hy3 → 10-31 23:59；qfmodel 截止未公布（freeUntil=None，永不过期）
+ #    ⇒ hy3 到期后免费池里仍有 qfmodel ⇒ 落它，并把 hy3 记进「窗口已过但仍探活通过 ⇒ 费率待核」
+ dict(n='11-01 起 hy3 已到期 ⇒ qfmodel（截止未公布）仍可用', task_type='core', when=DT(2026, 11, 1, 15),
+      want=dict(model='qfmodel', t0_free_unverified=['hy3'])),
+ # ⭐ 正面回归：10-01 ~ 10-31 23:59（hy3 延期窗口内）⇒ hy3 正常当选，⛔ 不提前判过期
+ #    这条直接验证「二次延期生效」——若 SKILL 的 freeUntil 没跟着改，这里会落 qfmodel 而不是 hy3
+ dict(n='10-15（hy3 在延期窗口内）⇒ 正常落 hy3（priority 1，⛔ 不提前判过期）', task_type='core',
+      when=DT(2026, 10, 15, 15),
       want=dict(upstream='codebuddy-code', model='hy3', thinking='max', t0_free_unverified=[])),
  # 🔴 2026-10-02 Qoder CN 官方公告：原定 09-30 的免费期延长，10-01 起继续免费，「结束时间将提前在本页公告」
  #    ⇒ qfmodel freeUntil=None（截止未公布，与 Space Bunny 同口径）。⭐ 实测原定 09-30 之后 total_credits 仍为 0。
  #    RED 依据：改前 qfmodel 按 09-30 过期 ⇒ 这里会落 T1，而不是 qfmodel。
- dict(n='qfmodel 截止未公布 ⇒ hy3 到期、Bunny 冷却后仍落 qfmodel（10-02 官方延期）', task_type='core',
-      when=AFTER_EXPIRY, cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+ dict(n='qfmodel 截止未公布 ⇒ hy3 到期后仍落 qfmodel（10-02 官方延期）', task_type='core',
+      when=AFTER_EXPIRY,
       want=dict(upstream='qoderclicn', model='qfmodel', provider='qoderclicn', thinking=None,
                 t0_free_unverified=['hy3'])),
  dict(n='qfmodel 不会因为日期老而过期（2027-06 仍可当选）', task_type='core', when=DT(2027, 6, 1, 15),
-      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
       want=dict(model='qfmodel', t0_free_unverified=['hy3'])),
- # 🔴 D3（用户 09-29）：Space Bunny 做并发实现类**只提醒不排除**（并发题 30.0，漏乘数量 / 字段风格不一致）
- dict(n='concurrency_impl ⇒ 仍落 Space Bunny，但必须带提醒', task_type='concurrency_impl',
-      want=dict(model='stealth/space-bunny-alpha',
-                free_cautions=[('stealth/space-bunny-alpha', 'concurrency_impl')])),
- # ⭐ 能力短板是【条目】的属性（avoidTaskTypes），⛔ 不再全局套在所有免费模型上 ——
- #    那张清单本来只对 hy3 有依据；Space Bunny 的 LRU 32.2 与 T1 同档
- dict(n='algorithm ⇒ Space Bunny 照常接（它没有 avoid）', task_type='algorithm',
-      want=dict(model='stealth/space-bunny-alpha')),
+ # 📜 D3（用户 09-29）原是对 Space Bunny 的 `concurrency_impl` 提醒；它 2026-10-06 下线后
+ #    现役两条免费条目的 `cautionTaskTypes` 都是空集 ⇒ 落 hy3 且**不产生提醒**（字段与机制保留）
+ dict(n='concurrency_impl ⇒ 落 hy3，无 caution 提醒（现役条目 caution 为空集）', task_type='concurrency_impl',
+      want=dict(model='hy3', free_cautions=[])),
+ # ⭐ 能力短板是【条目】的属性（avoidTaskTypes）—— hy3 与 qfmodel 都 avoid algorithm
+ #    ⇒ 免费池整池跳过，直接进付费 T2
+ dict(n='algorithm ⇒ 两条免费条目都 avoid ⇒ 付费 T2 起步', task_type='algorithm',
+      free_probes=[], want=dict(model='deepseek-v4-flash', upstream='volcengine-coding')),
  # qfmodel avoid perf：与 hy3 同一理由（perf 无任何模型的实测，按 algorithm 同类保守处理）；10-02 agent 推导所定，⛔ 非待决
- dict(n='perf + Bunny 冷却 ⇒ hy3/qfmodel 都 avoid ⇒ 付费 T2 起步', task_type='perf',
-      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)}, free_probes=[],
-      want=dict(model='deepseek-v4-flash')),
- dict(n='algorithm + Bunny 冷却 ⇒ hy3/qfmodel 都 avoid ⇒ 付费 T2 起步', task_type='algorithm',
-      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)}, free_probes=[],
+ dict(n='perf ⇒ hy3/qfmodel 都 avoid ⇒ 付费 T2 起步', task_type='perf',
+      free_probes=[], want=dict(model='deepseek-v4-flash')),
+ # 🔴 hy3 冷却⛔ 不能让「另一条也 avoid algorithm」的 qfmodel 溜进来（avoid 按条目判，与冷却无关）
+ dict(n='algorithm + hy3 冷却 ⇒ qfmodel 仍 avoid ⇒ 付费 T2 起步（⛔ 冷却不改变 avoid）', task_type='algorithm',
+      cooldowns={HY3: DT(2099, 1, 1)}, free_probes=[],
       want=dict(model='deepseek-v4-flash', upstream='volcengine-coding')),
- # ⭐ 多模态：Space Bunny 能免费接图（hy3 会被 cb 切到付费多模态模型）
- dict(n='多模态任务 ⇒ Space Bunny 可接', task_type='core', multimodal=True,
-      want=dict(model='stealth/space-bunny-alpha')),
- dict(n='多模态 + Bunny 冷却 ⇒ hy3/qfmodel 物理不可用 ⇒ T1', task_type='core', multimodal=True,
-      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)}, free_probes=[],
-      want=dict(model='deepseek-v4.1-flash')),
+ # ⭐ 多模态：📜 原 Space Bunny 能免费接图；它下线后现役两条都 `multimodal=false`
+ #    （hy3 会被 cb 切到付费多模态模型）⇒ 免费池整池跳过 ⇒ 直接进 T1
+ dict(n='多模态任务 ⇒ 免费池无可接图条目 ⇒ T1', task_type='core', multimodal=True,
+      free_probes=[], want=dict(model='deepseek-v4.1-flash')),
  # ⭐ 本任务里已在某免费落点做砸（有产出不合格）⇒ 只排除那一条
  dict(n='hy3 本任务已做砸 ⇒ 只跳过 hy3，落 qfmodel', task_type='core',
-      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
       extra_failures=[{'tier': None, 'upstream': 'codebuddy-code', 'model': 'hy3',
                        'shape': 'bad_output'}],
       free_probes=[QFM], want=dict(model='qfmodel')),
  # ⭐ 显式 provider ⇒ 只看同 provider 的免费条目（⛔ 不算冲突）
- dict(n='显式 --provider openrouter-free ⇒ Space Bunny', provider='openrouter-free', task_type='core',
-      want=dict(upstream='openrouter-free', model='stealth/space-bunny-alpha')),
+ dict(n='显式 --provider codebuddy-code ⇒ 只看 hy3', provider='codebuddy-code', task_type='core',
+      free_probes=[HY3], want=dict(upstream='codebuddy-code', model='hy3')),
  dict(n='显式 --provider qoderclicn ⇒ 只看 qfmodel', provider='qoderclicn', task_type='core',
       free_probes=[QFM], want=dict(upstream='qoderclicn', model='qfmodel')),
- # 🔴 openrouter-free 是【白名单型】provider（只放这一个模型）⇒ 其它 id ⛔ 一律拦
- dict(n='--provider openrouter-free --model 其它 ⇒ 白名单拦', provider='openrouter-free',
-      model='stealth/other-alpha', task_type='core', block='conflict'),
- dict(n='显式 openrouter-free + Bunny 冷却 ⇒ 付费档没有该 provider ⇒ 报错配并停',
-      provider='openrouter-free', task_type='core', cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
-      block='mismatch', free_report=[(SPACE_BUNNY, ['quota_cooldown'])]),
+ # 🔴 2026-10-06：`openrouter-free` 随 Space Bunny 下线**同时移出白名单与 EXEMPT_PROVIDERS**
+ #    ⇒ 现在任何形式都落「未知 provider」被拦（⛔ 不再是白名单冲突，也⛔不再有错配分支）
+ dict(n='--provider openrouter-free（已退役）⇒ 未知 provider 拦', provider=RETIRED_FREE,
+      task_type='core', block='unknown'),
+ dict(n='--provider openrouter-free --model 任意 ⇒ 同样拦（整个 provider 已退役）', provider=RETIRED_FREE,
+      model='stealth/other-alpha', task_type='core', block='unknown'),
+ # 🔴 显式 provider 再也拿不到它、而付费档里也没有它 ⇒ 必须报错配并停（⛔ 不静默换到别的 provider）
+ #    📜 原借 `openrouter-free + Bunny 冷却` 测这条；该 provider 整族退役后改借 qoderclicn：
+ #    qfmodel 冷却 ⇒ T0 对该 provider 无可用条目 ⇒ T1 是 deepseek-v4.1-flash，它的池与 TIER_PEERS 都没有 qoderclicn。
+ dict(n='显式 --provider qoderclicn（免费条目冷却、付费档没这个 provider）⇒ 报错配并停',
+      provider='qoderclicn', task_type='core', cooldowns={QFM: DT(2099, 1, 1)},
+      block='mismatch', free_report=[(QFM, ['quota_cooldown'])]),
  # 🔴 2026-09-24 cb 移出 v4.1-flash 的池 ⇒ 自动派发落轮换首位火山 coding，且 Paseo 串带 pi/ 前缀
  dict(n='T1 起步（免费档被排除）', task_type='core', free_off=True,
       want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash',
@@ -465,7 +471,8 @@ CASES = [
  dict(n='T4 落 K3', task_type='core', free_off=True, failed=3,
       want=dict(model='kimi-k3-1')),
  dict(n='超 T4 必停', task_type='core', free_off=True, failed=4, exhausted=True),
- # ⚠️ 原名「algorithm 跳 T0 从 T2 起」—— 09-29 起 algorithm ⛔不再整档跳 T0（Space Bunny 可接），
+ # ⚠️ 原名「algorithm 跳 T0 从 T2 起」—— 09-29 起 algorithm ⛔不再整档跳 T0（当时 Space Bunny 可接）；
+ #    📜 它 2026-10-06 下线后，algorithm 仍因 hy3 / qfmodel 各自的 avoid 跳过整个免费池。
  #    本条只测「免费池不可用时，algorithm 付费从 T2 起步」
  dict(n='algorithm + 免费池不可用 ⇒ 付费从 T2 起', task_type='algorithm', free_off=True,
       want=dict(model='deepseek-v4-flash', upstream='volcengine-coding')),
@@ -582,7 +589,7 @@ CASES = [
       model='space-bunny', task_type='core', force_cli=True, paseo_unlisted={'codebuddy-code/space-bunny'},
       want=dict(upstream='codebuddy-code', model='space-bunny', channel='cli')),
  dict(n='T0 落 hy3 时 Paseo 清单也缺 hy3 ⇒ 同样必须停（守卫对 cb 落点一视同仁，⛔ 不只管 space-bunny）', task_type='core',
-      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)}, paseo_unlisted={HY3}, paseo_stop=True, paseo_report=[(HY3, False)]),
+      paseo_unlisted={HY3}, paseo_stop=True, paseo_report=[(HY3, False)]),
  dict(n='守卫只管 cb：火山显式落点即使「未登记」也不拦', provider='volcengine-coding', model='deepseek-v4-flash',
       task_type='core', paseo_unlisted={'volcengine-coding/deepseek-v4-flash'},
       want=dict(upstream='volcengine-coding', model='deepseek-v4-flash', channel='paseo')),
@@ -650,33 +657,34 @@ CASES = [
  # 🔴 关键反例：任何时段都⛔不得把档位冲掉
  dict(n='深夜 T1 档位不被冲掉', task_type='core', free_off=True, failed=0,
       when=DT(2026,9,9,23), want=dict(model='deepseek-v4.1-flash')),
- dict(n='深夜免费档仍是 T0', task_type='core', when=DT(2026,9,9,23),
-      want=dict(upstream='openrouter-free', model='stealth/space-bunny-alpha')),
+ dict(n='深夜免费档仍是 T0（hy3）', task_type='core', when=DT(2026,9,9,23),
+      want=dict(upstream='codebuddy-code', model='hy3')),
  # --free 新语义（0909：不再委派，只影响选档）
  dict(n='--free 无排除 → T0', free=True, task_type='core',
-      want=dict(upstream='openrouter-free', model='stealth/space-bunny-alpha')),
- # ⭐ --free 只放宽【能力类】：Bunny 冷却时 hy3 的 algorithm 短板被放宽 ⇒ hy3 接
- dict(n='--free 放宽能力类 → algorithm + Bunny 冷却 ⇒ hy3 接', free=True, task_type='algorithm',
-      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+      want=dict(upstream='codebuddy-code', model='hy3')),
+ # ⭐ --free 只放宽【能力类】：hy3 的 algorithm 短板被放宽 ⇒ hy3 接
+ dict(n='--free 放宽能力类 → algorithm ⇒ hy3 接', free=True, task_type='algorithm',
       want=dict(upstream='codebuddy-code', model='hy3', thinking='max')),
+ # ⭐ 放宽是**按条目**的：hy3 冷却后，同样 avoid algorithm 的 qfmodel 也被放宽 ⇒ qfmodel 接
+ dict(n='--free + algorithm + hy3 冷却 ⇒ 放宽后落 qfmodel', free=True, task_type='algorithm',
+      cooldowns={HY3: DT(2099, 1, 1)}, want=dict(model='qfmodel')),
  dict(n='--free 遇物理不可用（全池冷却）→ 停止', free=True, task_type='core',
       free_off=True, free_unavailable=True, free_probes=[]),
- # 🔴 --free ⛔ 不放宽物理不可用：多模态 + Bunny 冷却 ⇒ hy3/qfmodel 都接不了图 ⇒ 停（⛔ 不静默变付费）
- dict(n='--free + 多模态 + Bunny 冷却 → 停止（⛔ 能力放宽不含物理不可用）', free=True,
-      task_type='algorithm', multimodal=True, cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+ # 🔴 --free ⛔ 不放宽物理不可用：多模态 ⇒ hy3/qfmodel 都接不了图 ⇒ 停（⛔ 不静默变付费）
+ dict(n='--free + 多模态 → 停止（⛔ 能力放宽不含物理不可用）', free=True,
+      task_type='algorithm', multimodal=True,
       free_unavailable=True, free_probes=[],
-      free_report=[(SPACE_BUNNY, ['quota_cooldown']), (HY3, ['algorithm', 'multimodal']),
-                   (QFM, ['algorithm', 'multimodal'])]),
+      free_report=[(HY3, ['algorithm', 'multimodal']), (QFM, ['algorithm', 'multimodal'])]),
  dict(n='--free + 全池探活不过 → 停止', free=True, task_type='core', probe_ok=False,
-      free_unavailable=True, free_probes=[SPACE_BUNNY, HY3, QFM],
-      free_report=[(SPACE_BUNNY, ['probe_failed']), (HY3, ['probe_failed']), (QFM, ['probe_failed'])]),
+      free_unavailable=True, free_probes=[HY3, QFM],
+      free_report=[(HY3, ['probe_failed']), (QFM, ['probe_failed'])]),
  dict(n='--free + review → 冲突停止', free=True, task_type='review', conflict_free_review=True),
  dict(n='--free --provider codebuddy-code → 不冲突走 T0', free=True,
       provider='codebuddy-code', task_type='core',
       want=dict(upstream='codebuddy-code', model='hy3')),
  # ⛔ 不带 --free 时能力类排除照旧生效（证明放宽只对 --free 生效）—— 与上面 --free 那条同一输入
- dict(n='无 --free 时 algorithm + Bunny 冷却 ⇒ hy3 仍被 avoid 挡住', task_type='algorithm',
-      cooldowns={SPACE_BUNNY: DT(2099, 1, 1)},
+ dict(n='无 --free 时 algorithm + qfmodel 冷却 ⇒ hy3 仍被 avoid 挡住', task_type='algorithm',
+      cooldowns={QFM: DT(2099, 1, 1)},
       want=dict(model='deepseek-v4-flash')),
  # 🔴 2026-09-10：T3 从「v4-pro 四池 + qwen 同档替代」变成「qwen3.8-max 单池、无同档替代」
  #    ⇒ 原本那两条以「四池全不可用」为前提的用例前提已不存在，改成断言新形态。

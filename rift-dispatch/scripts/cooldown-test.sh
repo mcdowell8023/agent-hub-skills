@@ -31,14 +31,16 @@ bash "$CD" set codebuddy-code hy3 "$far" "longer" >/dev/null
 [ "$(bash "$CD" get codebuddy-code hy3)" == "$far" ] && ok || bad "更长的 set 应延长到 $far"
 
 # 4. model id 带 `/` ⇒ 嵌套键，⛔ 不拼成单键
-bash "$CD" set openrouter-free stealth/space-bunny-alpha +30m "OpenRouter 429" >/dev/null
+#    ⚠️ 用中性假 id（provider 与 model 都不必真存在）—— 本项只测嵌套键语义，
+#    📜 原先借的 openrouter-free/stealth/space-bunny-alpha 2026-10-06 已随模型下线删除，⛔ 别把断言一起删了
+bash "$CD" set sample-provider nested/model-name +30m "带斜杠的 model id" >/dev/null
 python3 - "$RIFT_COOLDOWN_FILE" <<'PY' && ok || bad "带 / 的 model 应存成 {upstream: {model: …}} 嵌套结构"
 import json, sys
 d = json.load(open(sys.argv[1]))
-assert 'stealth/space-bunny-alpha' in d['openrouter-free'], d
-assert set(d['openrouter-free']['stealth/space-bunny-alpha']) >= {'until', 'reason', 'setAt'}
+assert 'nested/model-name' in d['sample-provider'], d
+assert set(d['sample-provider']['nested/model-name']) >= {'until', 'reason', 'setAt'}
 PY
-[ -n "$(bash "$CD" get openrouter-free stealth/space-bunny-alpha)" ] && ok || bad "带 / 的 model get 应有值"
+[ -n "$(bash "$CD" get sample-provider nested/model-name)" ] && ok || bad "带 / 的 model get 应有值"
 
 # 5. 过去的时间 ⇒ 视为未冷却
 bash "$CD" set qoderclicn qfmodel 2020-01-01T00:00 "old" >/dev/null
