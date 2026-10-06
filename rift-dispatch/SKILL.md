@@ -1,6 +1,6 @@
 ---
 name: rift-dispatch
-description: "Rift Dispatch: analyze task → recommend model → create Paseo sub-session or pi -p call. Triggers: 'rift-dispatch', 'rift dispatch', 'dispatch', '派任务', '派个子会话', '选模型', '用 codebuddy', '用 v4-pro', '用 GLM', 'model dispatch', '调度', 'dev sub-session'."
+description: "Rift Dispatch: analyze task → recommend model → create Paseo sub-session, or `pi -p` call, or `codex exec` review call. Triggers: 'rift-dispatch', 'rift dispatch', 'dispatch', '派任务', '派个子会话', '选模型', '用 codebuddy', '用 v4-pro', '用 GLM', 'model dispatch', '调度', 'dev sub-session'."
 user-invocable: true
 argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>] [--free] <task description>"
 ---
@@ -22,7 +22,7 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 | # | 规则 | 落点 |
 |---|---|---|
 | 1 | **便宜优先，逐级升档** | 免费池（**`FREE_POOL` 登记表**：Space Bunny@high → hy3@max → qfmodel，逐条按条目判，09-29 起）先试 → 付费从 **`deepseek-v4.1-flash`**（火山两套餐 + 百炼；🔴 **cb 上改用同档 `glm-5.3-flash` 0.06x** —— 09-24 cb 的 v4.1 涨到 0.11x）起步 → `deepseek-v4-flash`（0.17x）→ `qwen3.8-max` → `kimi-k3-1`（1.62x）。⛔ **每一级【质量/成本升档】的唯一入口是「上一档已在本任务做砸过一轮」**，理由里要写明哪一轮、砸在哪。写不出来不许升。⚠️ 这条⛔**不管【可用性换档】**——模型在所有 provider 都拿不到时允许向上换档（必须报告），见 §2 第 5 段。⚠️ 例外：`algorithm` / `perf` 两类从 `deepseek-v4-flash` 起步（⚠️ 依据比的是 v4-flash **对 glm**，⛔ 没比过现在的 T1 ⇒ **待补测**）。🔴 并发两类已改回 T1 起步 —— 4 臂拉丁方并发题 v4.1-flash 37.5 > v4-flash 30.5 |
-| 2 | 🔴 **按「要不要看得见」分通道，不是按工具分** | 🔴 **开发实施类 + 大审查 → Paseo；短任务 / 短审查 → `pi -p`**。判据是**规模**不是任务类型——Paseo 能看进度、中途干预、拿结构化状态；`pi -p` 跑完即退不堆 serve。⛔ **开发任务和大审查都不要走 `pi -p`**：它不进 Paseo agent 列表，你看不见也打不断（实测大审查走 `pi -p` 跑满 35 分钟零输出 ⚠️ 09-24 起**疑似 stdin 挂死**而非规模问题，见 §3.2b —— 当时未查 stdin，未复测） |
+| 2 | 🔴 **按「要不要看得见」分通道，不是按工具分** | 🔴 **开发实施类 + 大审查 → Paseo；短任务 / 短审查 → `pi -p`；⭐ 审查（大/短审查）2026-10-06 起统一走 CLI `codex exec`（见 #4 与 §3.2c）**。判据是**规模**不是任务类型——Paseo 能看进度、中途干预、拿结构化状态；`pi -p` 跑完即退不堆 serve。⛔ **开发任务和大审查都不要走 `pi -p`**：它不进 Paseo agent 列表，你看不见也打不断（实测大审查走 `pi -p` 跑满 35 分钟零输出 ⚠️ 09-24 起**疑似 stdin 挂死**而非规模问题，见 §3.2b —— 当时未查 stdin，未复测） |
 | 3 | 🔴 **先判失败形态，再决定换什么** | **有产出但不合格** = `bad_output` ⇒ 走【质量/成本升档】（可换模型族）。**没产出**（静默停 / 唤不醒 / 探活不过）= `no_response` ⇒ 走【可用性】：**留在同 provider 降到下一档**，⛔ 不算做砸、⛔ 不跨钱包。⚠️ hy4 经常「碰墙」——允许你用但派发后静默停，**Paseo 抓不到明确错误** ⇒ ⛔ 别把它当成模型能力问题 |
 | 4 | 🔴 **审查的硬约束是「异构」** | ⛔ **评审模型族 ≠ 实施模型族**（全局红线 #8），是**不变量**，不是针对某个模型的禁令。🔴 **含主会话：主会话就是 Claude，我自己写的东西不得派 `claude/*` 去审**。族对照表见 routing §5。⭐ **未显式指定时**默认 **`codex`**（⭐ 2026-10-06 起；模型取 `~/.codex/config.toml` 的 `model`，实测 `gpt-5.6-sol`，可用 `RIFT_REVIEW_MODEL` 覆盖；⛔ 不是「不可覆盖」，显式换 provider 会报冲突）。⚠️ **通道统一走 CLI** `codex exec`（大/短审查同通道——Paseo 的 codex provider `out of credits`，⛔ copilot 全族 2026-10-06 已死）。🔴 codex 撞额度 ⇒ 按 §3.2c 降级阶梯换异族，**显式记录并告知用户** |
 
@@ -210,7 +210,7 @@ WHITELIST = {                                   # P0，routing §1
 #    ⚠️ 配置完整归档在 ~/.pi/agent/providers-disabled/jdcloud-joyagent.json（含恢复清单）。
 #    ⇒ 现在派它会落到「未知 provider」被拦，这是预期行为。
 # 🔴 用户点名屏蔽的型号（2026-09-09）。⛔ 与 WHITELIST/EXEMPT 正交 ——
-#    豁免 provider 也拦得住（否则 `--provider github-copilot --model gpt-5-mini` 会直接放行）。
+#    豁免 provider 也拦得住（否则 `--provider volcengine-chat --model deepseek-v4-pro` 会直接放行）。
 BLOCKED_MODELS = {
   # 🔴 `glm-latest` 两边都列 —— ⛔ 它只在 agent-plan 上存在，但**万一将来 coding 也上**，
   #    漏一边就等于留了个口子。屏蔽名单宁可写重，⛔ 不要赌「那边没有」。
@@ -280,8 +280,8 @@ OUTPUT_VALIDATION_REQUIRED = {
 #    ⛔ 为什么必须有这一层（0910 异构审 gpt-5.5 连开两枪）：
 #      ① provider-keyed 表天生漏 —— 我写 v4-pro 时列了四个 provider、注释还写「四个全写」，
 #         实际是**五个**（漏了 EXEMPT 里的 volcengine-chat，显式指定就能绕过）；
-#         而 `--provider github-copilot --model deepseek-v4-pro` 这类**没列过的 provider**
-#         结构上永远拦不住。
+#         而 `--provider <未列过的 provider> --model deepseek-v4-pro` 这类**没列过的 provider**
+#         结构上永远拦不住（⚠️ 原例写的是 github-copilot，该族 2026-10-06 已全量屏蔽 ⇒ 换成占位写法）。
 #      ② 只给 `--model` **不给 provider** 时，§1 的 `if explicit_upstream is not None: validate()`
 #         **压根不执行** ⇒ 要到 §5 把池探活完、收尾 validate() 才拦 ⇒ 用户明令禁用的型号被真请求了一遍。
 BLOCKED_MODELS_ANY_PROVIDER = {'deepseek-v4-pro'}   # 🔴 用户 2026-09-10：⛔ 不允许 agent 自己派发
@@ -310,7 +310,12 @@ REVIEW_DEFAULT_MODEL    = codex_config_model()
 REVIEW_FALLBACK_LADDER  = [('qoderclicn', 'qfmodel'),            # 免费（截止未公布），Qwen 族
                            ('codebuddy-code', 'hy3'),            # 免费至 10-31，Hy(混元) 族
                            ('codebuddy-code', 'glm-5.3-flash')]  # ⚠️ **付费 0.06x**（⛔ 不是免费），GLM 族
-CODEX_EXHAUSTED_RX      = r'out of credits|usage limit|401|429'  # 判 codex 额度耗尽的签名（大小写不敏感；2026-10-06 实测原文含 'out of credits'）
+CODEX_EXHAUSTED_RX      = r'out of credits|usage limit|HTTP 401|HTTP 429'  # 判 codex 额度耗尽的签名（大小写不敏感；2026-10-06 实测原文含 'out of credits'）
+# 🔴 锚定纪律（2026-10-06 异构审 P1-2）：⛔ **不许写裸 `401|429`** —— codex 正常输出里就有
+#    `tokens used: 14290` / `elapsed 4012ms` / `turn 1 completed (4290 tokens)`，裸数字必然命中 ⇒
+#    会把**健康通道**判成额度耗尽（写 +1h 冷却 + 悄悄换评审族）。只匹配带上下文的形态。
+# 🔴 **单一真源**：本行即真源。`scripts/probe-models.sh` 的 `probe_codex()` 在运行时用 sed 从本行提取
+#    （提取不到才用它自己的 `CODEX_EXHAUSTED_RX_DEFAULT` 兜底），`consistency-check.py` 强制两边逐字一致。
 LADDER = [('deepseek-v4.1-flash', 0.03), ('deepseek-v4-flash', 0.17),
           ('qwen3.8-max', None),     ('kimi-k3-1', 1.62)]      # T1..T4
 # 🔴 2026-09-24 cb 上 v4.1-flash 涨到 **0.11x**（上面 0.03 是 09-10 定档时的 cb 价，⛔ 已过时）。
@@ -786,6 +791,33 @@ if task_type == 'review':
     #    P1 显式优先仍然成立（routing 附录 P1 在 P2 之前）。
     # ⛔ 但显式指定同族模型时必须报冲突：评审族 ≠ 实施族（routing §5）是不变量。
     #    主会话是 Claude ⇒ ⛔ 不用 claude/*
+    # 🔴 **codex 撞额度 ⇒ 走降级阶梯**（2026-10-06 异构审 P1-3：阶梯此前只有常量、没有可执行落点）：
+    #    触发判据 = `probe-models.sh` 的 `probe_codex()` 报 FAILC（rc≠0 且命中 CODEX_EXHAUSTED_RX，
+    #    通道级 —— 额度按 workspace 算，整个 codex provider 都不可用），或真派发时 stderr 命中同一签名。
+    #    ⛔ 不许静默：换档必须写进派发记录（派给谁、为什么换）并**当轮告知用户**。
+    #    ⛔ 不许回落 claude 族（主会话）/ copilot 族（全族已死）；同族档直接跳过（异构不变量）。
+    #    阶梯全撞完 ⇒ `report_review_channel_unavailable_and_stop()`（当轮 review 未完成，⛔ 不拿同族凑数）。
+    # 🔴 **codex 撞额度 ⇒ 走降级阶梯**（2026-10-06 异构审 P1-3：阶梯此前只有常量、没有可执行落点）：
+    #    判据 = §3.2c 的 `codex_exhausted_report()` 返回非 None —— 即 probe 报 FAILC
+    #    （rc≠0 且命中 CODEX_EXHAUSTED_RX，**通道级**：额度按 workspace 算，整个 codex provider 都不可用），
+    #    或真派发时 stderr 命中同一签名。
+    #    ⛔ 不许静默：换档必须 `warn()` 出来并**当轮告知用户**（派给谁、为什么换）。
+    #    ⛔ 不许回落 claude 族（主会话）/ copilot 族（全族已死）；同族档直接跳过（异构不变量）。
+    #    ⛔ 本段不许 return（统一收尾在 §6/§7）——这里只改 `upstream`/`model` 两个落点变量。
+    _cx = codex_exhausted_report()
+    if _cx is not None:
+        _impl_family, _detail = _cx
+        for _prov, _mid in REVIEW_FALLBACK_LADDER:   # ① qoderclicn/qfmodel ② codebuddy-code/hy3 ③ …/glm-5.3-flash
+            if family_of(_prov, _mid) == _impl_family:
+                continue                             # 🔴 评审族 ≠ 实施族
+            if not family_is_alive(_prov):            # ⛔ 死族（copilot / 已停用 provider）直接跳
+                continue
+            if probe_model(_prov, _mid).ok:
+                upstream, model = _prov, _mid         # 落点交给统一收尾去派发 + 记录
+                warn(f'codex 额度耗尽（{_detail}）⇒ 审查降级 {_prov}/{_mid}')   # 🔴 显式记录
+                break
+        else:
+            report_review_channel_unavailable_and_stop(_detail)   # 阶梯全撞完 ⇒ 停并报（⛔ 不拿同族凑数）
 
 # ═══ 4. 选模型：T0 免费档 → T1..T4 阶梯 ═══ ⛔ 只赋值，不 return
 elif model is None:
@@ -1388,7 +1420,7 @@ codebuddy -p --output-format json --model <m> --tools "" "<prompt>" > out.json
 「这模型爱自行分块，是它的行为风险」—— **错了**，是 harness 丢数据。
 ⇒ 🔴 看到「续篇」先查 **transcript 有几条 assistant**，⛔ 别先怪模型。
 
-✅ 走 `pi -p` 的通道（火山/百炼/Copilot）**不受影响**——pi 是单条输出。
+✅ 走 `pi -p` 的通道（火山/百炼）**不受影响**——pi 是单条输出。⭐ 审查默认的 `codex exec` 也是单条 CLI 输出，同样不适用本条（它没有 transcript 续篇问题）。
 
 #### 3.2d opencode（🔻 兜底，排最后）
 

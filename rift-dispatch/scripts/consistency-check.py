@@ -870,6 +870,43 @@ if pi:
         chk('glm-5.3-flash' in [m['id'] for m in pi['providers'][p_]['models']],
             f"pi {p_} 缺 glm-5.3-flash")
 
+# ── 8. codex 审查通道：RX 单一真源 + catalog 现行字段⛔不得指向已死 copilot（2026-10-06 异构审 P1-2/P1-4）──
+def _rx_of(txt, pat):
+    m = re.search(pat, txt)
+    return m.group(1) if m else None
+
+_PM = (B/'scripts'/'probe-models.sh').read_text()
+_rx_skill = _rx_of(S, r"CODEX_EXHAUSTED_RX\s*=\s*r'([^']*)'")
+_rx_script = _rx_of(_PM, r"CODEX_EXHAUSTED_RX_DEFAULT='([^']*)'")
+chk(_rx_skill is not None, "SKILL.md 缺 CODEX_EXHAUSTED_RX（codex 额度耗尽签名）")
+chk(_rx_script is not None, "probe-models.sh 缺 CODEX_EXHAUSTED_RX_DEFAULT")
+if _rx_skill and _rx_script:
+    chk(_rx_skill == _rx_script,
+        f"CODEX_EXHAUSTED_RX 单一真源不一致：SKILL={_rx_skill!r} vs probe-models.sh={_rx_script!r}")
+    # 🔴 锚定纪律：⛔ 裸 401/429 —— codex 正常输出就含 tokens used: 14290 / elapsed 4012ms / (4290 tokens)
+    _noise = "turn 1 completed (4290 tokens)\nelapsed 4012ms\ntokens used: 14290"
+    chk(not re.search(_rx_skill, _noise, re.I),
+        f"CODEX_EXHAUSTED_RX 命中正常输出噪声（裸 401/429）⇒ 会把健康通道判成额度耗尽：{_rx_skill!r}")
+    chk(bool(re.search(_rx_skill, "ERROR: Your workspace is out of credits.", re.I)),
+        f"CODEX_EXHAUSTED_RX 认不出真实额度耗尽原文：{_rx_skill!r}")
+    chk(bool(re.search(r"REVIEW_FALLBACK_LADDER\s*=", S)) and S.count('REVIEW_FALLBACK_LADDER') >= 2,
+        "REVIEW_FALLBACK_LADDER 只有常量定义、没有可执行落点（异构审 P1-3）")
+
+_rc = d.get('dispatchDefaults', {}).get('reviewChannel', {})
+chk(_rc.get('provider') == 'codex',
+    f"catalog dispatchDefaults.reviewChannel.provider 应为 codex，实际 {_rc.get('provider')!r}")
+chk('codex' in (_rc.get('command') or ''), "catalog reviewChannel.command 未指向 codex exec")
+_rce = (d.get('opencodeProviders', {}).get('reviewChannelException') or {}).get('model', '')
+chk('github-copilot' not in _rce,
+    f"catalog reviewChannelException.model 仍指向已死 copilot：{_rce!r}")
+_p2 = d.get('oneshotChannels', {}).get('priority') or []
+chk(len(_p2) > 2 and 'codex' in _p2[2],
+    f"catalog oneshotChannels.priority[2] 未指向 codex：{_p2[2] if len(_p2) > 2 else None!r}")
+_oc = (d.get('whitelist', {}).get('exempt', {}) or {}).get('opencode')
+_oc_txt = ' '.join(_oc) if isinstance(_oc, list) else str(_oc)
+chk('Copilot' not in _oc_txt or '已死' in _oc_txt or '2026-10-06' in _oc_txt,
+    "catalog whitelist.exempt.opencode 仍把 Copilot 写成现行审查通道（异构审 P1-4）")
+
 print("=== rift-dispatch 一致性校验 ===")
 print(f"仓库: {B}")
 print("✅ 全部通过" if not e else "\n".join("❌ " + x for x in e))

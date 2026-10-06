@@ -48,6 +48,41 @@
 测试改动：copilot「照常放行」两条反例随全族屏蔽反转为必拦；「显式 copilot + 自动 T1」从错配改为未知 provider 拦；
 review 默认相关断言全部改到 codex/gpt-5.6-sol 新语义（理由如上，非放宽）。
 
+### v11.12.1 修复轮（2026-10-06 异构审 4×P1 + 9×P2）
+
+实现方 GLM / 复核方 Qwen 异族复核给 `VERDICT: ISSUES`（`tmp/dispatch-2026-10-06/review-channel/verdict.md`，
+22,042 B）。四条 P1 全部成立，逐条修复：
+
+- **P1-1 探活成功判据被 prompt 回显击穿**：`codex exec` 会把 prompt 回显到 stdout，而 prompt 里含
+  `PROBE_OK` ⇒ 原文案「assistant 段 grep `PROBE_OK`」在「模型拒答」时也恒真。改为**整行相等**
+  （`any(l.strip() == 'PROBE_OK' …)`，且优先只看最后一段 assistant 正文），回显行 `reply with exactly: PROBE_OK`
+  整行 ≠ `PROBE_OK` ⇒ 拒答判 FAIL。stub 三态（credits / tokens-noise / refuse / nosection / hang）全覆盖。
+- **P1-2 额度签名过宽**：`CODEX_EXHAUSTED_RX` 原写裸 `401|429`，而 codex **正常输出**就含
+  `tokens used: 14290` / `elapsed 4012ms` / `(4290 tokens)` ⇒ 会把健康通道判成额度耗尽（写 +1h 冷却 + 静默换族）。
+  改为 `out of credits|usage limit|HTTP 401|HTTP 429`，并在 consistency-check 里加**双向断言**
+  （对噪声串不得命中、对真实 `ERROR: Your workspace is out of credits.` 必须命中），且
+  SKILL 与 `probe-models.sh` 的 `CODEX_EXHAUSTED_RX_DEFAULT` 必须**逐字相等**（单一真源）。
+- **P1-3 降级阶梯没有可执行落点**：`REVIEW_FALLBACK_LADDER` 原来只在常量区出现，§2 review 分支压根
+  不引用它（`probe-models-test.sh` 里 `grep codex` 为空）⇒ 文档写了、代码没接。现已在 §2 review 分支
+  就地实现阶梯循环（同族跳过 / 死族跳过 / 探活选中 / `warn()` 显式记录 / 全撞完
+  `report_review_channel_unavailable_and_stop`），并新增 4 条 pipeline 用例把「接没接上」变成可红的测试。
+- **P1-4 catalog 现行字段仍把 copilot 当活审查通道**：`whitelist.exempt.opencode`、
+  `models.gpt-5.5.providers.pi.note`（"⭐ 审查主通道"）、`opencodeProviders.reviewChannelException.model`
+  及其 `promptLengthRule`（≤200 字符只对旧非交互通道成立）、`oneshotChannels._note`/`priority[1..2]`、
+  `opencodeCrashRootCause` 尾句 —— 共 9 处定点改指 codex CLI（历史字段保留并标注"📜 历史"）。
+  `version` 6.44.0 → **6.45.0**；consistency-check §8 新增「`*review*` 现行字段不得指向 github-copilot」守卫。
+
+P2：`SKILL.md` 硬默认 #2 与 frontmatter description 补 codex CLI 通道；两处 copilot 举例改活通道/占位；
+§3.2b 说明 codex 单条输出不受 transcript 续篇影响；`pipeline-test.py` 里 `review --model gpt-5.5`
+（已屏蔽型号）换成中性 `gpt-5.4`；`probe_codex` 补 `communicate(timeout)` + `killpg` + 输出采集上限
+（抄 `probe_qcn` 的纪律）；冷却状态文件从「整体 `ensure_ascii=True`」改为**只清洗孤代理**
+（`_clean()` + `ensure_ascii=False`）⇒ 中文仍人可读，非法 UTF-8 不再让整份状态写不进去。
+
+验证（2026-10-06 16:5x，全部本机复跑）：pipeline-test **144** ✅ · consistency-check ✅ ·
+probe-models-test **53** ✅ · cooldown-test **19** ✅。负向证据见
+`docs/kb-reports/agent-hygiene-review-channel-2026-10-06.md` §修复轮。
+
+
 ## v11.5 (2026-09-10) — T1 换成 `deepseek-v4.1-flash`
 
 **起因是用户的一个观察：「有的 agent 没优先用 4.1 flash，而是优先用了 glm 5.3 flash」。**

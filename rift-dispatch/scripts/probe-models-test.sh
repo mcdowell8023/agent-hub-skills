@@ -221,6 +221,70 @@ out=$(bash "$P" --force openrouter-free/stealth/strcost-model); rc=$?
 out=$(bash "$P" --force volcengine-coding/ok-model); rc=$?
 { [ "$rc" -eq 0 ] && echo "$out" | grep -q '✅ volcengine-coding'; } && ok || bad "火山探活不该受影响（rc=${rc}）：$out"
 
+# ── 19~23. codex 探针（2026-10-06 异构审 P1-1/P1-2/P2-7/P2-8：此前 codex 用例 0 条）──
+cat > "$T/bin/codex" <<'SH'
+#!/usr/bin/env bash
+# 假 codex：记录收到的参数；FAKE_CODEX=credits(rc=1 out of credits) / tokens-noise(rc=1 但只有 tokens/耗时数字)
+#   / refuse(rc=0 assistant 段拒答) / nosection(rc=0 无分段标记) / hang(挂住)；缺省 = 回显 prompt + codex 段答 PROBE_OK
+echo "$*" > "$TMPDIR/codex-args"
+if [ "${FAKE_CODEX:-}" = "hang" ]; then sleep 4242 & sleep 4243; fi
+if [ "${FAKE_CODEX:-}" = "credits" ]; then
+  printf 'OpenAI Codex v0.156.0\n--------\nuser\nreply with exactly: PROBE_OK\n'
+  printf 'ERROR: Your workspace is out of credits. Ask your workspace owner to refill in order to continue.\n' >&2
+  exit 1
+fi
+if [ "${FAKE_CODEX:-}" = "tokens-noise" ]; then
+  # 🔴 旧 RX `401|429` 在这三行上全中（tokens used: 14290 / elapsed 4012ms / (4290 tokens)）—— 锚定后必须全不中
+  printf 'user\nreply with exactly: PROBE_OK\nturn 1 completed (4290 tokens)\nelapsed 4012ms, retrying\ntokens used: 14290\n'
+  exit 1
+fi
+printf 'OpenAI Codex v0.156.0\n--------\nuser\nreply with exactly: PROBE_OK\n\n'
+if [ "${FAKE_CODEX:-}" = "refuse" ]; then printf 'codex\n抱歉，我无法完成该请求\n'; exit 0; fi
+if [ "${FAKE_CODEX:-}" = "nosection" ]; then printf '只有回显，没有 assistant 分段标记\n'; exit 0; fi
+printf 'codex\nPROBE_OK\ntokens used: 14290\n'
+exit 0
+SH
+chmod +x "$T/bin/codex"
+
+# 19. codex 正常：assistant 段按要求作答 ⇒ ✅；codex/codex 用 config 默认（⛔ 不传 -m），codex/<model> 走 -m
+out=$(bash "$P" codex/codex); rc=$?
+{ [ "$rc" -eq 0 ] && echo "$out" | grep -q '✅ codex'; } && ok || bad "codex 正常应 ✅（rc=${rc}）：$out"
+grep -q -- '-m gpt-5.6-sol' "$T/codex-args" 2>/dev/null && bad "codex/codex 不该传 -m（实际 $(cat "$T/codex-args")）" || ok
+out=$(bash "$P" codex/gpt-5.6-sol); rc=$?
+{ [ "$rc" -eq 0 ] && grep -q -- '-m gpt-5.6-sol' "$T/codex-args"; } && ok \
+  || bad "codex/<model> 应以 -m 传给 CLI 且 ✅（rc=${rc}，args=$(cat "$T/codex-args" 2>/dev/null)）"
+
+# 20. 🔴 P1-1：rc=0 但 assistant 段没按要求答 ⇒ ⛔ 必须报失败（旧判据全文 grep PROBE_OK 被 prompt 回显击穿恒真）
+out=$(FAKE_CODEX=refuse bash "$P" codex/codex); rc=$?
+{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '❌ codex'; } && ok || bad "assistant 拒答必须报失败（rc=${rc}）：$out"
+out=$(FAKE_CODEX=nosection bash "$P" codex/codex); rc=$?
+{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '❌ codex'; } && ok || bad "取不到 assistant 分段必须 fail-closed（rc=${rc}）：$out"
+
+# 21. 🔴 P1-2：rc=1 + 额度签名 ⇒ 通道级失败（⛔ 不是〔模型级〕）+ 冷却写整族键 codex/*（P2-7：model 粒度冷却换 model 即漏）
+out=$(FAKE_CODEX=credits bash "$P" codex/gpt-5.6-sol); rc=$?
+{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '额度耗尽' && ! echo "$out" | grep -q '〔模型级〕'; } && ok \
+  || bad "out of credits 应报通道级额度耗尽（rc=${rc}）：$out"
+[ -n "$(cd_get codex '*')" ] && ok || bad "额度耗尽冷却应写整族键 codex/*（实际 get codex '*' 无值）"
+bash "$S/cooldown.sh" get codex gpt-5.6-sol >/dev/null; [ $? -eq 1 ] && ok \
+  || bad "⛔ 不该写 model 粒度冷却 codex/gpt-5.6-sol"
+
+# 22. 🔴 P1-2 锚定：rc=1 但输出只有 tokens/耗时数字（无额度签名）⇒ 普通失败，⛔ 不许判额度耗尽、⛔ 不写冷却
+bash "$S/cooldown.sh" clear codex '*' >/dev/null
+out=$(FAKE_CODEX=tokens-noise bash "$P" codex/codex); rc=$?
+{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '❌ codex' && ! echo "$out" | grep -q '额度耗尽'; } && ok \
+  || bad "裸数字噪声不许判成额度耗尽（旧 RX 裸 401|429 全中）：$out"
+bash "$S/cooldown.sh" get codex '*' >/dev/null; [ $? -eq 1 ] && ok || bad "普通失败 ⛔ 不该写冷却 codex/*"
+
+# 23. P2-8：codex 挂住 ⇒ 超时 + 整个进程组（含它 fork 的子进程）被杀（范式抄 probe_qcn）
+start=$(date +%s)
+out=$(FAKE_CODEX=hang RIFT_PROBE_CODEX_TIMEOUT=2 bash "$P" --force codex/codex)
+el=$(( $(date +%s) - start ))
+{ echo "$out" | grep -q '超时' && [ "$el" -lt 20 ]; } && ok || bad "codex 挂住应在超时后报超时（${el}s）：$out"
+sleep 1
+# ⚠️ 按 argv 精确比对（⛔ pgrep -f 会匹配到调用方自己的命令行，见第 14 项注释）
+left=$(ps -axo pid=,args= | awk '$2=="sleep" && ($3=="4242" || $3=="4243") {print $1}')
+if [ -n "$left" ]; then bad "codex 超时后残留子进程 PID: $left"; kill $left 2>/dev/null; else ok; fi
+
 # 11. 🔴 隔离性：整场测试⛔一次都不许调到 pi（openrouter-free 必须走直连，才拿得到真实状态码）
 [ ! -s "$T/pi-calls" ] && ok || bad "测试调到了 pi：$(cat "$T/pi-calls")"
 

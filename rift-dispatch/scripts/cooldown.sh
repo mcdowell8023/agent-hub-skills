@@ -50,16 +50,26 @@ def load():
     except json.JSONDecodeError:
         print(f'⛔ {F} 不是合法 JSON ⇒ 不读也不覆盖，先人工看一眼（调用方按「未冷却」处理：最坏多探一次活）', file=sys.stderr); sys.exit(2)
 
+def _clean(o):
+    # 🔴 只清孤代理，⛔ 不做整篇转义（2026-10-06 异构审 P2-9）：原因是 provider 原文，
+    #    `reason` 里出现非法 UTF-8 字节（子进程按 surrogateescape 解码 ⇒ 孤代理 \udcXX）时，
+    #    `ensure_ascii=False` 会抛 UnicodeEncodeError 让整个冷却状态写不进去；但改成
+    #    `ensure_ascii=True` 又会把**所有中文**写成 \uXXXX（人读不了状态文件）。
+    #    ⇒ 只把不可编码的字符换成 '?'，其余（含中文）原样落盘。
+    if isinstance(o, dict):  return {_clean(k): _clean(v) for k, v in o.items()}
+    if isinstance(o, list):  return [_clean(v) for v in o]
+    if isinstance(o, str):
+        try:
+            o.encode('utf-8'); return o
+        except UnicodeEncodeError:
+            return o.encode('utf-8', 'replace').decode('utf-8')
+    return o
+
 def save(d):
     fd, tmp = tempfile.mkstemp(prefix=os.path.basename(F) + '.', dir=os.path.dirname(F))
     try:
-        # 🔴 ensure_ascii=True（2026-10-06 主会话修）：状态里可能混进 provider 返回的
-        #    非法 UTF-8 字节（读的时候按 surrogateescape 变成孤代理 \udcXX）⇒ ensure_ascii=False
-        #    写盘时 json.dump 抛 UnicodeEncodeError: 'utf-8' codec can't encode ... surrogates
-        #    not allowed，整个冷却状态**写不进去**（probe-models-test「402 应冷却 24h」用例
-        #    就是这样长期失败，且在 1d022e7 基线同样失败）。转义成 \udcXX 是合法 JSON 文本，
-        #    json.load 能原样读回，语义不变。
-        with os.fdopen(fd, 'w') as fh: json.dump(d, fh, ensure_ascii=True, indent=2)
+        with os.fdopen(fd, 'w', encoding='utf-8') as fh:
+            json.dump(_clean(d), fh, ensure_ascii=False, indent=2)
         os.replace(tmp, F)                   # 原子替换
     except BaseException:
         os.unlink(tmp); raise

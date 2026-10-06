@@ -10,8 +10,8 @@
 #    · codebuddy-code        → cb CLI，判 stdout 是不是 JSON（CLI 也不给状态码，只能看正文）
 #    · volcengine-* / bailian-* → **直连端点**，拿【真实 HTTP 状态码】
 #      ⇒ 429(额度) / 403(无权限) / 404(不存在) **三态分得开**，且 429 正文带重置时间
-#    · codex                  → codex exec CLI（2026-10-06 起审查默认通道）；判 rc + stderr，
-#                                 `out of credits` ⇒ FAILM（额度耗尽，通道级）
+#    · codex                  → codex exec CLI（2026-10-06 起审查默认通道）；判 rc + assistant 段正文，
+#                                 `out of credits` 等（签名见 CODEX_EXHAUSTED_RX）⇒ FAILC（通道级，冷却 codex/*）
 #    · openrouter-free       → **直连**（2026-09-29）：key 按 pi 配置的 `!command` 从钥匙串取，⛔ 不打印
 #      ⇒ 429(额度，带 X-RateLimit-Reset) / 402(余额为负) / 404(模型下线) 分得开
 #    · qoderclicn            → qcn CLI `-p -o json`（2026-09-29）；⚠️ Paseo id 与 CLI 名不同（qfmodel ⇒ Qwen3.8-Flash）
@@ -44,10 +44,13 @@ S="$(cd "$(dirname "$0")" && pwd)"
 DEFAULT=(openrouter-free/stealth/space-bunny-alpha
          codebuddy-code/hy3
          qoderclicn/qfmodel
+         codex/codex
          volcengine-coding/deepseek-v4.1-flash
          volcengine-agent-plan/deepseek-v4.1-flash
          bailian-token-plan/deepseek-v4.1-flash
          codebuddy-code/glm-5.3-flash)
+# ⭐ codex/codex（P2-6，2026-10-06）：审查默认落点必须被预探 —— 此前阶梯 ①②③ 都在 DEFAULT、唯独默认档不在，
+#    额度耗尽只能在真派活时撞上。`codex` 槽位 = 用 ~/.codex/config.toml 的 model；探活一次 ~16 token 订阅额度，成本可忽略。
 ALL=("${DEFAULT[@]}"
      codebuddy-code/deepseek-v4.1-flash
      volcengine-coding/glm-5.3-flash
@@ -193,25 +196,52 @@ else:
 PY
 }
 
-probe_codex() {  # $1=model（省略 / 为 "codex" ⇒ 用 ~/.codex/config.toml 的 model）；判 rc + stderr（⛔ 不解析正文 JSON）
-  local out rc margs=()
-  if [ "$#" -gt 0 ] && [ "$1" != "codex" ]; then margs=(-m "$1"); fi
-  # 🔴 必须 < /dev/null：codex exec 在 stdin 非 TTY 时会读它，永不 EOF 的管道会永久等（2026-10-06 实测）
-  out=$(cd "$PROBE_DIR" && codex exec --skip-git-repo-check ${margs+"${margs[@]}"} \
-        "reply with exactly: PROBE_OK" < /dev/null 2>&1); rc=$?
-  if [ "$rc" -ne 0 ]; then
-    case "$out" in
-      *"out of credits"*) echo "FAILM|额度耗尽：out of credits|+1h" ;;
-      *"usage limit"*)    echo "FAILM|额度耗尽：usage limit|+1h" ;;
-      *) echo "FAIL|$(printf '%s' "$out" | tr -d '\n|' | head -c 170)|" ;;
-    esac
-    return
-  fi
-  case "$out" in
-    *PROBE_OK*) echo "OK|codex 返回正常|" ;;
-    '')         echo "FAIL|EMPTY（codex 无输出）|" ;;
-    *)          echo "FAIL|$(printf '%s' "$out" | tr -d '\n|' | head -c 170)|" ;;
-  esac
+# 🔴 判 codex 额度耗尽的签名 —— **单一真源是 SKILL.md 的 `CODEX_EXHAUSTED_RX`**（probe_codex 运行时提取）；
+#    这里的缺省只在提取不到时兜底（脚本被单独拷走的场景），consistency-check 强制两边一致。
+#    ⛔ 锚定纪律（2026-10-06 异构审 P1-2）：不许写裸 `401|429` —— codex 正常输出就含
+#    `tokens used: 14290` / `elapsed 4012ms` / `(4290 tokens)`，裸数字必然误判成额度耗尽
+#    （＝给健康通道写冷却 + 悄悄换评审族）。
+CODEX_EXHAUSTED_RX_DEFAULT='out of credits|usage limit|HTTP 401|HTTP 429'
+
+probe_codex() {  # $1=model（省略 / 为 "codex" ⇒ 用 ~/.codex/config.toml 的 model）；判 rc + assistant 段正文
+  local rx
+  rx=$(sed -n "s/^CODEX_EXHAUSTED_RX[[:space:]]*=[[:space:]]*r'\([^']*\)'.*/\1/p" "$S/SKILL.md" 2>/dev/null | head -1)
+  rx="${rx:-$CODEX_EXHAUSTED_RX_DEFAULT}"
+  # ⚠️ 带超时并杀进程组（范式抄 probe_qcn；MEMORY：只杀子进程=没超时）。⛔ < /dev/null 只是堵住了 stdin 一种挂法
+  python3 - "$1" "$PROBE_DIR" "${RIFT_PROBE_CODEX_TIMEOUT:-120}" "$rx" <<'PY'
+import os, re, signal, subprocess, sys
+mid, cwd, limit, rx = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
+margs = ['-m', mid] if mid not in ('', 'codex') else []
+p = subprocess.Popen(['codex', 'exec', '--skip-git-repo-check', *margs, 'reply with exactly: PROBE_OK'],
+                     cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                     text=True, errors='replace', start_new_session=True)
+try:
+    out, _ = p.communicate(timeout=limit)
+except subprocess.TimeoutExpired:
+    os.killpg(p.pid, signal.SIGKILL); p.wait()
+    print(f"FAIL|超时 {limit}s（已杀进程组）|"); sys.exit()
+out = out[:4000]                       # 🔴 采集上限（P2-8）：探活不需要全文，⛔ 全量入内存
+if p.returncode != 0:
+    if re.search(rx, out, re.I):       # 🔴 额度耗尽是【通道级】⇒ FAILC（主循环据此写整族冷却 codex/*）
+        print("FAILC|额度耗尽（通道级，codex 全家不可用）：" + out.replace('\n', ' ').replace('|', '/')[:150] + "|+1h")
+    else:
+        print("FAIL|" + out.replace('\n', ' ').replace('|', '/')[:170] + "|")
+    sys.exit()
+# 🔴 成功判据必须锚在【assistant 段正文】—— codex exec 会回显 user prompt，
+#    全文 grep PROBE_OK 被回显击穿：模型没按要求答也恒真（2026-10-06 异构审 P1-1，离线 stub 复现）。
+#    分段标记 = 一行 exactly `codex`/`assistant`（assistant 回合）；取到就从标记后看，取不到就全区看。
+#    ⛔ 判据是**整行相等**（不是子串）：回显行是 `reply with exactly: PROBE_OK`，整行 ≠ PROBE_OK，
+#    所以「回显 + 模型拒答」判 FAIL，而「assistant 段答 PROBE_OK」判 OK —— 两种输出格式都不会误判。
+lines = out.splitlines()
+idx = max((i for i, l in enumerate(lines) if l.strip() in ('codex', 'assistant')), default=-1)
+reply_lines = lines[idx + 1:] if idx >= 0 else lines
+if any(l.strip() == 'PROBE_OK' for l in reply_lines):
+    print("OK|codex assistant 段按要求作答|")
+else:
+    body = '\n'.join(reply_lines).strip()
+    brief = body or '未取到 assistant 段正文（输出格式变了？fail-closed）'
+    print("FAIL|" + brief.replace('\n', ' ').replace('|', '/')[:170] + "|")
+PY
 }
 
 probe_pi() {   # $1=provider $2=model
@@ -231,8 +261,11 @@ ok=0; bad=0; bad_model=0
 printf '%-26s %-24s %s\n' PROVIDER MODEL 结果
 for t in "${TARGETS[@]}"; do
   prov="${t%%/*}"; model="${t#*/}"
+  # 🔴 codex 的冷却是【通道级】（额度按 workspace 算，全家不可用）⇒ 键固定 codex/*，
+  #    ⛔ 不按探到的 model（P2-7：config 换 model 后 model 粒度冷却就漏）
+  _cd_key="$model"; [ "$prov" = codex ] && _cd_key='*'
   # ⭐ 冷却中 ⇒ 直接报，⛔ 不再探一次活（那正是冷却要省掉的排队 / 429）
-  if [ "$FORCE" -eq 0 ] && until_=$(bash "$S/cooldown.sh" get "$prov" "$model"); then
+  if [ "$FORCE" -eq 0 ] && until_=$(bash "$S/cooldown.sh" get "$prov" "$_cd_key"); then
     printf '⏸  %-24s %-24s 冷却中至 %s（--force 强制探）  〔模型级〕\n' "$prov" "$model" "$until_"
     bad=$((bad+1)); bad_model=$((bad_model+1)); continue
   fi
@@ -245,7 +278,7 @@ for t in "${TARGETS[@]}"; do
   esac
   status="${r%%|*}"; rest="${r#*|}"; detail="${rest%|*}"; cool="${rest##*|}"
   if [ -n "$cool" ]; then
-    bash "$S/cooldown.sh" set "$prov" "$model" "$cool" "probe: ${detail:0:80}" >/dev/null \
+    bash "$S/cooldown.sh" set "$prov" "$_cd_key" "$cool" "probe: ${detail:0:80}" >/dev/null \
       && detail="${detail} ⇒ 已写冷却（${cool}）"
   fi
   case "$status" in
@@ -257,6 +290,7 @@ for t in "${TARGETS[@]}"; do
           esac ;;
     SKIP) printf '⚠️  %-24s %-24s %s\n' "$prov" "$model" "$detail"; bad=$((bad+1)) ;;   # ⛔ 探不了 ≠ 可用（审查 r2：原先不计数，单目标会 exit 0）
     FAILM) printf '❌ %-24s %-24s %s  〔模型级〕\n' "$prov" "$model" "$detail"; bad=$((bad+1)); bad_model=$((bad_model+1)) ;;
+    FAILC) printf '❌ %-24s %-24s %s  〔通道级：额度耗尽 ⇒ 已冷却整族 codex/*〕\n' "$prov" "$model" "$detail"; bad=$((bad+1)) ;;
     *)    printf '❌ %-24s %-24s %s\n' "$prov" "$model" "$detail"; bad=$((bad+1)) ;;
   esac
 done

@@ -99,6 +99,19 @@ print((t.replace(second=0)+d.timedelta(minutes=1)).strftime('%Y-%m-%dT%H:%M'))")
 bash "$CD" set codebuddy-code dated "2099-01-02 18:43:13" "cb dated" >/dev/null
 [ "$(bash "$CD" get codebuddy-code dated)" = "2099-01-02T18:44" ] && ok || bad "YYYY-MM-DD HH:MM:SS 应存成 2099-01-02T18:44（实际 $(bash "$CD" get codebuddy-code dated)）"
 
+# 15. 🔴 非法 UTF-8（surrogateescape 孤代理）⇒ 仍要能写盘，且中文保持【人可读】（异构审 P2-9）
+bad_reason=$(printf '坏字节\xff 触发控制')
+bash "$CD" set codebuddy-code surrogate-test +1h "$bad_reason" >/dev/null; rc=$?
+[ "$rc" -eq 0 ] && ok || bad "含非法 UTF-8 的 reason 应仍能写盘（rc=${rc}）"
+python3 - "$RIFT_COOLDOWN_FILE" <<'PY' && ok || bad "状态文件必须中文可读 + 孤代理已清洗（⛔ 不许整体 \\uXXXX）"
+import json, sys
+raw = open(sys.argv[1], encoding='utf-8').read()
+assert '触发控制' in raw, '中文被转义了（ensure_ascii 又被打开？）'
+d = json.load(open(sys.argv[1], encoding='utf-8'))
+r = d['codebuddy-code']['surrogate-test']['reason']
+assert '\udcff' not in r and '坏字节' in r, repr(r)
+PY
+
 rm -rf "$T"
 echo "=== cooldown.sh 行为测试 === 通过 $pass · 失败 $fail"
 [ "$fail" -eq 0 ]

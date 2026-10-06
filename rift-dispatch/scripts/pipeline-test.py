@@ -23,6 +23,19 @@ class ReviewProviderConflict(Exception): pass  # 0909 第 6 轮: review 的 prov
 class NoLanding(Exception): pass            # 0909: 本档在所有池+同档替代里都没有可用落点
 class BlockedModel(Exception): pass         # 0909: 用户点名屏蔽的型号
 class PaseoUnlisted(Exception): pass        # 1002: Paseo 的 cb provider 清单里没有该型号 ⇒ 会静默降级成 hy3
+class ReviewChannelUnavailable(Exception): pass  # 1006: codex 额度耗尽且阶梯全撞完 ⇒ 停并报
+class ProbeResult:
+    def __init__(s, ok): s.ok = ok
+
+# 🔴 族对照（只用于 §2 降级阶梯的同族跳过测试；⛔ 与 routing §5 的完整对照表无关）
+FAMILY = {
+    'qoderclicn/qfmodel':                  'Qwen',
+    'codebuddy-code/hy3':                  'Hy3(混元)',
+    'codebuddy-code/glm-5.3-flash':        'GLM(智谱)',
+    'codex/gpt-5.6-sol':                   'GPT',
+    'claude/claude-sonnet-5':              'Claude',
+    'volcengine-coding/deepseek-v4-flash': 'DeepSeek',
+}
 class Result:
     def __init__(s): s.agent_id, s.run_id = 'ag-1', 'run-1'
 
@@ -77,6 +90,17 @@ def run_case(c):
         # ⭐ review 默认模型（2026-10-06 起 codex）——codex_config_model() 读 ~/.codex/config.toml 的 model，
         #    测试里用 review_model 旋钮覆盖（默认桩成实测值 gpt-5.6-sol）
         'codex_config_model': lambda: c.get('review_model', 'gpt-5.6-sol'),
+        # ⭐ 2026-10-06 异构审 P1-3：codex 撞额度 ⇒ §2 review 分支真的会调 review_after_codex_exhausted()
+        #    旋钮 codex_exhausted='<实施族>' 触发；ladder_unavailable=[...] 模拟该档探活失败。
+        'codex_exhausted_report': lambda: (
+            (c['codex_exhausted'], 'ERROR: Your workspace is out of credits.')
+            if c.get('codex_exhausted') else None),
+        'family_of':         lambda u, m: FAMILY.get(f'{u}/{m}', 'Unknown'),
+        'family_is_alive':   lambda u: (u != 'github-copilot' and not u.startswith('claude')
+                                        and u not in set(c.get('dead_providers', ()))),
+        'probe_model':       lambda u, m: ProbeResult(f'{u}/{m}' not in set(c.get('ladder_unavailable', ()))),
+        'report_review_channel_unavailable_and_stop': lambda d=None: (
+            _ for _ in ()).throw(ReviewChannelUnavailable()),
         # ⚠️ force_cli 是【测试专用】旋钮：review 改成顶层分支后，review 永远落 codex（CLI），
         #    自然路径下已没有「cli 规模的任务走到 LAST_RESORT」这条 —— 但那个 channel 守卫
         #    是**防御性**的（防将来改 is_dev_task），仍要测得到。
@@ -459,8 +483,8 @@ CASES = [
  dict(n='--free + review + 显式 model → 仍报 free×review 冲突', free=True, task_type='review',
       model='v4-pro', conflict_free_review=True),
  dict(n='review + 显式 model → 保留，provider 默认 codex（⛔ 不掉进普通阶梯）', task_type='review',
-      scope='small', model='gpt-5.5',
-      want=dict(upstream='codex', model='gpt-5.5', channel='cli')),
+      scope='small', model='gpt-5.4',      # ⚠️ 原写 gpt-5.5 —— 那是已屏蔽型号（异构审 P2-5）；本用例只测「显式 model 被保留」
+      want=dict(upstream='codex', model='gpt-5.4', channel='cli')),
  # 🔴 2026-10-06：合法 review provider 只剩 codex，显式 copilot 也报 review 冲突（原「照常」反转）
  dict(n='review + 显式 copilot provider → 报冲突（copilot 全族已死）', task_type='review', scope='small',
       provider='github-copilot', review_provider_conflict=True),
@@ -468,6 +492,28 @@ CASES = [
  dict(n='review + 显式 codex provider → 照常放行', task_type='review', scope='small',
       provider='codex',
       want=dict(upstream='codex', model='gpt-5.6-sol', provider='codex', channel='cli')),
+ # ═══ 2026-10-06 异构审 P1-3：codex 额度耗尽 ⇒ 降级阶梯【必须真的被调用】═══
+ #    判据 = codex_exhausted_report() 返回非 None；阶梯条目见 SKILL 的 REVIEW_FALLBACK_LADDER。
+ # ⭐ 实现在跑但不生效（只定义常量、没有调用点）正是本轮 P1-3 的病，这三条就是那个病的最小复现。
+ dict(n='codex 额度耗尽 ⇒ 降到阶梯第 1 档 qfmodel（异族）', task_type='review', scope='small',
+      codex_exhausted='DeepSeek',
+      want=dict(upstream='qoderclicn', model='qfmodel')),
+ dict(n='codex 额度耗尽 + 第 1 档探活不过 ⇒ 顺延到 hy3（⛔ 不许停在第 1 档）',
+      task_type='review', scope='small', codex_exhausted='DeepSeek',
+      ladder_unavailable={'qoderclicn/qfmodel'},
+      want=dict(upstream='codebuddy-code', model='hy3')),
+ dict(n='codex 额度耗尽 + 实施族 = 阶梯前两档的族 ⇒ 必须跳过同族（异构不变量）',
+      task_type='review', scope='small', codex_exhausted='Hy3(混元)',
+      ladder_unavailable={'qoderclicn/qfmodel'},
+      want=dict(upstream='codebuddy-code', model='glm-5.3-flash')),
+ dict(n='codex 额度耗尽 + 阶梯第 1 档是死族 ⇒ 跳过（⛔ 不探一个已知停用的 provider）',
+      task_type='review', scope='small', codex_exhausted='DeepSeek',
+      dead_providers={'qoderclicn'},
+      want=dict(upstream='codebuddy-code', model='hy3')),
+ dict(n='codex 额度耗尽 + 阶梯全撞完 ⇒ 明确报「审查通道不可用」并停（⛔ 不拿同族凑数）',
+      task_type='review', scope='small', codex_exhausted='Qwen',
+      ladder_unavailable={'qoderclicn/qfmodel', 'codebuddy-code/hy3', 'codebuddy-code/glm-5.3-flash'},
+      review_channel_unavailable=True),
  # ⚠️1 LAST_RESORT 的 provider 串也要断言（防未来把 claude 加进 PI_HOSTED 拼出 pi/claude）
  # ⚠️2 只给 provider、补出的默认 model 不可用 → 也要停
  # 🔴 换 T1 当场开出来的洞：新 T1 只在 cb，火山没有 ⇒ 显式火山 + 自动 model 会错配。
@@ -809,6 +855,9 @@ for c in CASES:
         if not c.get('paseo_stop'): fails.append(f"{c['n']}: 🔴 意外判为「Paseo 清单缺该型号」")
     except NoLanding:
         if not c.get('no_landing'): fails.append(f"{c['n']}: 🔴 意外报『无可用落点』——本档应当有落点")
+    except ReviewChannelUnavailable:
+        if not c.get('review_channel_unavailable'):
+            fails.append(f"{c['n']}: 🔴 意外报「审查通道不可用（阶梯全撞完）」")
     except BlockedModel:
         if not c.get('blocked_model'): fails.append(f"{c['n']}: 🔴 意外判为被屏蔽型号")
     except NameError as e:

@@ -1,5 +1,5 @@
 {
-  "version": "6.44.0",
+  "version": "6.45.0",
   "lastUpdated": "2026-10-06",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn / openrouter-free)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
@@ -25,7 +25,7 @@
         "⚠️ 可派不推荐，消耗 Claude 订阅额度，建议留主会话"
       ],
       "opencode": [
-        "🔻 **兜底，无常规用途**（2026-08-20 起）。review 已迁到 Copilot（大审查走 Paseo，短审查走 pi -p）"
+        "🔻 **兜底，无常规用途**（2026-08-20 起）。review ⭐ 2026-10-06 起迁到 codex CLI（大/短审查同通道 `codex exec`；📜 原 Copilot 通道全族已死）"
       ],
       "volcengine-coding": [
         "⭐ **火山 Coding Plan（独立额度池）**。阶梯相关：`deepseek-v4.1-flash`（T1 三池之一）/ `deepseek-v4-flash`（T2）/ `glm-5.3-flash`（T1 同档替代）；`deepseek-v4-pro` ⛔ 全局禁用。",
@@ -203,7 +203,7 @@
       "defaultModelId": "gpt-5.6-sol",
       "_defaultModelIdNote": "⚠️ 这是 2026-10-06 的实测快照（consistency-check 用它做标题缩写覆盖检查）；config.toml 改了 model 就要同步这里，⛔ 别让它漂",
       "modelOverride": "显式 --model > RIFT_REVIEW_MODEL 环境变量 > codex exec -m > config.toml",
-      "exhaustedSignatures": "out of credits（大小写不敏感；2026-10-06 实测原文 ERROR: Your workspace is out of credits. Ask your workspace owner to refill in order to continue.，rc=1，stderr）· usage limit · 401 · 429",
+      "exhaustedSignatures": "out of credits（大小写不敏感；2026-10-06 实测原文 ERROR: Your workspace is out of credits. Ask your workspace owner to refill in order to continue.，rc=1，stderr）· usage limit · HTTP 401 · HTTP 429（🔴 2026-10-06 异构审 P1-2：⛔ 不许写裸 401/429 —— codex 正常输出含 tokens used: 14290 / elapsed 4012ms ⇒ 裸数字必误判）",
       "exhaustedAction": "按 fallbackLadder 依次换异族落点 + 落点写冷却 +1h + 显式记录并告知用户（⛔ 不许悄悄换）",
       "invariants": "评审族 ≠ 实施族（实施是 Qwen/Hy/GLM 族时同族档跳过）；⛔ 不许回落 claude 族（主会话）；⛔ 不许回落 copilot 族（已死）",
       "fallbackLadder": [
@@ -1221,7 +1221,7 @@
         "pi": {
           "modelId": "github-copilot/gpt-5.5",
           "credit": null,
-          "note": "⭐ 审查主通道（2026-08-21 起）"
+          "note": "📜 历史：2026-08-21 ~ 2026-10-06 曾是审查主通道；⭐ 现由 codex CLI 取代（copilot 全族 2026-10-06 屏蔽，本 provider 已不可达）"
         },
         "opencode": {
           "modelId": "github-copilot/gpt-5.5",
@@ -1910,7 +1910,7 @@
       "⛔ deepseek/* 官方 API —— 已被用户加入 disabled_providers，不可用"
     ],
     "reviewChannelException": {
-      "model": "github-copilot/gpt-5.5",
+      "model": "codex（CLI 通道；⭐ 2026-10-06 起，见 dispatchDefaults.reviewChannel）",
       "rule": "⛔ 硬约束是【评审模型族 ≠ 实施模型族】（全局红线 #8），⛔ 不是「禁用 DeepSeek 审查」",
       "why": "⛔ 无论实施侧默认落点是谁，审查一律按【本次实施用的模型族】排除同族（routing §5）。⚠️ 原文写「当前 cb 默认落点是 deepseek-v4-flash」——那是把一个会变的默认值写进了不变量，已改",
       "invariant": "评审族 ≠ 实施族。🔴 含主会话——主会话本身就是 Claude，凡是主会话自己写的代码/文档/配置，⛔ 不得派 claude/* 子会话去审（自审）。同理：实施 hy3 → 可用 Claude/DeepSeek/GLM/Kimi/GPT；实施 deepseek-* → 排除 DeepSeek 全族；实施 kimi-k3 → 排除 Kimi 全族；实施 claude/* → 排除 Claude 全族。与具体模型无关。",
@@ -1927,7 +1927,7 @@
         "GPT"
       ],
       "claudeAsReviewer": "✅ Claude 族可以当评审（只要族不同就合规），但消耗 Claude 订阅额度，按 P3『可派发但不推荐』建议留给主会话；有更省的异族可用时优先用它们。",
-      "promptLengthRule": "🔴 ⛔ prompt ≤200 字符，背景让模型自己读文件。agent-review-protocol 实测：非交互模式 800 字 prompt 让 GPT-5.5 挂 22 分钟，短 prompt 秒回。⚠️ 本 skill 2026-08-20 审查轮出现的 300s/540s 超时，根因即此。"
+      "promptLengthRule": "🔴 ⛔ prompt ≤200 字符 —— **只适用旧 github-copilot 非交互通道**（⭐ 2026-10-06 起 review 走 codex CLI，`codex exec` 无此限制，大 prompt 由 §3.2c 的超时+进程组兜住）。原文：⛔ prompt ≤200 字符，背景让模型自己读文件。agent-review-protocol 实测：非交互模式 800 字 prompt 让 GPT-5.5 挂 22 分钟，短 prompt 秒回。⚠️ 本 skill 2026-08-20 审查轮出现的 300s/540s 超时，根因即此。"
     },
     "volcengine-agent-plan": {
       "verifiedOn": "2026-08-16",
@@ -2111,11 +2111,11 @@
     }
   },
   "oneshotChannels": {
-    "_note": "🔴 pi 有两种启动方式，⚠️ 不是「Paseo 还是 pi」的二选一——两种跑的都是 pi（同样读 AGENTS.md、同样 22 skill、同样 read/bash/edit/write），区别只在能不能看见它。开发实施类要可观测 ⇒ 用 Paseo MCP 派 pi（provider: 'pi/…'），可观测性与 pi 能力两样都要，本来就不冲突。pi -p CLI 只用于短任务/短审查；⚠️ 大审查走 Paseo",
+    "_note": "🔴 pi 有两种启动方式，⚠️ 不是「Paseo 还是 pi」的二选一——两种跑的都是 pi（同样读 AGENTS.md、同样 22 skill、同样 read/bash/edit/write），区别只在能不能看见它。开发实施类要可观测 ⇒ 用 Paseo MCP 派 pi（provider: 'pi/…'），可观测性与 pi 能力两样都要，本来就不冲突。pi -p CLI 只用于短任务；⭐ 审查（大/短）2026-10-06 起统一走 codex CLI（`codex exec`）",
     "priority": [
       "① 开发实施类 → Paseo create_agent，provider 可用 pi/volcengine-coding/deepseek-v4-flash（Paseo 的 pi provider 暴露 ~/.pi/agent/models.json 里的全部模型，带完整 thinking 档位；⚠️ 具体数量以 `pi --list-models` 为准，⛔ 别在文档里写死），或原有 codebuddy-code/* · qoderclicn/* · claude/* · codex/*",
-      "② 短任务/短审查 → pi -p CLI（省机器、不堆 serve）；⚠️ 大审查走 Paseo",
-      "③ 审查专用 → pi + Copilot（⛔ 仅审查，不做开发）",
+      "② 短任务 → pi -p CLI（省机器、不堆 serve）",
+      "③ 审查专用 → codex CLI `codex exec`（⭐ 2026-10-06 起；📜 原 pi + Copilot 通道全族已死）",
       "④ opencode → 🔻 兜底，排最后"
     ],
     "pi": {
@@ -2139,7 +2139,7 @@
         "⛔ 不要加 compat.thinkingFormat —— 实测填 'zai' 导致请求全部挂起（10 分钟超时）。思考强度目前用 pi 默认，未做映射"
       ]
     },
-    "opencodeCrashRootCause": "🔴 用户 2026-08-20 定位：opencode 卡死电脑是【纯命令方式】造成的——每次 opencode run --pure 拉起一个 serve，反复调用则 serve 堆叠吃穿内存。与既有记录一致（oc-review v1.13.0 靠共享 serve + --attach 消掉 per-run 堆叠）。⇒ 单次偶发调用本身安全；⛔ 循环里反复 opencode run 是危险动作。⚠️ 但 review 已于 2026-08-20 迁到 Copilot（2026-09-08 起大审查走 Paseo、短审查走 pi -p） ⇒ opencode 现在【没有任何常规用途】，纯兜底。",
+    "opencodeCrashRootCause": "🔴 用户 2026-08-20 定位：opencode 卡死电脑是【纯命令方式】造成的——每次 opencode run --pure 拉起一个 serve，反复调用则 serve 堆叠吃穿内存。与既有记录一致（oc-review v1.13.0 靠共享 serve + --attach 消掉 per-run 堆叠）。⇒ 单次偶发调用本身安全；⛔ 循环里反复 opencode run 是危险动作。⚠️ review 📜 2026-08-20 曾迁到 Copilot、⭐ 2026-10-06 起迁到 codex CLI（`codex exec`） ⇒ opencode 现在【没有任何常规用途】，纯兜底。",
     "codexReverted": "⛔ 2026-08-20 撤销：codex 里 model 与 model_provider 是两个独立字段、catalog entry 无 provider 字段 ⇒ 一个 session 只能连一个 provider，界面 /models 切不了跨 provider。用户选择保留原有 GPT，codex 已逐字节还原",
     "piCopilot": {
       "_dead_20261006": "🔴⛔ **2026-10-06 全族不可用**：用户删除 Copilot 凭据（auth.json = {}、models.json / models-store.json 的 github-copilot 条目抽走）⇒ 实测 No API key found for github-copilot。审查默认已迁 codex（见 dispatchDefaults.reviewChannel）。⛔ 以下字段是**历史配置记录**，⛔ 不是现行规则。",
