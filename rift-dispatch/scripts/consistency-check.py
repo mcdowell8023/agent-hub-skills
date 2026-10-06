@@ -133,7 +133,7 @@ if m:
     # ⚠️ 费率列允许 `None`（0910：T3 的 qwen3.8-max 倍率未测，⛔ 不许填数字凑齐）
     #    ⛔ 只写 [\d.]+ 会让该档**整个漏出 ladder 集合**，下面那条断言就空转了。
     ladder = set(re.findall(r"\('([a-z0-9.\-]+)',\s*(?:[\d.]+|None)\)",
-                 re.search(r"LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1)))
+                 re.search(r"(?<![A-Z_])LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1)))
     for base, peers in sk_peers.items():
         chk(base in ladder, f"TIER_PEERS 的键 {base} ⛔ 不是阶梯模型")
         ent = cat_tp.get(base, {})
@@ -168,7 +168,7 @@ DESCRIPTIVE = re.compile(r'is_night|那个 bug|旧写法|越过档位边界|换�
                         #    是在说 LAST_RESORT【不走】质量路径 —— 它本身就已经限定清楚了。
                         r'|不参与|⛔ ?不走|不受此约束|不是阶梯的|⛔ ?不是 ?T5')
 # 🔴 由 SKILL 实际执行的 LADDER + TIER_PEERS 推出「哪些档有同档替代」，供下面的反残留守卫用
-_LADDER_IDS = re.findall(r"\('([a-z0-9._\-]+)',", re.search(r"LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
+_LADDER_IDS = re.findall(r"\('([a-z0-9._\-]+)',", re.search(r"(?<![A-Z_])LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
 _PEER_TIERS = sorted(f'T{_LADDER_IDS.index(k) + 1}' for k in (sk_peers if m else {}) if k in _LADDER_IDS)
 _PEER_QUALIFIERS = tuple(f'仅 {t}' for t in _PEER_TIERS) or ('（无同档替代）',)
 RESIDUE = [
@@ -179,6 +179,12 @@ RESIDUE = [
    '「升档需做砸」⛔ 必须限定为【质量/成本升档】——可用性换档不受此约束'),
   (re.compile(r'模型固定|固定 ?`?github-copilot/gpt-5\.5|不受 P0 约束'), ('默认', '旧说法'),
    'review 的模型是**默认值**⛔不是「固定/不可覆盖」；选出的组合照样过 validate()，⛔ 不是「不受 P0 约束」'),
+  # ⭐ 2026-10-06：审查默认迁 codex（copilot 全族已死）。反残留：现行规则区⛔不许再写
+  #    「审查默认 github-copilot/gpt-5.5」这类旧口径 —— 要讲历史就带上 📜 / 迁移前 / 旧通道。
+  (re.compile(r'默认[^。\n]{0,20}github-copilot/gpt-5\.5'
+              r'|审查默认[^。\n]{0,10}gpt-5\.5'
+              r'|github-copilot/gpt-5\.5[^。\n]{0,10}审查默认'), ('📜', '历史', '2026-10-06 前', '旧通道', '迁移前'),
+   '审查默认 2026-10-06 起是 codex（CLI）—— copilot 全族已屏蔽（凭据已删），别再写它是默认；要讲历史就带上「📜 / 迁移前」', 'strict'),
   # 🔴 限定语**由 SKILL 的 TIER_PEERS 推出**，⛔ 不写死 —— 09-29 实测：写死的「仅 T3」在 T3 清空、T1 有 peer 之后
   #    反过来拦截正确写法（守卫把当时的事实编成了常量，事实一变守卫就站到错的一边）。
   (re.compile(r'四池 ?\+ ?同档替代|四池轮换 ?\+'), _PEER_QUALIFIERS,
@@ -275,14 +281,45 @@ for _m, pool in re.findall(r"'([a-z0-9.\-]+)':\s*\[(.*?)\]",
                            re.search(r"WALLET_PREF\s*=\s*\{(.*?)\n\}", S, re.S).group(1), re.S):
     dispatchable |= {mid for _u, mid in re.findall(r"\('([^']+)',\s*'([^']+)'\)", pool)}
 dispatchable |= set(re.findall(r"\('([a-z0-9.\-]+)',\s*[\d.]+\)",
-                    re.search(r"LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1), re.S))
+                    re.search(r"(?<![A-Z_])LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1), re.S))
 dispatchable |= {mid for _u, mid in re.findall(r"\('([^']+)',\s*'([^']+)'\)",
                  re.search(r"TIER_PEERS\s*=\s*\{(.*?)\n\}", S, re.S).group(1))}
 for prov in WL_PROVIDERS: dispatchable |= set(d['whitelist'][prov])
 dispatchable |= {x['model'] for x in SK_FP}      # ⭐ T0 免费池（09-29）
 lr = re.search(r"LAST_RESORT = \('([^']+)', '([^']+)'", S)
 if lr: dispatchable.add(lr.group(2))
-dispatchable.add('gpt-5.5')                       # review 默认
+# ⭐ review 默认落点（2026-10-06 起 codex）—— SKILL ⇔ catalog 结构性比对 + 标题缩写覆盖
+_rc_sk = re.search(r"REVIEW_DEFAULT_PROVIDER\s*=\s*'([a-z0-9._\-]+)'", S)
+chk(_rc_sk is not None, "SKILL 里找不到 REVIEW_DEFAULT_PROVIDER（review 默认 provider）")
+_rv = d.get('dispatchDefaults', {}).get('reviewChannel', {})
+chk(bool(_rv), "catalog 缺 dispatchDefaults.reviewChannel（审查默认落点）")
+if _rc_sk and _rv:
+    chk(_rc_sk.group(1) == _rv.get('provider') == 'codex',
+        f"review 默认 provider SKILL={_rc_sk.group(1)!r} catalog={_rv.get('provider')!r}，2026-10-06 起都应是 'codex'")
+    chk(_rv.get('channel') == 'cli', "reviewChannel.channel 应为 'cli'（审查全走 CLI）")
+    # 降级阶梯：SKILL 字面量 ⇔ catalog fallbackLadder（顺序 + 落点 + ⛔ 不许混入 claude/copilot 族）
+    _lad_sk = re.findall(r"\('([a-z0-9._\-]+)',\s*'([a-z0-9._\-]+)'\)",
+                         re.search(r"REVIEW_FALLBACK_LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
+    _lad_cat = [(x.get('upstream'), x.get('model')) for x in _rv.get('fallbackLadder', [])]
+    chk(_lad_sk == _lad_cat,
+        f"review 降级阶梯 SKILL={_lad_sk} ≠ catalog={_lad_cat}")
+    chk(bool(_lad_sk), "review 降级阶梯为空 —— codex 撞额度后没有出路")
+    for u, m in _lad_sk:
+        chk(u != 'github-copilot' and not u.startswith('claude'),
+            f"⛔ 降级阶梯混入禁族 {u}/{m}（⛔ copilot 已死、⛔ claude 是主会话）")
+        chk((u in WL_PROVIDERS and m in set(d['whitelist'][u])) or u in sk,
+            f"⛔ 降级阶梯 {u}/{m} 过不了 validate()（白名单/豁免都不认）")
+    _sig = str(_rv.get('exhaustedSignatures', ''))
+    _rx = re.search(r"CODEX_EXHAUSTED_RX\s*=\s*r'([^']*)'", S)
+    chk(_rx is not None, "SKILL 里找不到 CODEX_EXHAUSTED_RX（codex 额度耗尽签名）")
+    if _rx:
+        for tok in _rx.group(1).split('|'):
+            chk(tok.lower() in _sig.lower(),
+                f"⛔ CODEX_EXHAUSTED_RX 的签名 {tok!r} 在 catalog reviewChannel.exhaustedSignatures 里没有对应")
+# 标题缩写：审查默认模型也要能拼标题（原 gpt-5.5 那条随迁移换掉）
+dispatchable.add('gpt-5.5')                       # 📜 旧 review 默认（仍在 catalog 数值字段里被引用）
+if _rv.get('defaultModelId'):
+    dispatchable.add(_rv['defaultModelId'])       # ⭐ 现审查默认（codex config 实测快照）
 missing = sorted(m for m in dispatchable if m not in mdAbbr)
 chk(not missing, f"⛔ 这些可派发模型没有标题缩写，派发时拼不出标题: {missing}")
 
@@ -399,7 +436,7 @@ if m:
     _rc = routing_chain(R)
     chk(_rc is not None, "routing 找不到 §0 派发链代码块")
     if _rc:
-        _ladder = re.findall(r"\('([a-z0-9._\-]+)',", re.search(r"LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
+        _ladder = re.findall(r"\('([a-z0-9._\-]+)',", re.search(r"(?<![A-Z_])LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
         # 🔴 T0 由 FREE_POOL 推（⛔ 不再匹配 `for m in (...): # T0` —— 09-29 起没有那个循环了）
         chk(bool(SK_FP), "SKILL 里找不到 FREE_POOL 字面量（T0 免费池登记表）")
         # ⭐ 连 provider 前缀一起比（审查 r2：只比 model 时 `cb/stealth/space-bunny-alpha` 这种错前缀也会通过）
@@ -504,18 +541,21 @@ if m:
                 f"⛔ 屏蔽漏口：`{mid}` 在 catalog 里挂着 provider `{prov}`，"
                 f"但 blockedModels['{prov}'] 里没有它 ⇒ 显式 --provider {prov} --model {mid} 可绕过 P0")
 
-    # ⛔ 被屏蔽的型号不得同时出现在「可用异族评审」清单里
-    # ⚠️ 清单会**折行**（第二行以 `·` 开头）⇒ ⛔ 不能只锚第一行（0909 实测：把被屏蔽型号
-    #    插到第二行，守卫全绿）。改成取【整块】：从「可用异族评审」到「已屏蔽」之间。
+    # ⛔ 被屏蔽的型号不得出现在 §3.2c 的「降级阶梯」表里（2026-10-06 起 §3.2c 是 codex 通道 + 降级阶梯；
+    #    旧「可用异族评审 … 已屏蔽」清单已随 copilot 通道死亡而删除）
+    # ⚠️ 取块判据：从「降级阶梯」标题到「copilot 全族已进」之间的表格区。
     L = S.splitlines()
     try:
-        a = next(i for i, l in enumerate(L) if '可用异族评审' in l)
-        b = next(i for i, l in enumerate(L[a:], a) if '已屏蔽' in l)
+        a = next(i for i, l in enumerate(L) if '**降级阶梯**（' in l)
+        b = next(i for i, l in enumerate(L[a:], a) if 'copilot 全族已进' in l)
         review_block = '\n'.join(L[a:b])
     except StopIteration:
-        review_block = ''; chk(False, "§3.2c 找不到「可用异族评审 … 已屏蔽」这一块")
+        review_block = ''; chk(False, "§3.2c 找不到「**降级阶梯**（… copilot 全族已进」这一块")
     for mid in sk_blk.get('github-copilot', ()):
-        chk(f'`{mid}`' not in review_block, f"⛔ 被屏蔽的 {mid} 仍列在可用异族评审清单里")
+        chk(f'`{mid}`' not in review_block, f"⛔ 被屏蔽的 {mid} 仍列在 §3.2c 降级阶梯里")
+    # ⛔ copilot 已不在豁免集 —— §3.2c 现行规则区若还写「copilot 在豁免集」就是残留
+    chk('github-copilot' not in sk,
+        "⛔ github-copilot 仍 in EXEMPT_PROVIDERS —— 2026-10-06 起全族已死，provider 级也必须拦")
 
 # ── 3g. 🔴 pi 配置里的【无版本别名】必须已进 BLOCKED_MODELS（用户 2026-09-10）──
 #    ⚠️ 这条是**结构性**的：⛔ 不靠人记得屏蔽，而是扫 ~/.pi/agent/models.json 里所有
@@ -659,7 +699,7 @@ if _cr:
             warn(_DT.now() <= _DT.fromisoformat(_du + 'T23:59'),
                  f"cb 型号 {_m} 的限时折扣已过 discountUntil={_du}（{_cr_latest} 快照）—— 折后价未知，核对 /model 面板或探活返回的 rawUsage.credit 后更新快照")
 # ⑪ catalog 里的旧免费链（审查 r2：反残留正则只拦散文，catalog 的数值 / 布尔字段拦不住）⇒ 结构性比对
-_ladder_ids = re.findall(r"\('([a-z0-9._\-]+)',", re.search(r"LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
+_ladder_ids = re.findall(r"\('([a-z0-9._\-]+)',", re.search(r"(?<![A-Z_])LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
 _et = d.get('dispatchDefaults', {}).get('entryTier', {})
 for k, v in _et.items():
     if not isinstance(v, dict): continue
@@ -734,7 +774,7 @@ _em = re.search(r"^ENTRY\s*=\s*(\{[^}]*\})", S, re.M)
 _entry = ast.literal_eval(_em.group(1)) if _em else None
 chk(_entry is not None, "SKILL 里找不到 ENTRY 字面量")
 if _entry is not None:
-    _L = re.findall(r"\('([a-z0-9._\-]+)',", re.search(r"LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
+    _L = re.findall(r"\('([a-z0-9._\-]+)',", re.search(r"(?<![A-Z_])LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
     def _tier_of(code):             # 付费起步档编号 1..4（ENTRY 缺省 0 ⇒ T1）
         return _entry.get(code, 0) + 1
     _n_cat = 0
@@ -819,10 +859,13 @@ chk('jdcloud-joyagent' in d['models']['deepseek-v4-pro']['providers'], "deepseek
 
 # ── 7. pi 侧配置（本机才查） ──
 if pi:
-    cop = pi['providers']['github-copilot']['models']
-    chk(not any(m['id'].startswith('claude') for m in cop), "pi Copilot 仍有 claude")
-    chk(sorted(m['id'] for m in cop if m.get('unsupported'))
-        == ['gpt-5.4-nano', 'kimi-k2.7-code', 'kimi-k3'], "unsupported 标记不全")
+    # 🔴 2026-10-06 起预期状态：pi 配置里【没有】github-copilot（用户删除 Copilot 凭据）。
+    #    ⛔ 留着 provider 条目只会让 pi --list-models 显示一排调不通的模型 ⇒ 出现即警告。
+    cop_prov = pi.get('providers', {}).get('github-copilot')
+    if cop_prov is not None:
+        w.append("⚠️ pi 配置里仍有 github-copilot —— 2026-10-06 起凭据已删、全族已屏蔽，"
+                 "这个 provider 条目只会误导（模型全部调不通）。若是有意恢复，先撤销 BLOCKED_MODELS 全族屏蔽。")
+        chk(not any(m['id'].startswith('claude') for m in cop_prov['models']), "pi Copilot 仍有 claude")
     for p_ in ('volcengine-coding', 'volcengine-agent-plan'):
         chk('glm-5.3-flash' in [m['id'] for m in pi['providers'][p_]['models']],
             f"pi {p_} 缺 glm-5.3-flash")

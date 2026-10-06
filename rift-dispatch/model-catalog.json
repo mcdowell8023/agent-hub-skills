@@ -1,6 +1,6 @@
 {
-  "version": "6.43.0",
-  "lastUpdated": "2026-10-02",
+  "version": "6.44.0",
+  "lastUpdated": "2026-10-06",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn / openrouter-free)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
     "codebuddy-code": [
@@ -40,9 +40,11 @@
       "volcengine-chat": [
         "🔸 仅当需消耗 Agent Plan 额度且要控思考强度时：deepseek-v4-flash / deepseek-v4-pro / ark-code-latest（Chat API，--variant 有效）  🔴 **仅 opencode 场景**：pi 直连 agent-plan 的 thinking 已实测生效（2026-09-09）⇒ 走 pi 时⛔不需要绕到本 provider"
       ],
-      "github-copilot": "⭐ 审查通道，⛔ 仅审查不做开发。🔴 真源是 `~/.pi/agent/models.json` 的 github-copilot provider（⛔ 不是 models-store.json，那个会自动刷新）。2026-09-08 实测可用 **17 个**：gpt-5.5(⭐审查默认) · gpt-5.6-sol · gpt-5.6-luna · gpt-5.6-terra · gpt-6-astra · gpt-5.4 · gpt-5.4-mini · gpt-5.3-codex · gpt-5-mini · gemini-3.5-flash · gemini-3.6-flash · gemini-3.7-flash · gemini-3.8-flash · grok-4.5 · grok-4.6 · mai-code-1-flash-picker · mai-code-1.1-flash。✅ claude-* 全族已移除。⚠️ store 里的 gpt-5.4-nano / kimi-k3 / kimi-k2.7-code 本订阅实际不支持",
+      "_githubCopilotRemoved_20261006": "🔴⛔ **2026-10-06 起 github-copilot 已 not in EXEMPT_PROVIDERS（豁免集里键整个删除，全族不可用）**：用户删除 Copilot 凭据（~/.pi/agent/auth.json = {}，models.json / models-store.json 的 github-copilot 条目抽走），实测再派 → [System Error] No API key found for github-copilot. ⇒ 审查默认已迁 codex（CLI）。📜 以下为迁移前的记录：⭐ 审查通道，⛔ 仅审查不做开发。真源是 ~/.pi/agent/models.json 的 github-copilot provider（⛔ 不是 models-store.json，那个会自动刷新）。2026-09-08 实测可用 **17 个**：gpt-5.5(⭐旧审查默认) · gpt-5.6-sol · gpt-5.6-luna · gpt-5.6-terra · gpt-6-astra · gpt-5.4 · gpt-5.4-mini · gpt-5.3-codex · gpt-5-mini · gemini-3.5-flash · gemini-3.6-flash · gemini-3.7-flash · gemini-3.8-flash · grok-4.5 · grok-4.6 · mai-code-1-flash-picker · mai-code-1.1-flash。✅ claude-* 全族已移除（2026-09-08）。⚠️ store 里的 gpt-5.4-nano / kimi-k3 / kimi-k2.7-code 本订阅实际不支持",
       "codex": [
-        "Paseo 派发 provider，定位不变"
+        "⭐ **审查默认 provider（2026-10-06 起）**——走 **codex CLI** `codex exec --skip-git-repo-check \"<prompt>\" < /dev/null`，模型取 ~/.codex/config.toml 的 model（实测 gpt-5.6-sol），RIFT_REVIEW_MODEL 可覆盖",
+        "🔴 Paseo 的 codex provider ⛔ **不可用**：`paseo run --provider codex` → Your workspace is out of credits（2026-10-06 实测，与 08-20 记录一致）⇒ 审查没有 Paseo 通道，大审查用「后台跑 + 输出落文件」补偿可见性",
+        "🔴 codex 撞额度（out of credits / usage limit / 401 / 429）⇒ 按 dispatchDefaults.reviewChannel.fallbackLadder 换异族，显式记录并告知用户"
       ],
       "bailian-token-plan": "阿里云百炼 Token Plan（2026-09-09 接入）—— **已付费套餐**，与火山/cb/Copilot 不同钱包。🔴 用户指定的文本模型：`deepseek-v4.1-flash`（T1 三池之一，09-15 加）· `qwen3.8-max`（T3 唯一池）· `qwen3.8-flash`（≈T1 同档但⛔不进阶梯）· `deepseek-v4-flash-0731`（未定档）· ~~`deepseek-v4-pro-0813`~~（禁用）。夜间 22–08：qwen3.8 系 4 折、DeepSeek 系 5 折（09-29）。⚠️ 目录里没有 ≠ 不能用（-0813 就不在 /models 里）"
     },
@@ -105,15 +107,26 @@
       "github-copilot": [
         "gemini-3.5-flash",
         "gemini-3.6-flash",
+        "gemini-3.7-flash",
+        "gemini-3.8-flash",
+        "grok-4.5",
+        "grok-4.6",
         "gpt-5-mini",
         "gpt-5.3-codex",
+        "gpt-5.4",
         "gpt-5.4-mini",
+        "gpt-5.5",
+        "gpt-5.6-luna",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-6-astra",
         "mai-code-1-flash-picker",
         "mai-code-1.1-flash"
       ],
-      "_pendingEval": "✅ **2026-09-09 已测**（三题盲评，⭐ 见 blindEval_copilot5_20260909）：grok-4.5 109.5 ≈ grok-4.6 106.0 ≫ gemini-3.7-flash 97.0 ≈ gemini-3.8-flash 93.0 ≫ mai-code-1.1-flash 81.5。⚠️ **与既有 /120 榜不同口径**（本轮 pi -p 无 agent 系统提示），⛔ 只在这 5 个之间可比。⇒ 用户口径是「做个参考」⇒ **⛔ 未改派发阶梯**。",
+      "_copilotFamilyBlocked_20261006": "🔴 2026-10-06 **整族屏蔽**：上表 17 个 = 该 provider 已知全部型号（原 7 个点名屏蔽 + 其余 10 个）。理由：用户删除 pi Copilot 凭据（auth.json 清空、models.json / models-store.json 的 github-copilot 条目抽走）⇒ 实测 No API key found for github-copilot ⇒ 全族不可用；审查默认已迁 codex（CLI）。⛔ 屏蔽名单宁可写全 —— pi 配置将来若被恢复，本表仍然兜底。",
+      "_pendingEval": "📜 **2026-09-09 已测**（三题盲评，⭐ 见 blindEval_copilot5_20260909）：grok-4.5 109.5 ≈ grok-4.6 106.0 ≫ gemini-3.7-flash 97.0 ≈ gemini-3.8-flash 93.0 ≫ mai-code-1.1-flash 81.5。⚠️ **与既有 /120 榜不同口径**（本轮 pi -p 无 agent 系统提示），⛔ 只在这 5 个之间可比。⇒ 用户口径是「做个参考」⇒ **⛔ 未改派发阶梯**。（📜 2026-10-06 起通道整体死亡，数据仅存档。）",
       "_howEnforced": {
-        "github-copilot": "🔴 **只能靠 rift-dispatch 的 BLOCKED_MODELS**（P0 validate 里拦）。⛔ 从 ~/.pi/agent/models.json 删条目**无效** —— pi 回落 models-store.json（2026-09-09 实测：删掉 gpt-5-mini 后仍能调用成功）；store 按 etag 自动刷新，改它会被冲掉。",
+        "github-copilot": "🔴 **只能靠 rift-dispatch 的 BLOCKED_MODELS**（P0 validate 里拦）。⛔ 从 ~/.pi/agent/models.json 删条目**无效** —— pi 回落 models-store.json（2026-09-09 实测：删掉 gpt-5-mini 后仍能调用成功）；store 按 etag 自动刷新，改它会被冲掉。⭐ 2026-10-06 起本条已被更强的两层闸取代：型号级 BLOCKED_MODELS 全族 17 个 + provider 级移出豁免集（显式 --provider github-copilot 落「未知 provider」）。",
         "volcengine-*": "✅ **删得掉** —— 这两个 provider 只在 models.json 里定义、无 store 兜底。doubao-* / ark-code-latest 已移除，归档 ~/.pi/agent/providers-disabled/blocked-models-20260909.json",
         "_claudeCorrection": "⚠️ 旧记录「Claude 全族靠 models.json 覆盖 store 移除」是**错的**：store 里 claude-* 8 个全在，是 GitHub 服务端返回 400 model_not_supported 拦的。"
       },
@@ -181,6 +194,48 @@
   },
   "dispatchDefaults": {
     "_note": "2026-08-12 用户决策（model-routing.md 硬性约束 4）+ 08-16 白名单（约束 6）。白名单优先级更高。",
+    "reviewChannel": {
+      "_note": "⭐ 2026-10-06 迁移：审查默认由 📜 旧通道 github-copilot/gpt-5.5（全族已死）改为 codex（CLI 通道）。本块是 catalog 侧的权威数据，与 SKILL §2 的 REVIEW_DEFAULT_PROVIDER / REVIEW_FALLBACK_LADDER / CODEX_EXHAUSTED_RX 由 consistency-check 结构性比对。",
+      "provider": "codex",
+      "channel": "cli",
+      "command": "codex exec --skip-git-repo-check \"<review_prompt>\" < /dev/null",
+      "modelSource": "~/.codex/config.toml 的 model 字段（⛔ 运行时读取，不写死）",
+      "defaultModelId": "gpt-5.6-sol",
+      "_defaultModelIdNote": "⚠️ 这是 2026-10-06 的实测快照（consistency-check 用它做标题缩写覆盖检查）；config.toml 改了 model 就要同步这里，⛔ 别让它漂",
+      "modelOverride": "显式 --model > RIFT_REVIEW_MODEL 环境变量 > codex exec -m > config.toml",
+      "exhaustedSignatures": "out of credits（大小写不敏感；2026-10-06 实测原文 ERROR: Your workspace is out of credits. Ask your workspace owner to refill in order to continue.，rc=1，stderr）· usage limit · 401 · 429",
+      "exhaustedAction": "按 fallbackLadder 依次换异族落点 + 落点写冷却 +1h + 显式记录并告知用户（⛔ 不许悄悄换）",
+      "invariants": "评审族 ≠ 实施族（实施是 Qwen/Hy/GLM 族时同族档跳过）；⛔ 不许回落 claude 族（主会话）；⛔ 不许回落 copilot 族（已死）",
+      "fallbackLadder": [
+        {
+          "order": 1,
+          "upstream": "qoderclicn",
+          "model": "qfmodel",
+          "family": "Qwen",
+          "cost": "免费（截止未公布）",
+          "command": "qoderclicn -p -m Qwen3.8-Flash --tools \"\" -o json \"<prompt>\" < /dev/null",
+          "verified": "✅ 2026-10-06 14:35 真实评审演练通过（30.3s，VERDICT 合规，total_credits=0）"
+        },
+        {
+          "order": 2,
+          "upstream": "codebuddy-code",
+          "model": "hy3",
+          "family": "Hy(混元)",
+          "cost": "免费（至 2026-10-31）",
+          "command": "codebuddy -p --output-format json --model hy3 --tools \"\" \"<prompt>\" < /dev/null",
+          "verified": "✅ 2026-10-06 14:38 探活通过（~12s，PROBE_OK）"
+        },
+        {
+          "order": 3,
+          "upstream": "codebuddy-code",
+          "model": "glm-5.3-flash",
+          "family": "GLM",
+          "cost": "⚠️ 付费 0.06x（⛔ 不是免费）",
+          "command": "codebuddy -p --output-format json --model glm-5.3-flash --tools \"\" \"<prompt>\" < /dev/null",
+          "verified": "✅ 2026-10-06 14:38 探活通过（~5s，PROBE_OK）"
+        }
+      ]
+    },
     "codebuddyDefaultModel": "glm-5.3-flash",
     "codebuddyDefaultThinking": "xhigh",
     "promoFirst": {
@@ -1379,7 +1434,7 @@
         "🔴_scope": "⛔ **不可与别轮横比** —— 本轮走 `pi -p`（无 agent 系统提示），既有 /120 榜是 Paseo agent。⭐ 只在这 5 个之间成立。"
       },
       "tier": "⭐ 第一档",
-      "dispatchNote": "⚠️ ⛔ **不在派发阶梯里**（用户口径「做个参考」）。⭐ 可作异族审查备选（审查默认仍是 gpt-5.5）。",
+      "dispatchNote": "⚠️ ⛔ **不在派发阶梯里**（用户口径「做个参考」）。📜 2026-10-06 前曾标「异族审查备选（默认 gpt-5.5）」；copilot 全族已死，仅存档。",
       "⛔_notSeparable": "同档内⛔不可分高下：lru/kafka 两题第一名换位后翻转（grok 对）；gemini 对差 4.0 同在噪声内。见 blindEval_copilot5_20260909"
     },
     "grok-4.6": {
@@ -1397,7 +1452,7 @@
         "🔴_scope": "⛔ **不可与别轮横比** —— 本轮走 `pi -p`（无 agent 系统提示），既有 /120 榜是 Paseo agent。⭐ 只在这 5 个之间成立。"
       },
       "tier": "⭐ 第一档",
-      "dispatchNote": "⚠️ ⛔ **不在派发阶梯里**（用户口径「做个参考」）。⭐ 可作异族审查备选（审查默认仍是 gpt-5.5）。",
+      "dispatchNote": "⚠️ ⛔ **不在派发阶梯里**（用户口径「做个参考」）。📜 2026-10-06 前曾标「异族审查备选（默认 gpt-5.5）」；copilot 全族已死，仅存档。",
       "⛔_notSeparable": "同档内⛔不可分高下：lru/kafka 两题第一名换位后翻转（grok 对）；gemini 对差 4.0 同在噪声内。见 blindEval_copilot5_20260909"
     },
     "gemini-3.7-flash": {
@@ -1846,7 +1901,7 @@
     "costContext": "v4-pro 0.13x / v4-flash 0.05x ⇒ 那 7 分总分差是用 2.6 倍成本换的"
   },
   "opencodeProviders": {
-    "_note": "🔻 【2026-08-20 起 opencode 已降为纯兜底】本节保留是因为配置仍在、偶尔兜底时要查。⛔ 通道选择请以 oneshotChannels.matrix 为唯一真源：开发=Paseo 派 pi · 只读=pi -p 火山 · 审查=Copilot（大审查 Paseo / 短审查 pi -p） · opencode=兜底。以下内容描述的是『若确实要用 opencode 时』的配置，不代表它还是默认。",
+    "_note": "🔻 【2026-08-20 起 opencode 已降为纯兜底】本节保留是因为配置仍在、偶尔兜底时要查。⛔ 通道选择请以 oneshotChannels.matrix 为唯一真源：开发=Paseo 派 pi · 只读=pi -p 火山 · 审查=codex exec CLI（2026-10-06 起，见 dispatchDefaults.reviewChannel） · opencode=兜底。以下内容描述的是『若确实要用 opencode 时』的配置，不代表它还是默认。",
     "priority": [
       "🔻 仅当确需使用 opencode 时（正常情况请走 oneshotChannels.matrix）：",
       "① volcengine-coding/deepseek-v4-flash",
@@ -2087,10 +2142,11 @@
     "opencodeCrashRootCause": "🔴 用户 2026-08-20 定位：opencode 卡死电脑是【纯命令方式】造成的——每次 opencode run --pure 拉起一个 serve，反复调用则 serve 堆叠吃穿内存。与既有记录一致（oc-review v1.13.0 靠共享 serve + --attach 消掉 per-run 堆叠）。⇒ 单次偶发调用本身安全；⛔ 循环里反复 opencode run 是危险动作。⚠️ 但 review 已于 2026-08-20 迁到 Copilot（2026-09-08 起大审查走 Paseo、短审查走 pi -p） ⇒ opencode 现在【没有任何常规用途】，纯兜底。",
     "codexReverted": "⛔ 2026-08-20 撤销：codex 里 model 与 model_provider 是两个独立字段、catalog entry 无 provider 字段 ⇒ 一个 session 只能连一个 provider，界面 /models 切不了跨 provider。用户选择保留原有 GPT，codex 已逐字节还原",
     "piCopilot": {
+      "_dead_20261006": "🔴⛔ **2026-10-06 全族不可用**：用户删除 Copilot 凭据（auth.json = {}、models.json / models-store.json 的 github-copilot 条目抽走）⇒ 实测 No API key found for github-copilot。审查默认已迁 codex（见 dispatchDefaults.reviewChannel）。⛔ 以下字段是**历史配置记录**，⛔ 不是现行规则。",
       "addedOn": "2026-08-20（用户在 pi 内 /login 接入 GitHub Copilot 订阅）",
-      "auth": "~/.pi/agent/auth.json 已含 github-copilot",
+      "auth": "📜 曾是 ~/.pi/agent/auth.json 含 github-copilot；2026-10-06 已被用户清空（= {}）",
       "models": [
-        "⭐ gpt-5.5 —— 审查默认",
+        "📜 gpt-5.5 —— 审查默认（2026-10-06 前）",
         "GPT 族备选：gpt-5.6-sol · gpt-5.6-luna · gpt-5.6-terra · gpt-6-astra · gpt-5.4 · gpt-5.4-mini · gpt-5.3-codex · gpt-5-mini",
         "Gemini 族：gemini-3.5-flash · gemini-3.6-flash · gemini-3.7-flash · gemini-3.8-flash",
         "其他异族：grok-4.5 · grok-4.6 · mai-code-1-flash-picker · mai-code-1.1-flash",
@@ -2110,11 +2166,12 @@
       "caveat": "⚠️ pi/volcengine-*/kimi-k2.7-code 的 thinkingOptions 为 null（官方注明不支持 reasoning summaries），派它时不要传 thinkingOptionId"
     },
     "matrix": {
-      "_note": "🔴 通道按【规模】分，⛔ 不按任务类型。判据是「要不要看得见」",
-      "开发实施类 + 大审查": "Paseo create_agent —— 可见/可干预。开发用 pi/volcengine-coding/*，大审查用 pi/github-copilot/gpt-5.5",
-      "短任务 / 短审查 / 只读分析": "pi -p —— 跑完即退不堆 serve。只读用 --provider volcengine-coding；短审查用 --provider github-copilot --model gpt-5.5，⛔ prompt ≤200 字符（800 字会挂 22 分钟）；🔴 一律带 `< /dev/null`（09-24 A/B：继承管道 stdin 会永久阻塞）",
+      "_note": "🔴 通道按【规模】分，⛔ 不按任务类型。判据是「要不要看得见」。⚠️ 2026-10-06 审查侧改写：copilot 全族死亡 + Paseo codex provider 撞额度 ⇒ 审查全走 CLI（codex exec），大审查可见性用后台 + 输出落文件补偿",
+      "开发实施类 + 大审查（实施侧）": "Paseo create_agent —— 可见/可干预。开发用 pi/volcengine-coding/*",
+      "审查（默认，不分大小）": "codex exec CLI —— 模型取 ~/.codex/config.toml 的 model（实测 gpt-5.6-sol），RIFT_REVIEW_MODEL 可覆盖；撞额度按 dispatchDefaults.reviewChannel.fallbackLadder 换异族并显式告知用户",
+      "短任务 / 只读分析": "pi -p —— 跑完即退不堆 serve。只读用 --provider volcengine-coding；🔴 一律带 `< /dev/null`（09-24 A/B：继承管道 stdin 会永久阻塞）",
       "兜底": "opencode —— 🔻 无常规用途",
-      "审查的模型侧": "**未显式指定时**默认 github-copilot/gpt-5.5（⛔ 不是「不可覆盖」：显式 --model 会保留，显式非 Copilot provider 会在 P0 之前报 review 冲突）。⛔ Copilot 仅审查不做开发；约束是评审族 ≠ 实施族"
+      "审查的模型侧": "**未显式指定时**默认 codex（⭐ 2026-10-06 起；⛔ 不是「不可覆盖」：显式 --model 会保留，显式非 codex provider 会在 P0 之前报 review 冲突）。约束是评审族 ≠ 实施族；⛔ codex 仅审查不做开发"
     }
   },
   "hy4Eval_20260821": {

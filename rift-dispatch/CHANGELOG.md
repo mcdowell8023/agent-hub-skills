@@ -1,5 +1,53 @@
 # Rift Dispatch — 变更记录
 
+## v11.12 (2026-10-06) — 审查默认迁 codex（CLI）· 屏蔽 copilot 全族 · 降级阶梯
+
+**用户决定（原文）：「评审换成 codex，限额度了就换个其他模型即可。」**
+
+### 背景（两条实测事实）
+
+1. **copilot 全族已死**：用户 2026-10-06 删除 pi 的 Copilot 凭据
+   （`~/.pi/agent/auth.json` = `{}`，models.json / models-store.json 的 `github-copilot` 条目抽走）。
+   实测再派 `pi/github-copilot/gpt-5.5` → `[System Error] No API key found for github-copilot.`
+2. **codex 当前是「额度耗尽」不是「可用」**：同日两次对照实测，
+   `codex exec --skip-git-repo-check`（用户先跑的一次 rc=0、输出 OK、tokens used 23241），
+   随后同样命令 rc=1、stderr `ERROR: Your workspace is out of credits. Ask your workspace owner to refill in order to continue.`；
+   Paseo 的 codex provider 同错。⇒ 默认落点仍是 codex（用户要求），撞额度走降级阶梯。
+
+### 改动
+
+- **审查默认**：`github-copilot/gpt-5.5` → **`codex`（CLI）**，模型取 `~/.codex/config.toml` 的
+  `model`（实测 `gpt-5.6-sol`），`RIFT_REVIEW_MODEL` 可覆盖；通道统一
+  `codex exec --skip-git-repo-check "<prompt>" < /dev/null`，**不分大/短审查**
+  （Paseo codex provider 撞额度 ⇒ 审查没有 Paseo 通道；大审查用「后台跑 + 输出落文件」补偿可见性）。
+  ⛔ pi 那套「prompt ≤200 字符」**不适用**：codex 长 prompt 实测正常（23241 tokens，额度耗尽前）。
+- **降级阶梯**（额度签名：`out of credits` / `usage limit` / 401 / 429，大小写不敏感）：
+  `qoderclicn/qfmodel`（免费，Qwen 族）→ `codebuddy-code/hy3`（免费至 10-31，Hy 族）→
+  `codebuddy-code/glm-5.3-flash`（**⚠️ 付费 0.06x，不是免费**，GLM 族）。
+  ⛔ 硬不变量：评审族 ≠ 实施族（同族档跳过）；⛔ 不落 claude 族（主会话）；⛔ 不落 copilot 族。
+  ⭐ 换档必须**显式记录并告知用户**（⛔ 不许悄悄换），落点写冷却 +1h。
+- **copilot 全族屏蔽**：`BLOCKED_MODELS['github-copilot']` 补全 17 个已知型号（原 7 + 新 10），
+  同时 `github-copilot` 移出 `EXEMPT_PROVIDERS` / `PI_HOSTED` / catalog `whitelist.exempt`
+  （provider 级：显式 `--provider github-copilot` 落「未知 provider」）。两层闸。
+- **结构性同步**：catalog `dispatchDefaults.reviewChannel` 新增，与 SKILL
+  `REVIEW_DEFAULT_PROVIDER` / `REVIEW_FALLBACK_LADDER` / `CODEX_EXHAUSTED_RX` 由 consistency-check 比对；
+  `version` 6.43.0 → 6.44.0。反残留守卫新增：现行规则区再写「审查默认 gpt-5.5/copilot」会红。
+- **探活**：`probe-models.sh` 新增 `probe_codex`（判 rc + stderr，额度耗尽 → FAILM + 冷却 +1h），
+  替换已死的 copilot 分流注释。
+
+### 实测边界（2026-10-06）
+
+| 项 | 结果 |
+|---|---|
+| codex exec（默认沙箱，/tmp） | rc=1 · `out of credits`（见上）；stdin 边界：10s 不关闭的管道实测拖住 10s、EOF 后才发请求 ⇒ `< /dev/null` 保留 |
+| qfmodel 真实评审演练（codex 失败 → 落第 ① 档） | ✅ 30.3s，`total_credits=0`，产出含真 bug（rejected promise 永久缓存）+ `VERDICT: FAIL` 合规 |
+| hy3 / glm-5.3-flash 探活 | ✅ PROBE_OK（~12s / ~5s） |
+| codex 长 prompt（额度耗尽后） | ⛔ 未能复测，恢复额度后补 |
+
+验证：pipeline-test 140 条 ✅ · coverage 100% ✅ · consistency-check ✅ · probe-models-test 41 ✅ · cooldown-test 17 ✅ · billing-test 24 ✅。
+测试改动：copilot「照常放行」两条反例随全族屏蔽反转为必拦；「显式 copilot + 自动 T1」从错配改为未知 provider 拦；
+review 默认相关断言全部改到 codex/gpt-5.6-sol 新语义（理由如上，非放宽）。
+
 ## v11.5 (2026-09-10) — T1 换成 `deepseek-v4.1-flash`
 
 **起因是用户的一个观察：「有的 agent 没优先用 4.1 flash，而是优先用了 glm 5.3 flash」。**

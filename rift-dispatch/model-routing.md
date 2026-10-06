@@ -89,7 +89,7 @@ consistency §3o ⑬ 强制每个 None 条目都带这类探测，且只认探�
 ⚠️ **豁免 provider** 走**另一套**校验 —— 它们不消耗 cb/qcn 额度，⛔ 不受本表约束。
 🔴 **校验对象是 `split_provider()` 之后的 upstream，⛔ 不是顶层 `pi`。**
 ⛔ `pi` 是**宿主**，把它当豁免会让 `pi/jdcloud-joyagent/...` 整条绕过 upstream 校验（0909 第 6 轮审查）。
-⇒ 实际豁免集（`EXEMPT_PROVIDERS`）= 火山×3 · 百炼 · Copilot · claude · codex · opencode。
+⇒ 实际豁免集（`EXEMPT_PROVIDERS`）= 火山×3 · 百炼 · claude · codex · opencode（🔴 Copilot 2026-10-06 起移出，全族已死）。
 ⇒ `LAST_RESORT` 的 `claude/claude-sonnet-5` 走豁免集，⛔ **不是违例**。
 
 | Provider | model id | 费率 | 角色 |
@@ -119,9 +119,9 @@ consistency §3o ⑬ 强制每个 None 条目都带这类探测，且只认探�
 | 通道 | 说明 |
 |---|---|
 | `pi/volcengine-coding/*` · `pi/volcengine-agent-plan/*` | 火山按月套餐，§7 |
-| `pi -p --provider github-copilot` | 审查硬例外，§5 |
+| `codex exec`（CLI） | 🔴 **审查硬例外，§5**（2026-10-06 起；原 `pi -p --provider github-copilot` 全族已死） |
 | `claude/*` | ⚠️ 可派但不推荐——消耗 Claude 订阅额度，建议留给主会话。⭐ **例外：`claude-sonnet-5` 作为 LAST_RESORT 自动可达**（§8） |
-| `codex/*` | Paseo 派发 provider，定位不变 |
+| `codex/*` | ⭐ **审查默认 provider（2026-10-06 起，走 CLI，§5）**。⚠️ Paseo 的 codex provider `out of credits`（10-06 实测）⇒ 只有 CLI 一条通道 |
 | ~~`jdcloud-joyagent/*`~~ | ⛔ **不在本表** —— 它虽是独立钱包，但同样受白名单约束（只准 DeepSeek），见上表与 §3.4 |
 | `opencode run --pure` | 🔻 **执行适配器的兜底**（三条通道都不可用时才用），无常规用途，§7 ⚠️ ⛔ 与「可用性降级链的 `LAST_RESORT`」是两码事 |
 | ~~`deepseek/*`（官方 API）~~ | 🔴 2026-08-20 已加入 `disabled_providers`。⛔ 不在自动降级链里，只能**手动**用（§3.5） |
@@ -131,13 +131,14 @@ consistency §3o ⑬ 强制每个 None 条目都带这类探测，且只认探�
 ## 1.b 🔴 屏蔽名单（`BLOCKED_MODELS`，用户 2026-09-09 点名）
 
 ⛔ **与白名单/豁免集正交** —— **豁免 provider 也拦得住**。
-（否则 `--provider github-copilot --model gpt-5-mini` 会因为 copilot 在豁免集里而直接放行。）
+（📜 历史例子：`--provider github-copilot --model gpt-5-mini` 曾因 copilot 在豁免集里而需要 BLOCKED_MODELS 拦。
+🔴 2026-10-06 起 github-copilot 已**整个移出豁免集** + 全族型号进屏蔽表 —— 两层闸并存。）
 
 | provider | 屏蔽的型号 |
 |---|---|
 | `volcengine-coding` | `doubao-seed-2.0-lite` · `doubao-seed-2.1-turbo` |
 | `volcengine-agent-plan` | 上面两个 + `doubao-seed-2.0-mini` · `doubao-seed-evolving` · `ark-code-latest` |
-| `github-copilot` | `gpt-5-mini` · `gpt-5.3-codex` · `gpt-5.4-mini` · `gemini-3.5-flash` · `gemini-3.6-flash` · `mai-code-1-flash-picker` |
+| 🔴 `github-copilot` | **全族 17 个（2026-10-06 整族屏蔽）**：`gpt-5-mini` · `gpt-5.3-codex` · `gpt-5.4` · `gpt-5.4-mini` · `gpt-5.5` · `gpt-5.6-sol` · `gpt-5.6-luna` · `gpt-5.6-terra` · `gpt-6-astra` · `gemini-3.5-flash` · `gemini-3.6-flash` · `gemini-3.7-flash` · `gemini-3.8-flash` · `grok-4.5` · `grok-4.6` · `mai-code-1-flash-picker` · `mai-code-1.1-flash`。理由：用户删除 pi Copilot 凭据（auth.json = `{}`、models.json/store 条目抽走）⇒ 实测 `No API key found for github-copilot` ⇒ 全族不可用；审查默认已迁 codex（§5） |
 
 ### ⚠️ 两个 provider 的屏蔽手段**不一样**（2026-09-09 实测）
 
@@ -200,7 +201,7 @@ consistency §3o ⑬ 强制每个 None 条目都带这类探测，且只认探�
 ```
 
 ⚠️ 显式 `--provider X` ⇒ 只看 provider 为 X 的免费条目（如 `--free --provider codebuddy-code` 只看 hy3），**不算冲突**。
-⚠️ `--free` 与 review 硬例外（§5 默认 `gpt-5.5`）**冲突** ⇒ 报告让用户选，⛔ 不替他决定。
+⚠️ `--free` 与 review 硬例外（§5 默认 `codex`）**冲突** ⇒ 报告让用户选，⛔ 不替他决定。
 
 ⛔ **2.b 的 avoid 与 §6 拆分表的「哪些免费条目跳过」一列必须一一对应**，改一边要同步另一边。
 2026-08-12 异构审抓到过一次漏判：表里写着不适用、清单里查不到，实际派了出去。
@@ -583,36 +584,44 @@ Kafka 架构题上 max 两次都高于 high（36、35 vs 33）——**架构/方
 ⇒ ⛔ **不要把它记成「DeepSeek 不许审查」**。实施是 Hy4 或 K3 时，DeepSeek 是完全合格的异构评审。
 只因为付费主力档是 `deepseek-v4-flash`，**那一路**的评审才要排除 DeepSeek 族。
 
-### ⭐ 当前审查通道（模型为**默认值**⛔非不可覆盖，⚠️ **通道按规模分流**）
+### ⭐ 当前审查通道（模型为**默认值**⛔非不可覆盖，⚠️ 通道统一 CLI）
 
-🔴 **模型 **未显式指定时**默认 `github-copilot/gpt-5.5`；通道按 §7 的规模判据选**，⛔ 别把两者写成一个原子。
+🔴 **模型**未显式指定时**默认 `codex`**（⭐ 2026-10-06 起；模型取 `~/.codex/config.toml` 的 `model`，实测 `gpt-5.6-sol`，
+`RIFT_REVIEW_MODEL` 可覆盖）；**通道统一走 CLI `codex exec`**，⛔ 别把「默认模型」和「通道」写成一个原子。
 ⚠️ 「默认」⛔ 不等于「不可覆盖」：显式 `--model` 会被保留（异构族约束仍成立）；
-显式 `--provider` 若不是 `github-copilot`，会报 **review 冲突**（⛔ 而不是 P0 的 disabled/白名单不匹配）。
+显式 `--provider` 若不是 `codex`，会报 **review 冲突**（⛔ 而不是 P0 的 disabled/白名单不匹配）。
 
 ```bash
-# 大审查（多文件 / 读大量源 / 预计 20+ 工具调用）—— ⭐ 走 Paseo，可见可中止
-create_agent(provider="pi/github-copilot/gpt-5.5", settings={"thinkingOptionId": "xhigh"})
-
-# 短审查（单文件 / 明确问题）—— 走 CLI，跑完即退
-pi -p --provider github-copilot --model gpt-5.5 "<≤200 字符的 prompt>" < /dev/null   # 🔴 必须 </dev/null，否则可能永久阻塞
+# 审查（不分大小，2026-10-06 起全走 CLI）—— 大审查用后台跑 + 输出落文件补偿可见性
+codex exec --skip-git-repo-check "<review_prompt>" < /dev/null
 ```
 
-⚠️ 实测：大审查走 `pi -p` 曾跑满 **35 分钟零输出、全程不可见只能盲杀**（⚠️ 09-24 起疑似 stdin 挂死，未复测）；
-同期 Paseo 派的审查 agent 能看到它们各自在第 13 / 22 步撞 429。
+⚠️ **为什么大审查也不走 Paseo**：Paseo 的 codex provider `out of credits`（2026-10-06 实测，与 08-20 记录一致），
+copilot 全族已死 ⇒ Paseo 侧没有可用审查 provider。若将来 Paseo codex 恢复额度，按「要不要看得见」把大审查升回 Paseo。
 
 | 约束 | 说明 |
 |---|---|
-| 🔴 **prompt ≤200 字符** | 背景让模型自己读文件。实测非交互模式下 800 字让 GPT-5.5 挂 22 分钟，短 prompt 秒回 |
-| ⛔ **撞超时不要收窄 prompt 重试** | 极小 prompt 也会超时的情况另有根因，换通道 |
-| ⛔ **Copilot 仅审查，不做开发** | 用户 2026-08-20 明确。开发走 §7 火山通道 |
-| ⛔ 不用 `codex/gpt-5.6-sol` | 实测该 workspace `out of credits` |
+| 🔴 **`< /dev/null` 保留** | codex exec 在 stdin 非 TTY 时会读它（10-06 实测：10s 不关闭的管道拖住 10s，EOF 后才发请求）⇒ 继承永不 EOF 的管道会永久等 |
+| ✅ **长 prompt 不需要 pi 的 ≤200 字符限制** | 用户 10-06 实测长 review prompt 正常（tokens used 23241，额度耗尽前）；恢复额度后建议复测记时 |
+| 🔴 **额度耗尽判 rc + stderr** | `out of credits`（10-06 实测原文 `ERROR: Your workspace is out of credits. …`，rc=1）/ `usage limit` / `401` / `429`，大小写不敏感。**通道级**失败：codex 全家不可用 |
+| ⛔ **仅审查不做开发** | 沿用 2026-08-20 口径。开发走 §7 火山通道 |
 
-Copilot 侧可用的异族评审（2026-09-08 实测 **17 个**，以 `~/.pi/agent/models.json` 为准）：
-`gpt-5.5`(⭐审查默认) · `gpt-5.6-sol` · `gpt-5.6-luna` · `gpt-5.6-terra` · `gpt-6-astra` · `gpt-5.4` · `gpt-5.4-mini` · `gpt-5.3-codex` · `gpt-5-mini` · `gemini-3.5-flash` · `gemini-3.6-flash` · `gemini-3.7-flash` · `gemini-3.8-flash` · `grok-4.5` · `grok-4.6` · `mai-code-1-flash-picker` · `mai-code-1.1-flash`
+**降级阶梯**（codex 额度耗尽 ⇒ 依次换**异族**；每一步都要**显式记录并告知用户**，⛔ 不许悄悄换）：
 
-🔴 **Claude 全族已于 2026-09-08 从 pi 的 Copilot 通道移除**（用户要求）——主会话就是 Claude，留着容易误用成自审。⚠️ 实现方式是在 `~/.pi/agent/models.json` 里显式定义 `github-copilot` provider 覆盖 `models-store.json`，⛔ 因为那个 store 会按 etag **自动刷新**，手改它会被冲掉。⚠️ 代价：Copilot 将来新增的模型**不会自动出现**，要手工补进 models.json。
-⚠️ store 目录里另有 `gpt-5.4-nano` / `kimi-k3` / `kimi-k2.7-code`，但**本订阅实际不支持**
-（API 返回 `model_not_supported`），⛔ 别按目录以为能用。
+| 顺位 | 落点 | 族 | 成本 |
+|---|---|---|---|
+| 默认 | `codex`（模型取 config.toml） | GPT | 订阅额度 |
+| ① | `qoderclicn/qfmodel` | Qwen | 免费（截止未公布）—— 10-06 真实评审演练通过（30.3s） |
+| ② | `codebuddy-code/hy3` | Hy | 免费（至 10-31）—— 10-06 探活通过 |
+| ③ | `codebuddy-code/glm-5.3-flash` | GLM | ⚠️ **付费 0.06x**（⛔ 不是免费）—— 10-06 探活通过 |
+
+⛔ 硬不变量：**评审族 ≠ 实施族**（实施是 Qwen / Hy / GLM 族时同族的档⛔跳过取下一档）；
+⛔ 不许回落 claude 族（主会话就是 Claude，那是自审）；⛔ 不许回落 copilot 族（全族已死）。
+命令与实测细节见 SKILL §3.2c（唯一真源）。
+
+🔴 **copilot 通道已死（📜 2026-10-06 前的口径，仅存档）**：用户删除 Copilot 凭据 ⇒ 全族 17 型号进
+`BLOCKED_MODELS`、provider 移出豁免集。旧记录「Claude 全族 2026-09-08 从 Copilot 通道移除」「17 个异族评审」
+等仅在 catalog 历史字段里保留，⛔ 不再是现行规则。
 
 ### 为什么审查不跟着「DeepSeek 优先」走
 
@@ -645,7 +654,7 @@ Copilot 侧可用的异族评审（2026-09-08 实测 **17 个**，以 `~/.pi/age
 | ⛔ `perf` | 性能/优化/O(n)/大数据量 | T0（跳过 hy3 / qfmodel）→ **T2** 起步 |
 | ⛔ `algorithm` | 算法/数据结构/精细编码 | T0（跳过 hy3 / qfmodel，⭐ Space Bunny 照常可接）→ **T2** 起步 |
 | ⛔ `architecture` | 选型/拓扑/一致性方案/技术方案定稿 | T0（跳过 hy3）→ **T1** 起步 ← 🔴 2026-08-28 改（原 T2） |
-| `review` | review/审核/检查/交叉检查 | **硬例外**，不进本链、不受白名单约束。唯一约束是 §5 异构 |
+| `review` | review/审核/检查/交叉检查 | **硬例外**，不进本链。默认 `codex`（CLI，§5）—— 选出的组合照样过 validate() |
 
 ### ⛔ 「跳过免费档」和「付费从哪档起步」是两件事
 
@@ -682,16 +691,19 @@ Copilot 侧可用的异族评审（2026-09-08 实测 **17 个**，以 `~/.pi/age
 | 任务规模 | 走哪条 | 为什么 |
 |---|---|---|
 | **开发实施类**（改代码/跑测试/提交） | ⭐ **Paseo `create_agent`** | 要看进度、能中途干预、有结构化状态 |
-| **大审查**（多文件 / 20+ 工具调用） | ⭐ **Paseo `create_agent`** | 🔴 它是长活，⛔ 不是 one-shot（见下方修正） |
-| **短任务**（单文件 / 只读分析 / 短审查） | `pi -p` CLI | 跑完即退，不堆 serve |
+| **审查**（不分大小，2026-10-06 起） | ⭐ **`codex exec` CLI** | Paseo codex provider 撞额度、copilot 全族已死 ⇒ 审查没有 Paseo 通道；大审查用后台 + 输出落文件补偿可见性（§5） |
+| **短任务**（单文件 / 只读分析） | `pi -p` CLI | 跑完即退，不堆 serve |
 | **执行适配器兜底** | `opencode` 🔻 | 无常规用途。⚠️ ⛔ 别与 `LAST_RESORT`（可用性降级链的最后一站，= `claude/claude-sonnet-5`）混为一谈——一个是**怎么跑**，一个是**跑哪个模型** |
 
 🔴 **通道与模型正交**：通道由**要不要看得见**定，模型由 §5 **异构族约束**定。
-⛔ 别把「审查类 → pi -p + gpt-5.5」写成一个原子——那会让「大审查」被迫走不可见通道。
+⛔ 别把「审查 → codex + 默认模型」写成一个原子——模型默认可覆盖、降级阶梯在通道层处理。
 
 ⚠️ **2026-09-08 修正**：原表把「审查类」整类钉给 `pi -p`，理由是「审查不需要盯」。
 实测推翻：`pi -p` + gpt-5.5 跑满 **35 分钟零输出**、全程不可见只能盲杀（⚠️ 09-24 起疑似 stdin 挂死，未复测）；
 同期 Paseo 派的两个审查 agent 都能看到各自在第 13 / 22 步撞 429。
+📜 **2026-10-06 再改**：审查的可见性本靠 Paseo 解决（`pi/github-copilot/gpt-5.5`），
+但 copilot 凭据被删、Paseo codex provider 撞额度后审查只剩 CLI —— 可见性暂时降级为「后台跑 + 日志回读」，
+通道表的判据在审查这一行是**现实约束压过理想判据**，恢复后应改回。
 
 🔴 **分通道的维度是「要不要看得见」，不是「用哪个工具」。**
 pi 有两种启动方式（Paseo 派 pi / `pi -p` 直跑），**跑的是同一个 pi、同一套能力**，
@@ -752,7 +764,7 @@ agent-plan = **0 / 165**。⛔ 那次失效的主语是**客户端**：opencode 
 
 用户 2026-08-20 定位卡死根因：**每次 `opencode run --pure` 拉起一个 serve，反复调用则 serve 堆叠吃穿内存**。
 ⇒ 单次偶发调用本身安全；⛔ **循环里反复 `opencode run` 是危险动作**，改用 `pi -p`。
-review 已迁到 Copilot：开发实施类 + 大审查 → Paseo；短任务 / 短审查 → `pi -p`。opencode 现在没有任何常规用途。
+review 已迁出：2026-08-20 → Copilot，2026-10-06 → codex exec CLI（§5）。开发实施类 → Paseo；短任务 / 只读 → `pi -p`。opencode 现在没有任何常规用途。
 
 ---
 
@@ -764,11 +776,11 @@ review 已迁到 Copilot：开发实施类 + 大审查 → Paseo；短任务 / �
 | `qoderclicn` | Paseo `create_agent` | **`yolo`**（09-29 起原生 1.1.62 ACP 的模式名；⛔ 旧 `bypassPermissions` 报 Invalid mode） |
 | `pi/<火山 provider>/<model>` | Paseo `create_agent` | ⚠️ **无 mode**：pi provider 在 Paseo 里 `availableModes` 为空，⛔ 传 `modeId` 会报 `Invalid mode` |
 | `pi -p --provider volcengine-coding` | CLI one-shot | — |
-| `pi/github-copilot/gpt-5.5` | Paseo `create_agent` | ⭐ **大审查**主通道（可见可中止） |
-| `pi -p --provider github-copilot` | CLI one-shot | 🔸 **短审查**主通道 |
+| ~~`pi/github-copilot/gpt-5.5`~~ · ~~`pi -p --provider github-copilot`~~ | — | ⛔ **2026-10-06 全族死亡**（凭据已删），型号全部进 `BLOCKED_MODELS`（§1.b） |
+| `codex exec`（CLI） | CLI one-shot | ⭐ **审查主通道**（2026-10-06 起，不分大小；大审查后台跑 + 输出落文件） |
 | ~~`pi/jdcloud-joyagent/<model>`~~ | — | ⛔ **2026-09-09 停用**，配置已归档（§3.4） |
 | `claude` | Paseo `create_agent` | auto |
-| `codex` | Paseo `create_agent` | auto |
+| `codex`（Paseo provider） | Paseo `create_agent` | 🔴 **不可用**：workspace `out of credits`（2026-10-06 实测）⇒ 审查走上面的 CLI 通道 |
 | `opencode run --pure` | CLI 🔻 | — |
 
 ### 降级链
@@ -971,10 +983,12 @@ M3 114 · Sonnet5 112 · K3 110.5 · Qwen3.8-Max 101.5 · Opus4.6 97 · Sonnet4.
 P0  ⛔ Provider 白名单（§1）        对【白名单 provider】：不在其清单的 model id 一律不派；
                                    其它 provider 必须在【豁免集】且⛔不在 DISABLED 里。先过这一关
 P1  用户显式 --model / --provider    直接用（仍受 P0 约束）
-P2  审查硬例外（§5）                 模型**默认** github-copilot/gpt-5.5（⛔ 非不可覆盖）；
-                                   ⚠️ 显式非 Copilot provider 在 **P0 之前**就报 review 冲突；
+P2  审查硬例外（§5）                 模型**默认** codex（CLI；模型取 ~/.codex/config.toml 的 model，实测 gpt-5.6-sol，
+                                   RIFT_REVIEW_MODEL 可覆盖；⛔ 非不可覆盖）；
+                                   ⚠️ 显式非 codex provider 在 **P0 之前**就报 review 冲突；
                                    ⛔ 「不受 P0 约束」是**旧说法** —— 选出的组合照样过 validate()
-     ⚠️ 通道按【规模】分：大审查 → Paseo pi/github-copilot/gpt-5.5；短审查 → pi -p
+     ⚠️ 通道统一 CLI：codex exec --skip-git-repo-check（大审查后台跑 + 输出落文件）；
+        codex 撞额度 ⇒ 降级阶梯 qfmodel → hy3 → glm-5.3-flash（显式告知用户，⛔ 不许悄悄换）
 P3  ⚠️ Claude 模型可派不推荐         消耗订阅额度，建议留给主会话
 P4  运行环境约束                     --hub 时确认 provider 在 Hub 可用
 P5  免费档（§0 T0 + §2 按条目判）   FREE_POOL：Space Bunny（截止未公布）> hy3（免费至 10-31）> qfmodel（截止未公布）

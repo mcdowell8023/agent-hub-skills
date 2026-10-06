@@ -74,7 +74,10 @@ def run_case(c):
         'first_available':   lambda lst: (PROBES.extend(f'{u}/{m}' for u, m in lst) or next(
             ((u, m) for u, m in lst if f'{u}/{m}' not in set(c.get('unavailable', ()))), None)),
         'model_id_on':       lambda u, m: PROVIDER_ID.get(u, {}).get(m, m),
-        # ⚠️ force_cli 是【测试专用】旋钮：review 改成顶层分支后，review 永远落 copilot，
+        # ⭐ review 默认模型（2026-10-06 起 codex）——codex_config_model() 读 ~/.codex/config.toml 的 model，
+        #    测试里用 review_model 旋钮覆盖（默认桩成实测值 gpt-5.6-sol）
+        'codex_config_model': lambda: c.get('review_model', 'gpt-5.6-sol'),
+        # ⚠️ force_cli 是【测试专用】旋钮：review 改成顶层分支后，review 永远落 codex（CLI），
         #    自然路径下已没有「cli 规模的任务走到 LAST_RESORT」这条 —— 但那个 channel 守卫
         #    是**防御性**的（防将来改 is_dev_task），仍要测得到。
         'is_dev_task':       lambda tt: (not c.get('force_cli')) and tt not in ('review',),
@@ -185,11 +188,11 @@ CASES = [
  #      ⇒ 这条不只要「被拦」，还要**拦在任何探活之前**（no_probe）
  dict(n='全局禁用：只给 --model deepseek-v4-pro（无 provider）必拦且⛔不探活',
       model='deepseek-v4-pro', task_type='core', blocked_model=True, no_probe=True),
- # ⛔ 反例：没被点名的⛔不许误伤
- dict(n='Copilot gpt-5.5 照常放行', provider='github-copilot', model='gpt-5.5',
-      task_type='core', want=dict(upstream='github-copilot', model='gpt-5.5')),
- dict(n='待测的 grok-4.6 ⛔ 不在屏蔽名单里', provider='github-copilot', model='grok-4.6',
-      task_type='core', want=dict(upstream='github-copilot', model='grok-4.6')),
+ # 🔴 2026-10-06 copilot 全族进 BLOCKED_MODELS（凭据已删）⇒ 原「照常放行」两条反例反转成必拦
+ dict(n='Copilot gpt-5.5 全族屏蔽必拦（2026-10-06 起）', provider='github-copilot', model='gpt-5.5',
+      task_type='core', blocked_model=True),
+ dict(n='Copilot grok-4.6 也在全族屏蔽里（2026-10-06 起整族拦）', provider='github-copilot', model='grok-4.6',
+      task_type='core', blocked_model=True),
  # 放行类
  dict(n='火山显式放行且带 pi 前缀', provider='volcengine-coding', model='deepseek-v4-flash',
       task_type='core', want=dict(provider='pi/volcengine-coding', model='deepseek-v4-flash', channel='paseo')),
@@ -443,24 +446,28 @@ CASES = [
  dict(n='algorithm + 免费池不可用 ⇒ 付费从 T2 起', task_type='algorithm', free_off=True,
       want=dict(model='deepseek-v4-flash', upstream='volcengine-coding')),
  # 审查类
- dict(n='大审查走 Paseo', task_type='review', scope='large',
-      want=dict(upstream='github-copilot', model='gpt-5.5',
-                provider='pi/github-copilot', channel='paseo')),
+ # 🔴 2026-10-06 起审查全走 CLI（默认 codex）—— Paseo codex provider out of credits、copilot 全族已死
+ dict(n='大审查也走 CLI（codex，2026-10-06 起）', task_type='review', scope='large',
+      want=dict(upstream='codex', model='gpt-5.6-sol', provider='codex', channel='cli')),
  # 🔴 review 硬例外⛔不许静默覆盖显式 --provider（0909 第 5 轮审查）
  # 🔴 review × 显式输入交叉矩阵（0909 第 6 轮审查：这些洞此前全部抓不住）
- dict(n='review + 显式非 copilot provider → 报冲突', task_type='review', scope='small',
+ dict(n='review + 显式非 codex provider → 报冲突', task_type='review', scope='small',
       provider='volcengine-coding', review_provider_conflict=True),
  dict(n='review + 显式 provider + 显式 model → 仍报冲突（⛔ 不许绕过）', task_type='review',
       scope='small', provider='volcengine-coding', model='deepseek-v4-flash',
       review_provider_conflict=True),
  dict(n='--free + review + 显式 model → 仍报 free×review 冲突', free=True, task_type='review',
       model='v4-pro', conflict_free_review=True),
- dict(n='review + 显式 model=gpt-5.5 → 落 copilot（⛔ 不掉进 cb 合成池）', task_type='review',
+ dict(n='review + 显式 model → 保留，provider 默认 codex（⛔ 不掉进普通阶梯）', task_type='review',
       scope='small', model='gpt-5.5',
-      want=dict(upstream='github-copilot', model='gpt-5.5', channel='cli')),
- dict(n='review + 显式 copilot provider → 照常', task_type='review', scope='small',
-      provider='github-copilot',
-      want=dict(upstream='github-copilot', model='gpt-5.5', channel='cli')),
+      want=dict(upstream='codex', model='gpt-5.5', channel='cli')),
+ # 🔴 2026-10-06：合法 review provider 只剩 codex，显式 copilot 也报 review 冲突（原「照常」反转）
+ dict(n='review + 显式 copilot provider → 报冲突（copilot 全族已死）', task_type='review', scope='small',
+      provider='github-copilot', review_provider_conflict=True),
+ # ⭐ 显式 codex provider → 照常（review 分支的 assert 行要被走到 —— coverage 99.6%→100% 靠这条）
+ dict(n='review + 显式 codex provider → 照常放行', task_type='review', scope='small',
+      provider='codex',
+      want=dict(upstream='codex', model='gpt-5.6-sol', provider='codex', channel='cli')),
  # ⚠️1 LAST_RESORT 的 provider 串也要断言（防未来把 claude 加进 PI_HOSTED 拼出 pi/claude）
  # ⚠️2 只给 provider、补出的默认 model 不可用 → 也要停
  # 🔴 换 T1 当场开出来的洞：新 T1 只在 cb，火山没有 ⇒ 显式火山 + 自动 model 会错配。
@@ -473,10 +480,10 @@ CASES = [
       provider='volcengine-coding', task_type='core', free_off=True,
       want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash',
                 tier_substitutions=[])),
- # 🔴 反例：同档里也没有该 provider 的落点 ⇒ 必须报错配并停，⛔ 不许硬派
- dict(n='显式 copilot + 自动 T1 → 同档也没有 ⇒ 报错配并停',
+ # 🔴 2026-10-06：copilot 移出豁免集 ⇒ 显式 copilot（非 review）落「未知 provider」被拦，⛔ 不再是错配
+ dict(n='显式 copilot（非 review）→ 未知 provider 拦（已移出豁免集）',
       provider='github-copilot', task_type='core', free_off=True,
-      block='mismatch'),
+      block='unknown'),
  # ⭐ 原用例的意图（补出的默认 model 拿不到 ⇒ 停）保留，但要用**合法**的 provider×model 对
  # ⚠️ 走的是 T0 路径：hy3 过了 probe_ok 但最终落点探活失败 ⇒ 当场 NoLanding，⛔ 走不到 T1。
  #    （09-24 前这里还列了 cb/v4.1 —— 那条从来没被读到过，是死数据，已删。）
@@ -546,20 +553,24 @@ CASES = [
  # 🔴🔴 fail-open 三连：⛔ 「问不出来」绝不能当成 due=no —— 那会把审查派发整体掐死
  dict(n='命令不存在(127) ⇒ 照派', task_type='review', scope='small',
       due_probe=(127, ''),
-      want=dict(upstream='github-copilot', model='gpt-5.5')),
+      want=dict(upstream='codex', model='gpt-5.6-sol')),
  dict(n='旧版不认 --due(exit 1) ⇒ 照派', task_type='review', scope='small',
       due_probe=(1, ''),
-      want=dict(upstream='github-copilot', model='gpt-5.5')),
+      want=dict(upstream='codex', model='gpt-5.6-sol')),
  dict(n='due=yes(exit 0) ⇒ 照派', task_type='review', scope='small',
       due_probe=(0, 'due=yes\nbranch=test\n'),
-      want=dict(upstream='github-copilot', model='gpt-5.5')),
+      want=dict(upstream='codex', model='gpt-5.6-sol')),
  # ⭐ 反例：CHECK 6 验收⛔不受本门控管（验收本来就该在改完之后跑）
  dict(n='[验收] 任务 ⇒ ⛔ 不被时机门控拦', task_type='review', scope='small',
       user_input='[验收] S3 官方 CHECK6 复核', due_probe=(79, 'due=no\n'),
-      want=dict(upstream='github-copilot', model='gpt-5.5')),
- dict(n='短审查走 CLI', task_type='review', scope='small',
-      want=dict(upstream='github-copilot', model='gpt-5.5',
-                provider='github-copilot', channel='cli')),
+      want=dict(upstream='codex', model='gpt-5.6-sol')),
+ dict(n='短审查走 CLI（codex 默认）', task_type='review', scope='small',
+      want=dict(upstream='codex', model='gpt-5.6-sol',
+                provider='codex', channel='cli')),
+ # 🔴 2026-10-06 review 默认模型可覆盖：RIFT_REVIEW_MODEL / codex config 换值 ⇒ 跟着走（⛔ 不写死 gpt-5.6-sol）
+ dict(n='review 默认模型可覆盖（codex config 换值）', task_type='review', scope='small',
+      review_model='gpt-5.6-luna',
+      want=dict(upstream='codex', model='gpt-5.6-luna', channel='cli')),
  # 显式值不得被覆盖
  dict(n='只给 model 不被 T0/阶梯覆盖', model='v4-pro', task_type='core',
       # 🔴 2026-09-10 用户停用 deepseek-v4-pro ⇒ T3 落点换成 qwen3.8-max（唯一池：百炼）。

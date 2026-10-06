@@ -10,7 +10,8 @@
 #    · codebuddy-code        → cb CLI，判 stdout 是不是 JSON（CLI 也不给状态码，只能看正文）
 #    · volcengine-* / bailian-* → **直连端点**，拿【真实 HTTP 状态码】
 #      ⇒ 429(额度) / 403(无权限) / 404(不存在) **三态分得开**，且 429 正文带重置时间
-#    · github-copilot        → 走 pi（没有可直连的 key）
+#    · codex                  → codex exec CLI（2026-10-06 起审查默认通道）；判 rc + stderr，
+#                                 `out of credits` ⇒ FAILM（额度耗尽，通道级）
 #    · openrouter-free       → **直连**（2026-09-29）：key 按 pi 配置的 `!command` 从钥匙串取，⛔ 不打印
 #      ⇒ 429(额度，带 X-RateLimit-Reset) / 402(余额为负) / 404(模型下线) 分得开
 #    · qoderclicn            → qcn CLI `-p -o json`（2026-09-29）；⚠️ Paseo id 与 CLI 名不同（qfmodel ⇒ Qwen3.8-Flash）
@@ -192,6 +193,27 @@ else:
 PY
 }
 
+probe_codex() {  # $1=model（省略 / 为 "codex" ⇒ 用 ~/.codex/config.toml 的 model）；判 rc + stderr（⛔ 不解析正文 JSON）
+  local out rc margs=()
+  if [ "$#" -gt 0 ] && [ "$1" != "codex" ]; then margs=(-m "$1"); fi
+  # 🔴 必须 < /dev/null：codex exec 在 stdin 非 TTY 时会读它，永不 EOF 的管道会永久等（2026-10-06 实测）
+  out=$(cd "$PROBE_DIR" && codex exec --skip-git-repo-check ${margs+"${margs[@]}"} \
+        "reply with exactly: PROBE_OK" < /dev/null 2>&1); rc=$?
+  if [ "$rc" -ne 0 ]; then
+    case "$out" in
+      *"out of credits"*) echo "FAILM|额度耗尽：out of credits|+1h" ;;
+      *"usage limit"*)    echo "FAILM|额度耗尽：usage limit|+1h" ;;
+      *) echo "FAIL|$(printf '%s' "$out" | tr -d '\n|' | head -c 170)|" ;;
+    esac
+    return
+  fi
+  case "$out" in
+    *PROBE_OK*) echo "OK|codex 返回正常|" ;;
+    '')         echo "FAIL|EMPTY（codex 无输出）|" ;;
+    *)          echo "FAIL|$(printf '%s' "$out" | tr -d '\n|' | head -c 170)|" ;;
+  esac
+}
+
 probe_pi() {   # $1=provider $2=model
   local out
   # 🔴 必须 < /dev/null：继承的管道 stdin 会让 pi -p 永久阻塞（2026-09-24 A/B 实证）
@@ -218,6 +240,7 @@ for t in "${TARGETS[@]}"; do
     codebuddy-code)                         r=$(probe_cb "$model") ;;
     volcengine-*|bailian-*|openrouter-*)    r=$(probe_http "$prov" "$model") ;;
     qoderclicn)                             r=$(probe_qcn "$model") ;;
+    codex)                                  r=$(probe_codex "$model") ;;
     *)                                      r=$(probe_pi "$prov" "$model") ;;
   esac
   status="${r%%|*}"; rest="${r#*|}"; detail="${rest%|*}"; cool="${rest##*|}"
