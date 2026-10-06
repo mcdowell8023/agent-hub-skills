@@ -53,7 +53,13 @@ def load():
 def save(d):
     fd, tmp = tempfile.mkstemp(prefix=os.path.basename(F) + '.', dir=os.path.dirname(F))
     try:
-        with os.fdopen(fd, 'w') as fh: json.dump(d, fh, ensure_ascii=False, indent=2)
+        # 🔴 ensure_ascii=True（2026-10-06 主会话修）：状态里可能混进 provider 返回的
+        #    非法 UTF-8 字节（读的时候按 surrogateescape 变成孤代理 \udcXX）⇒ ensure_ascii=False
+        #    写盘时 json.dump 抛 UnicodeEncodeError: 'utf-8' codec can't encode ... surrogates
+        #    not allowed，整个冷却状态**写不进去**（probe-models-test「402 应冷却 24h」用例
+        #    就是这样长期失败，且在 1d022e7 基线同样失败）。转义成 \udcXX 是合法 JSON 文本，
+        #    json.load 能原样读回，语义不变。
+        with os.fdopen(fd, 'w') as fh: json.dump(d, fh, ensure_ascii=True, indent=2)
         os.replace(tmp, F)                   # 原子替换
     except BaseException:
         os.unlink(tmp); raise
