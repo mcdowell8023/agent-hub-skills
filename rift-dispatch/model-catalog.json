@@ -1,6 +1,6 @@
 {
-  "version": "6.48.0",
-  "lastUpdated": "2026-10-10",
+  "version": "6.49.0",
+  "lastUpdated": "2026-10-11",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
     "codebuddy-code": [
@@ -240,8 +240,9 @@
           "model": "qfmodel",
           "family": "Qwen",
           "cost": "免费（截止未公布）",
-          "command": "qoderclicn -p -m Qwen3.8-Flash --tools \"\" -o json \"<prompt>\" < /dev/null",
-          "verified": "✅ 2026-10-06 14:35 真实评审演练通过（30.3s，VERDICT 合规，total_credits=0）"
+          "command": "qoderclicn -p -w \"$(mktemp -d)\" --no-session-persistence -m Qwen3.8-Flash --tools \"\" -o json \"<prompt>\" < /dev/null",
+          "verified": "✅ 2026-10-06 14:35 旧命令（无 -w / --no-session-persistence）真实评审演练通过（30.3s，VERDICT 合规，total_credits=0）· ✅ 2026-10-11 新参数局部验证（headless 可用、不写会话文件 —— ⛔ prompt 仍进运行日志；请求被额度拒，未见正文）· ⚠️ 新命令的真实评审未复测",
+          "outputGate": "SKILL §3.2h：正文含 <tool_call> / <function= 、没有 VERDICT: 行、或声称没收到内容 ⇒ 通道失败、换下一档，⛔ 不当审查结论"
         },
         {
           "order": 2,
@@ -393,7 +394,7 @@
           "verifiedOn": "2026-10-02",
           "source": "`qoderclicn -p -m Qwen3.8-Flash -o json` 实测 total_credits=0（⭐ 原定截止 09-30 之后；2.6s）；另有 Qoder CN 官方公告「活动延期：10-01 起继续免费，结束时间将提前在本页公告」（用户 10-02 转发截图）"
         },
-        "verifyVia": "⭐ 首选：`qoderclicn -p -m Qwen3.8-Flash --tools '' -o json 'reply with exactly: PROBE_OK'` 的 `total_credits`（=0 免费；>0 已计费，CLI 直接给的实扣值，agent 自己就能核；probe-models.sh 已自动判）。公告页：Qoder CN 文档站「事件」→「Qwen3.8-Flash 限时免费使用」（URL 不在截图里，⛔ 未核）",
+        "verifyVia": "⭐ 首选：`qoderclicn -p -w \"$(mktemp -d)\" --no-session-persistence -m Qwen3.8-Flash --tools '' -o json 'reply with exactly: PROBE_OK'` 的 `total_credits`（=0 免费；>0 已计费，CLI 直接给的实扣值，agent 自己就能核；probe-models.sh 已自动判）。公告页：Qoder CN 文档站「事件」→「Qwen3.8-Flash 限时免费使用」（URL 不在截图里，⛔ 未核）",
         "evalRef": "qwen38flashEval_20260924 → 🔴 round2_qoderSamples",
         "note": "Qoder 免费版 Qwen3.8-Flash。🔴 2026-10-02 官方公告：原定 09-30 23:59:59 的免费期延长，10-01 起继续免费，「结束时间将提前在本页公告」⇒ 截止未公布，freeUntil=None。⭐ 实测原定 09-30 之后 total_credits 仍为 0。⚠️ 仅 Qoder CN 个人用户（体验 / 专业 / 高级 / 旗舰版 + 会员卡，免费与试用用户均可）；**企业订阅（团队版 / 企业标准版 / 企业专属版）不适用**。官方注明活动期间用量大、高峰可能慢。🔴 免费一结束模型照样答得动、只是开始扣 Credits ⇒ freeUntil=None 必须自带失效条件：probe-models.sh 对它判 total_credits：>0 ⇒ 已计费、读不到（缺失 / 乱码）⇒ 无法确认免费（fail-closed），都冷却 24h。⚠️ 与百炼 qwen3.8-flash ⛔ 不是同一表现：09-24 第二轮 Qoder×2 均分 28.3 / 30.5 vs 百炼版 34.5（11:1 p=0.006），答案短、快 3–5 倍。avoid=algorithm·perf：algorithm 按实测（LRU 19.5 / 23.2，其余臂 30–32）；perf 无实测，推导：付费阶梯对 perf 跳过 T1 起步 T2，比 T1 还弱的免费模型更不该接（2026-10-02 由 agent 自行定下，非待决）；Kafka 34.0 / 35.5 同档 ⇒ ⛔ 不扩到 architecture。没有思考档 ⇒ ⛔ 不传 thinkingOptionId。Paseo 走原生 1.1.62 ACP（mode=yolo）。"
       },
@@ -3684,5 +3685,19 @@
     "file": "~/.config/rift-dispatch/policy.local.json（⛔ 不进仓库）",
     "example": "policy.local.example.json",
     "check": "python3 scripts/local-policy.py --cwd <dir>（exit 2 = 文件坏了 ⇒ 停止派发）"
+  },
+  "qoderclicnTextMode_20261011": {
+    "_what": "qoderclicn -p --tools \"\" 不是纯文本通道：只去工具 schema，Qoder 仍发 agent 系统提示 + 环境信息 + 空 <memory_overview>，cwd 有 AGENTS.md 也注入。权威说明 SKILL §3.2h",
+    "facts": {
+      "noAgentLoop": "✅ 日志 tool_schema_count=0、num_turns=1；结构化 tool_use 为 0",
+      "shellTokens": "✅ 空目录 ≈2,800 / cwd 有 AGENTS.md ≈3,760（context_usage_ratio × 180000）",
+      "paramsLocal": "✅ -w 在 headless 可用、--no-session-persistence 不写 ~/.qoder-cn/projects 会话文件（请求被额度拒 error_code 110，未见正文）",
+      "logsStillHavePrompt": "✅ 🔴 加了 --no-session-persistence，prompt 原文仍进 ~/.qoder-cn/logs/runs/*/qodercli.log（prompt= / text_preview=，未截断）与 logs/sessions/ ⇒ ⛔ 不等于不留痕",
+      "systemPrompt": "⚠️ 静态读码：--system-prompt 替换默认提示正文，环境信息仍附加；未实测"
+    },
+    "incident": "2026-10-11 一次 200+ 张卡的批量蒸馏（qfmodel，cwd 带 AGENTS.md）约两成不可用：把外壳当输入 > 工具调用写成正文 ≈ 整段编造 > 元文本外泄；同批换 JoyCode 桥几乎为零（外壳不同，不能单独证明模型差）",
+    "fix": "空 cwd（-w \"$(mktemp -d)\"）+ --no-session-persistence + 输出闸门（必需：空 cwd 只去掉 AGENTS.md，agent 系统提示仍在，改后脏率未复测）；probe-models.sh 探活改每次 TemporaryDirectory",
+    "check": "consistency-check §3s；probe-models-test.sh 8b",
+    "todo": "⚠️ 额度恢复后：新命令真实评审复测 + --system-prompt 小样对照，结果回填 SKILL §3.2h"
   }
 }

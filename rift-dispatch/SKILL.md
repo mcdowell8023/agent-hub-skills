@@ -51,7 +51,7 @@ bash $S/cb-probe.sh hy3                              # 兼容 shim：只探 cb
 | `volcengine-*` / `bailian-*` | **直连端点** | ⭐ **真实 HTTP 状态码** ⇒ `429`(额度) / `403`(无权限) / `404`(不存在) **三态分得开** |
 | `codex` | `codex exec` CLI | 🔴 报错走 **stderr + rc=1**（实测 `ERROR: Your workspace is out of credits.`），判 rc + stderr 即可，无需解析正文 JSON |
 | ~~`openrouter-free`~~ | 📜 **2026-10-06 退役**：模型 404 下线 ⇒ 条目已从 FREE_POOL / WHITELIST / catalog 删除，provider 已从 pi 配置移除（探活代码路径保留，便于将来重加） | 原有判据：⭐ 真实状态码 `429`(额度，带 `X-RateLimit-Reset`) / `402`(余额为负) / `404`(模型下线) |
-| `qoderclicn` | qcn CLI `-p -o json` | 判 `is_error` + 正文；🔴 **Paseo id ≠ CLI 名**：`qfmodel` 在 CLI 里是 `-m Qwen3.8-Flash` |
+| `qoderclicn` | qcn CLI `-p -o json` | 判 `is_error` + 正文；🔴 **Paseo id ≠ CLI 名**：`qfmodel` 在 CLI 里是 `-m Qwen3.8-Flash`；🔴 **文本任务见 §3.2h**（空 cwd + 不写会话文件 + 输出闸门：`is_error=false` 也可能是垃圾） |
 
 ⭐ **撞额度自动写冷却**（`scripts/cooldown.sh`，§2 的 `cooldown_until()` 读它）：有重置时间用重置时间，否则 **+1h**（用户 09-29 定）；
 冷却中的落点探活脚本**直接报「冷却中」、⛔ 不再探一次活**（`--force` 才强制探）。
@@ -1458,7 +1458,7 @@ pi -p --provider volcengine-coding --model deepseek-v4-flash "{prompt}" < /dev/n
 #    ⚠️ 留这条是因为它是「model id 里带 `/`」的写法示例：⛔ 别写成 `--model <provider>/<model id>`
 #       （pi 会按第一个 `/` 拆 provider），provider 必须单独给
 codebuddy -p --output-format json --model hy3 --tools "" "{prompt}" < /dev/null          # 见 §3.2c-bis：必须 json
-qoderclicn -p -m Qwen3.8-Flash --tools "" -o json "{prompt}" < /dev/null                 # 🔴 CLI 名 ≠ Paseo id（qfmodel）
+qoderclicn -p -w "$(mktemp -d)" --no-session-persistence -m Qwen3.8-Flash --tools "" -o json "{prompt}" < /dev/null   # 🔴 CLI 名 ≠ Paseo id（qfmodel）；空 cwd + 不写会话文件见 §3.2h
 ```
 
 🔴 **`< /dev/null` 必须带**（2026-09-24 A/B 实证）：`pi -p` 碰到**非 TTY 的 stdin** 会去读它，
@@ -1507,9 +1507,11 @@ codex exec --skip-git-repo-check "{review_prompt}" < /dev/null
 | 顺位 | 落点 | 族 | 成本 | 通道命令 | 实测 |
 |---|---|---|---|---|---|
 | 默认 | `codex`（模型取 config.toml） | GPT | 订阅额度 | `codex exec --skip-git-repo-check "{prompt}" < /dev/null` | 🔴 2026-10-06 **out of credits**（rc=1，两次对照） |
-| ① | `qoderclicn/qfmodel`（CLI 名 `-m Qwen3.8-Flash`） | Qwen | 免费（截止未公布） | `qoderclicn -p -m Qwen3.8-Flash --tools "" -o json "{prompt}" < /dev/null` | ✅ 2026-10-06 14:35 真实评审演练通过（30.3s，VERDICT 合规，`total_credits=0`） |
+| ① | `qoderclicn/qfmodel`（CLI 名 `-m Qwen3.8-Flash`） | Qwen | 免费（截止未公布） | `qoderclicn -p -w "$(mktemp -d)" --no-session-persistence -m Qwen3.8-Flash --tools "" -o json "{prompt}" < /dev/null` | ✅ 2026-10-06 14:35 **旧命令**（无 `-w` / `--no-session-persistence`）真实评审演练通过（30.3s，VERDICT 合规，`total_credits=0`）· ✅ 2026-10-11 新参数局部验证（headless 可用、不写会话文件 —— ⛔ prompt 仍进运行日志；请求被额度拒，未见正文）· ⚠️ **新命令的真实评审未复测** |
 | ② | `codebuddy-code/hy3` | Hy(混元) | 免费（至 10-31） | `codebuddy -p --output-format json --model hy3 --tools "" "{prompt}" < /dev/null` | ✅ 2026-10-06 14:38 探活通过（~12s，PROBE_OK） |
 | ③ | `codebuddy-code/glm-5.3-flash` | GLM | ⚠️ **付费 0.06x**（⛔ 不是免费） | 同上，`--model glm-5.3-flash` | ✅ 2026-10-06 14:38 探活通过（~5s，PROBE_OK） |
+
+🔴 **第 ① 档的产出先过 §3.2h 输出闸门**：正文含 `<tool_call>` / `<function=`、没有 `VERDICT:` 行、或声称「没收到要审的内容」⇒ 判**通道失败**、换下一档，⛔ 不当审查结论（`is_error=false` 照样可能是垃圾，2026-10-11 实测）。
 
 ⭐ **降级动作必须显式**：换档时报告用户「codex 额度耗尽（附 stderr 签名）→ 已落到第 N 档 X/Y」，
 落点写冷却记录（`cooldown.sh set codex <model> +1h "out of credits"`），
@@ -1717,6 +1719,61 @@ agent-plan = **0 / 165**。⛔ 那条结论的主语是**客户端**不是 provi
 - **多机**：只在本机生效。⚠️ 在 Hub 上派发同一目录的任务，要先把这个文件同步过去（⛔ 不靠记性：Hub 上派发前同样先跑 `local-policy.py`）。
 - **审查质量**：命中「只许 Claude + 免费」类规则时，审查只能落免费异族模型（qfmodel / hy3），§7 要提示审查强度下降。
 
+### 3.2h qoderclicn `-p` 不是纯文本通道 —— 2026-10-11
+
+⭐ **一句话**：`qoderclicn -p --tools ""` 只**去掉了工具 schema**。Qoder 仍把整套 agent 外壳发给模型：系统提示（"Use the instructions below and the tools available to you"）、环境信息、空的 `<memory_overview>`；cwd 下有 `AGENTS.md` 也一并注入。
+拿它做**纯文本任务**（蒸馏 / 摘要 / 审查 / 分类）⇒ 必须按本节的写法 + 输出闸门。Paseo 派发（ACP，§3.1）是真 agent 模式，本来就有工具，不受本节影响。
+
+**实测事实**（2026-10-11，依据 Qoder 自己的运行日志 `~/.qoder-cn/logs/runs/*/qodercli.log` 与会话记录）：
+
+| 事实 | 口径 | 依据 |
+|---|---|---|
+| `--tools ""` 生效；**不存在** agent 循环 | ✅ | 日志 `tool_schema_count=0`、`num_turns=1`；数百份会话里结构化 `tool_use` 为 0 |
+| 产出里的 `<tool_call><function=Bash>…` 是**模型写的正文**，没有被执行 | ✅ | Qwen 原生的 XML 工具调用格式；请求没声明工具 ⇒ 服务端不解析，原样进 `result` |
+| 固定外壳 ≈ **2,800 token**（空目录）；cwd 有 `AGENTS.md` 时 ≈ **3,760 token** | ✅ | `context_usage_ratio × max_input_tokens(180000)`，两组极短 prompt 对照；差值 ≈ AGENTS.md 的体积 |
+| prompt 开头写 `SYSTEM:` ⛔ **不等于**系统提示 | ✅ | 它只是用户消息里的文字，和 Qoder 自己的系统提示互相打架 |
+| `-w <目录>` 在 headless 下可用；`--no-session-persistence` 不在 `~/.qoder-cn/projects/` 写会话文件 | ✅ 局部 | 带 / 不带参数对照（日志 `cwd=` 为指定目录；只有对照组生成会话文件）。⚠️ 两次请求都被额度拒（`error_code 110`），没拿到模型正文 |
+| 🔴 加了 `--no-session-persistence`，prompt 原文**仍会进运行日志** | ✅ | 同一次运行的 `~/.qoder-cn/logs/runs/*/qodercli.log` 里有 `prompt=` / `text_preview=`（652 字的 prompt 记为 `truncated=false`），`~/.qoder-cn/logs/sessions/<cwd>/…/segments/` 里也有 |
+| `--system-prompt` 替换 Qoder 默认的提示正文，环境信息仍附加；AGENTS.md 走另一条注入路径（单靠它去不掉） | ⚠️ 静态读码 | 未实测 ⇒ 现行模板**不带**它 |
+| 换成空 cwd（+ `--system-prompt`）后脏输出是否归零 | ⚠️ 未测 | 额度恢复后补测，结果回填本表 |
+
+**事故**（2026-10-11，一次 200+ 张卡的批量会话蒸馏，`qfmodel`，cwd 是带 `AGENTS.md` 的工作区）：约**两成**答案不可用。形态按多少排：
+
+1. **把注入的外壳当成输入**：声称「没收到记录」「只有空的 `<memory_overview>` 占位符」，或者逐条复述 cwd 的 AGENTS.md。
+2. **工具调用写成正文**：`我先读取待蒸馏的文件…` + `<tool_call><function=Read>…`。
+3. **整段编造**：答案与输入毫无关系。
+4. **元文本外泄**：`The system prompt has been updated.`、`<analysis>…`，或英文推理过程。
+
+同一批卡换 JoyCode 桥（§3.2f），同一套检测**几乎为零**。⚠️ 两边的外壳不一样，这个对照**不能**单独证明模型能力差；要比模型，先按下面的写法把通道洗干净再比。
+
+**规定写法**（纯文本任务一律如此；§3.2b / §3.2c 的模板已改）。⚠️ 空 cwd 只去掉 `AGENTS.md` 这一部分，Qoder 的 agent 系统提示仍在，改后的脏率**未复测** ⇒ 下面的**输出闸门是必需的**，⛔ 不是可选项：
+
+```bash
+qoderclicn -p -w "$(mktemp -d)" --no-session-persistence -m Qwen3.8-Flash --tools "" -o json "{prompt}" < /dev/null
+```
+
+| 参数 | 作用 |
+|---|---|
+| `-w "$(mktemp -d)"` | 空目录 ⇒ 不注入任何 `AGENTS.md`。⛔ **不用固定复用的目录**，残留文件会被注入（`probe-models.sh` 的探活同理，改为每次 `tempfile.TemporaryDirectory()`）。模板留下的是空目录，可忽略 |
+| `--no-session-persistence` | 不写 `~/.qoder-cn/projects/<cwd>/*.jsonl` 会话文件（默认会写，批量任务会留下成百份含正文的文件）。🔴 ⛔ **不等于不留痕**：prompt 原文仍进 `~/.qoder-cn/logs/`（见上表）⇒ 敏感正文别走这条通道，或用完清理 `~/.qoder-cn/logs/runs/` 与 `logs/sessions/` 里对应的条目 |
+| ⚠️ `--system-prompt "<指令>"`（可选） | 把指令放进系统提示、正文作为用户消息，可进一步去掉 Qoder 的 agent 提示。**未实测**，用之前先小样验证：输入 token 是否明显下降、脏率是否下降 |
+
+`{prompt}` 里也别写「你可以读取文件 / 先看看目录」之类会诱导它去调用工具的话。
+
+**输出闸门**（⛔ `exit 0` + `is_error=false` ≠ 有效答案）：
+
+| 命中 | 判定 |
+|---|---|
+| `<tool_call>` / `<function=` / `The system prompt has been updated` / 以 `<analysis>` 开头 | **通道失败** |
+| 缺约定结构（审查缺 `VERDICT:` 行；摘要缺约定小节） | 通道失败 |
+| 输入明明有正文，产出却说「未收到 / 没有看到 / 为空 / 请贴入」 | 通道失败 |
+
+- 通道失败 ⇒ 重试一次或换下一档；⛔ 不落盘当答案，⛔ 不当审查结论。
+- 批量任务先跑**小样**（如 20 张，脏 / 干净各半）看脏率，再放量。
+- ⚠️ 整段编造靠上面的规则抓不到 ⇒ 批量产出要抽检：答案里的专有词能不能在输入里找到。
+
+**同类风险**：`codebuddy -p --tools ""`（§3.2c 的 ②③ 档）同为 agent CLI 的 print 模式，⚠️ **未验证**是否也有外壳注入；出现同类形态时按本节处理并回填。
+
 ### 3.3 Hub 远程（`--hub`）
 
 ```bash
@@ -1814,6 +1871,7 @@ ssh hub "paseo run --detach \
 ⛔ **不算「做砸」、⛔ 不许据此升档换模型族**。正确动作是**留在同 provider 降到下一档**
 （⚠️ 09-24 起 cb 已不在 v4.1-flash 的池里 ⇒ 按现行不变量回到轮换落火山；是否改为「留 cb 用 glm」⏳ 待用户裁定，见 §2 affinity 注释）。⚠️ hy4 的典型形态就是这个：允许你用，但 Paseo 抓不到任何明确错误 |
 | 🔴 **`requires_output_validation` 为真？→ 必须跑产出校验** | ⛔ 该型号有「看着像正常输出」的垃圾形态（实测 3988 字带 `<｜｜DSML｜｜>` 标记）⇒ **只看 exit 0 会收下垃圾**。判据：过短 / 内部标记 / 续接语 / **不足同批中位数 35%**。参考 `validate_cell.py` |
+| 🔴 **`qoderclicn -p` 的文本产出先过 §3.2h 闸门** | `<tool_call>` 正文 / 元文本 / 「未收到」类话术 = 通道失败（2026-10-11 批量实测约两成），⛔ 不算答案 |
 | **`lastStatus` 已是 idle/completed** | running 时取到的是中间态（§3.1） |
 | `git log` 核对 HEAD **真的有新 commit** | 高频：agent 报"全绿"但改动全躺工作区没提交 |
 | `git status` 有无未提交残留 | 同上 |

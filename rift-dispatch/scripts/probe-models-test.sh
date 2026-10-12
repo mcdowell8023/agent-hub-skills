@@ -69,6 +69,7 @@ cat > "$T/bin/qoderclicn" <<'SH'
 #!/usr/bin/env bash
 # 假 qcn：记录收到的 -m；FAKE_QCN=quota 额度错误 / hang 挂住 / billed 已计费（total_credits>0）/ nocredits 旧版无该字段
 for a in "$@"; do [ "$prev" = "-m" ] && echo "$a" > "$TMPDIR/qcn-model"; prev="$a"; done
+printf '%s\n' "$@" > "$TMPDIR/qcn-args"; pwd -P > "$TMPDIR/qcn-cwd"; ls -A > "$TMPDIR/qcn-cwd-ls"   # §3.2h：参数 + cwd 是否为空
 if [ "${FAKE_QCN:-}" = "hang" ]; then sleep 4242 & sleep 4243; fi
 if [ "${FAKE_QCN:-}" = "quota" ]; then echo '{"is_error": true, "result": "429 Too Many Requests: 今日免费额度已用完"}'; exit 1; fi
 if [ "${FAKE_QCN:-}" = "billed" ]; then echo '{"is_error": false, "result": "PROBE_OK", "total_credits": 0.1}'; exit 0; fi
@@ -151,6 +152,19 @@ got=$(cd_get codebuddy-code hy3)
 out=$(bash "$P" qoderclicn/qfmodel); rc=$?
 { [ "$rc" -eq 0 ] && echo "$out" | grep -q '✅ qoderclicn'; } && ok || bad "qcn 正常应 ✅（rc=${rc}）：$out"
 [ "$(cat "$T/qcn-model" 2>/dev/null)" = "Qwen3.8-Flash" ] && ok || bad "qfmodel 探活应以 -m Qwen3.8-Flash 调 CLI（实际 $(cat "$T/qcn-model" 2>/dev/null)）"
+
+# 8b. 🔴 §3.2h（2026-10-11）：qcn 探活必须每次在全新空目录里跑 + 不写会话文件 ——
+#     `--tools ""` 只去工具 schema，Qoder 仍会注入 cwd 的 AGENTS.md；固定复用的 rift-probe 一旦残留文件就会污染
+mkdir -p "$T/rift-probe"; echo '# planted' > "$T/rift-probe/AGENTS.md"
+out=$(bash "$P" --force qoderclicn/qfmodel); rc=$?
+[ "$rc" -eq 0 ] && ok || bad "8b qcn 探活应成功（rc=${rc}）：$out"
+grep -qx -- '--no-session-persistence' "$T/qcn-args" 2>/dev/null && ok || bad "qcn 探活缺 --no-session-persistence（参数：$(tr '\n' ' ' < "$T/qcn-args" 2>/dev/null)）"
+[ -f "$T/qcn-cwd-ls" ] && [ ! -s "$T/qcn-cwd-ls" ] && ok || bad "qcn 探活 cwd 不是空目录（内容：$(tr '\n' ' ' < "$T/qcn-cwd-ls" 2>/dev/null)）"
+case "$(cat "$T/qcn-cwd" 2>/dev/null)" in */rift-probe) bad "qcn 探活仍在复用 rift-probe 目录" ;; '') bad "没记录到 qcn 探活 cwd" ;; *) ok ;; esac
+#     ⛔ 换成「另一个固定空目录」也不行（审查 r1）：必须是本次新建（rift-qcn- 前缀）且探活结束后已删除
+_qd="$(cat "$T/qcn-cwd" 2>/dev/null)"
+case "$(basename "$_qd")" in rift-qcn-*) ok ;; *) bad "qcn 探活 cwd 不是 TemporaryDirectory(prefix='rift-qcn-')：$_qd" ;; esac
+[ -n "$_qd" ] && [ ! -e "$_qd" ] && ok || bad "qcn 探活的临时目录没被清理：$_qd"
 
 # 9. qoderclicn 额度错误 ⇒ 模型级 + 冷却 +1h
 out=$(FAKE_QCN=quota bash "$P" qoderclicn/qfmodel)

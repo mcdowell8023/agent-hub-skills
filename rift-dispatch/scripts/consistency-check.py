@@ -975,6 +975,44 @@ try:
 except _lp.PolicyError as _err:
     chk(False, f"policy.local.example.json 不是合法策略：{_err}")
 
+# ── §3s（2026-10-11）qoderclicn `-p` 文本模式：现行模板必须换空 cwd + 不写会话文件（§3.2h）──
+#    `--tools ""` 只去掉工具 schema，Qoder 仍发 agent 系统提示 + cwd 的 AGENTS.md ⇒ 文本任务约两成脏输出。
+#    ⛔ 只按结构取「现行入口」：历史证据字段（creditRecord.source / verifiedByAgent）记录的是当时真跑过的命令，不改也不查；
+#       `--acp`（Paseo）走 agent 模式，不在范围。每类入口至少取到 1 条，取不到 = 格式变了检查静默失效 ⇒ 报错（防假绿）。
+_QCN_TEXT_FLAGS = ('-w ', '--no-session-persistence')
+_qcn_entries = {
+    '① SKILL 代码块': [l.strip() for blk in re.findall(r"```[a-z]*\n(.*?)```", S, re.S)
+                       for l in blk.splitlines() if l.strip().startswith('qoderclicn -p')],
+    '② SKILL §3.2c 降级阶梯': [c for row in S.splitlines() if row.startswith('|') and '`qoderclicn/' in row
+                              for c in re.findall(r"`(qoderclicn -p[^`]*)`", row)],
+    '③ catalog fallbackLadder': [x['command'] for x in d['dispatchDefaults']['reviewChannel']['fallbackLadder']
+                                if x.get('upstream') == 'qoderclicn'],
+    '④ catalog freePool.verifyVia': [re.search(r"`(qoderclicn -p[^`]*)`", x.get('verifyVia', '')).group(1)
+                                    if re.search(r"`(qoderclicn -p[^`]*)`", x.get('verifyVia', '')) else x.get('verifyVia', '')
+                                    for x in d['freePool']['entries'] if x.get('upstream') == 'qoderclicn'],
+}
+for _where, _cmds in _qcn_entries.items():
+    chk(bool(_cmds), f"§3s {_where} 没取到任何 qoderclicn -p 命令（格式变了？检查会静默失效）")
+    for _c in _cmds:
+        _miss = [f for f in _QCN_TEXT_FLAGS if f not in _c]
+        chk(not _miss, f"§3s {_where} 的 `{_c[:70]}…` 缺 {_miss} ⇒ 会把 cwd 的 AGENTS.md 和会话落盘带进文本任务（§3.2h）")
+_PM = (B / 'scripts' / 'probe-models.sh').read_text()
+_qcn_probe = re.search(r"QCN = \{.*?print\(f?\"FAIL\|超时", _PM, re.S)
+chk(bool(_qcn_probe), "§3s 没在 probe-models.sh 里定位到 qcn 探活块（QCN = {… 到 超时分支），检查会静默失效")
+if _qcn_probe:
+    # ⛔ 只认代码：剥掉 `#` 注释再查（注释里写了参数名会造成假绿 —— 变异测试实测踩过）
+    _qcode = "\n".join(l.split('#', 1)[0] for l in _qcn_probe.group(0).splitlines())
+    _popen = re.search(r"Popen\(\[(.*?)\]", _qcode, re.S)
+    chk(bool(_popen) and "'--no-session-persistence'" in _popen.group(1),
+        "§3s probe-models.sh 的 qcn 探活 Popen 参数缺 '--no-session-persistence'（§3.2h）")
+    # ⛔ 三者要连成一条链（审查 r1）：X = tempfile.TemporaryDirectory(…) → cwd = X.name → Popen(..., cwd=cwd)
+    #    只查「出现过 TemporaryDirectory」会被「建了不用、cwd 换成别的固定目录」骗过
+    _td = re.search(r"^\s*(\w+) = tempfile\.TemporaryDirectory\(", _qcode, re.M)
+    _cw = _td and re.search(rf"^\s*cwd = {_td.group(1)}\.name\s*$", _qcode, re.M)
+    _pc = re.search(r"Popen\(\[.*?\],\s*cwd=(\w+)", _qcode, re.S)
+    chk(bool(_td and _cw and _pc and _pc.group(1) == 'cwd'),
+        "§3s probe-models.sh 的 qcn 探活必须 X = tempfile.TemporaryDirectory(…) → cwd = X.name → Popen(…, cwd=cwd)（⛔ 不复用 rift-probe / 固定目录）")
+
 print("=== rift-dispatch 一致性校验 ===")
 print(f"仓库: {B}")
 print("✅ 全部通过" if not e else "\n".join("❌ " + x for x in e))

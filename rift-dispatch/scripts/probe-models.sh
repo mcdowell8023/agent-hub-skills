@@ -156,8 +156,8 @@ PY
 
 probe_qcn() {  # $1=model ；qcn CLI `-p -o json`，判 is_error + 正文。⚠️ 带超时并杀进程组（MEMORY：只杀子进程=没超时）
   python3 - "$1" "$PROBE_DIR" "${RIFT_PROBE_QCN_TIMEOUT:-120}" "$S" <<'PY'
-import json, os, re, signal, subprocess, sys
-mid, cwd, limit = sys.argv[1], sys.argv[2], int(sys.argv[3])
+import json, os, re, signal, subprocess, sys, tempfile
+mid, limit = sys.argv[1], int(sys.argv[3])        # argv[2]（共用的 PROBE_DIR）qcn 不用，见下方 §3.2h
 sys.path.insert(0, sys.argv[4])
 from billing import classify                      # 免费条目「已计费」判定的唯一口径（三态、fail-closed）
 # 🔴 Paseo 的 model id → (CLI 的 -m 名, 是否免费池条目)。
@@ -166,7 +166,11 @@ from billing import classify                      # 免费条目「已计费」�
 #    ⚠️ 与 SKILL FREE_POOL 的 qoderclicn 条目必须一致（consistency-check §3o ⑬ 比对）
 QCN = {'qfmodel': ('Qwen3.8-Flash', True)}
 cli_name, expect_free = QCN.get(mid, (mid, False))
-p = subprocess.Popen(['qoderclicn', '-p', '-m', cli_name, '--tools', '', '-o', 'json',
+# 🔴 §3.2h（2026-10-11）：`--tools ""` 只去工具 schema，Qoder 仍注入 cwd 的 AGENTS.md ⇒ 每次全新空目录（⛔ 不复用 rift-probe：
+#    残留文件会被注入）；--no-session-persistence ⇒ 不在 ~/.qoder-cn/projects/ 留会话。退出时自动删目录。
+_cwd_tmp = tempfile.TemporaryDirectory(prefix='rift-qcn-')
+cwd = _cwd_tmp.name
+p = subprocess.Popen(['qoderclicn', '-p', '--no-session-persistence', '-m', cli_name, '--tools', '', '-o', 'json',
                       'reply with exactly: PROBE_OK'], cwd=cwd, stdin=subprocess.DEVNULL,
                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, start_new_session=True)
 try:

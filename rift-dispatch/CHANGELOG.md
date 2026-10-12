@@ -1,5 +1,71 @@
 # Rift Dispatch — 变更记录
 
+## v11.16 (2026-10-11) — qoderclicn `-p` 不是纯文本通道（§3.2h）
+
+**起因**：一次 200+ 张卡的批量会话蒸馏改走 `qoderclicn -p -m Qwen3.8-Flash --tools "" -o json`（免费池 qfmodel），约两成答案不可用，执行方把原因归结为「`--tools ""` 下仍走 agent 循环」。用户要求查清原因，并把结论补进 rift-dispatch。
+
+### 查清的事实
+
+- `--tools ""` 是生效的：日志里 `tool_schema_count=0`、`num_turns=1`，结构化 `tool_use` 为 0。**没有 agent 循环**。产出里的 `<tool_call><function=Bash>` 是模型写成正文的 Qwen 原生工具调用格式。
+- 直接证据指向 Qoder 的 agent 外壳（坏答案复述了注入的 AGENTS.md 和 `<memory_overview>`）：Qoder 仍然发送整套 agent 外壳，包括系统提示、环境信息和空的 `<memory_overview>`。cwd 下有 `AGENTS.md` 时一并注入：空目录约 2,800 token，带 AGENTS.md 的工作区约 3,760 token。卡片本身只占模型所见内容的一小部分。
+- 不可用的形态按多少排：
+  1. 把外壳当成输入（声称没收到记录，或复述 AGENTS.md）；
+  2. 工具调用写成正文；
+  3. 整段编造；
+  4. 元文本外泄。
+- 同一批卡换 JoyCode 桥几乎为零。因为两边外壳不同，这个对照不足以证明是模型差。
+- 🔴 **`--no-session-persistence` 不等于不留痕**：它只是不写 `~/.qoder-cn/projects/` 下的会话文件，prompt 原文仍会进 `~/.qoder-cn/logs/` 的运行日志（审查 r1 指出，已实测）。
+- ⚠️ 空 cwd 只去掉 AGENTS.md 这一部分，agent 系统提示仍在，改后的脏率未复测 ⇒ 输出闸门是必需的。
+
+### 改动
+
+- SKILL 新增 **§3.2h**：实测事实表（带 ✅ / ⚠️ 口径）、事故形态、规定写法、输出闸门。`codebuddy -p` 作为同类风险，标「未验证」。
+- 现行模板统一改为 `qoderclicn -p -w "$(mktemp -d)" --no-session-persistence …`，涉及：
+  - §3.2b；
+  - §3.2c 降级阶梯 ①；
+  - catalog 的 `fallbackLadder` 和 `freePool.verifyVia`。
+
+  历史证据字段不改，那是当时实际跑过的命令。
+- §3.2c 阶梯 ① 和 §5「收割时」都加了输出闸门。规则是：`is_error=false` 也可能是垃圾。
+- `probe-models.sh`：qcn 探活改为每次在 `tempfile.TemporaryDirectory()` 里跑，并加 `--no-session-persistence`，不再复用固定的 `rift-probe` 目录。
+- 证据口径拆开写：「10-06 旧命令评审通过」「10-11 新参数局部验证（请求被额度拒，未见正文）」「⚠️ 新命令真实评审未复测」。`--system-prompt` 只做了静态读码，现行模板不带它。
+- catalog 升到 6.49.0，新增 `qoderclicnTextMode_20261011`。
+
+### 测试（TDD）
+
+- `consistency-check` 新增 **§3s**，按结构只取现行入口：SKILL 代码块、§3.2c 阶梯、catalog `fallbackLadder` / `freePool.verifyVia`、探活脚本。每类至少要取到 1 条，用来防假绿。先跑到 5 条 ❌，改完转 ✅。
+- 变异测试（逐个删掉 5 类入口里的参数）抓到 §3s 自身的两个问题，均已修：
+  - 探活块的正则漏了 `print(f"…`，RED 阶段那条其实是被正则 bug 弄红的；
+  - 探活注释里写了参数名，删掉真实参数后仍是假绿 ⇒ 改为剥掉注释、只认 `Popen([...])` 参数和代码行。
+
+  修完后 5 类入口删参数都能报 ❌。
+- `probe-models-test.sh` 新增 **8b**：先在 `rift-probe` 里放一个 AGENTS.md，再断言探活的 cwd 为空、不是 rift-probe、带 `--no-session-persistence`。先 3 条 ❌，改完 63/63 通过。
+- 审查 r1 后再加强：
+  - §3s 要求 `X = tempfile.TemporaryDirectory(…)` → `cwd = X.name` → `Popen(…, cwd=cwd)` 三者连成一条链；
+  - 8b 加断言：目录名以 `rift-qcn-` 开头，且探活结束后已删除。
+
+  变异「改成另一个固定空目录、临时变量不用」两边都报 ❌，还原后 65/65 通过。
+
+### 审查
+
+- 计划由 codex 审了两轮。
+  - r1 FAIL 4 条，全部采纳：漏了 `verifyVia`；§3s 范围未定义；探活目录会被复用；旧证据挂在新命令上。
+  - r2 关掉了其中 3 条。剩下的「固定探活目录」改为每次新建临时目录，并用 8b 测试闭合，不开第三轮。
+- 最终 diff 由 codex 异构审查。
+  - r1 ISSUES 3 条，全部采纳：
+    1. 「不落盘」说过头 —— 已实测 prompt 仍进运行日志，文档改为「不写会话文件，⛔ 不等于不留痕」；
+    2. 因果口径过强 —— 改为「直接证据指向外壳」，并写明「空 cwd 后脏率未复测、闸门必需」；
+    3. §3s / 8b 可被另一固定目录骗过 —— 已加强，见上。
+  - 建议「模板用 trap 清理 mktemp」不采纳：残留的是空目录，单行模板越复杂越容易抄错。
+  - r2（闭合轮）：#2 #3 已解决；#1 还剩降级阶梯行和 catalog `verified` 里两处「不落盘」没改到。已统一改为「不写会话文件 —— ⛔ prompt 仍进运行日志」，不开第三轮。
+
+### 待办
+
+- ⚠️ 额度恢复后：
+  - 用新命令跑一次真实评审复测；
+  - 做 `--system-prompt` 小样对照（输入 token、脏率）；
+  - 结果回填 §3.2h 的事实表。
+
 ## v11.15 (2026-10-10) — 本地用户策略（最高优先级，⛔ 不进仓库）
 
 **用户要求**：增加一条优先级最高、只在本机生效（⛔ 不进仓库）的派发规则 —— 指定的公司工作目录下只许用 Claude 与免费池，不花个人付费额度。
