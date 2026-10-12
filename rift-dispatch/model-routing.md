@@ -19,6 +19,7 @@
 T0  免费档   按 FREE_POOL 的 priority 取第一个可用的（⭐ 登记表驱动，新增 / 下线免费模型⛔不改逻辑，只改数据，2026-09-29）
      ① cb/hy3 @max                          0.00x   免费至 **10-31** 23:59（10-01 官方二次延期，原 09-30）；avoid 算法 / 性能 / 架构
      ② qcn/qfmodel @none                    0.00x   Qoder 版 Qwen3.8-Flash，截止未公布（10-01 官方延期）；avoid 算法 / 性能；无思考档
+     ③ jd/joycode/JoyAI-Code-1.5 @none      0x      JoyCode 桌面版（GUI 桥接，SKILL §3.2f，走 cli），免费至 **11-06** 23:59；avoid 算法 / 性能 / 架构；无思考档
      📜 原 ① 的 or/stealth/space-bunny-alpha 2026-10-06 因 OpenRouter 下线（404）已删除，⛔ 不再探测 / 派发
               ↓ 逐条按【该条目】判（§2）：冷却中 / 本任务无响应或做砸 / 接不了多模态 / 能力 avoid / 过期未复核 / 探活不过
 T1  低价档   deepseek-v4.1-flash  @xhigh          付费档起步 —— 🔴 三池轮换：火山 coding · 火山 agent-plan · 百炼
@@ -65,7 +66,7 @@ hy4-preview                08-28 ~ 09-10 免费期已过；🔴 2026-09-15 用�
 hy3-x                      ⛔ 从来不是免费档（0.05x），无派发角色
 ```
 
-⚠️ **11-01 起若 hy3 不再延期 ⇒ 免费池只剩 qfmodel**（截止未公布）；它也结束 / 下线 ⇒ T0 清零，默认落点变成 T1。
+⚠️ **11-01 起若 hy3 不再延期 ⇒ 免费池剩 qfmodel（截止未公布）+ joycode（至 11-06）**；都结束 / 下线 ⇒ T0 清零，默认落点变成 T1。
 🔴 「截止未公布」⛔ 不等于永久免费：免费一结束，模型照样答得动、只是开始扣费 ⇒ 靠探活里的计费探测兜
 （qcn `total_credits` > 0 / OpenRouter `usage.cost` > 0 ⇒ 已计费 ⇒ 冷却 24h 并报告；⛔ 读不到这两个字段也按「无法确认免费」处理——fail-closed；
 consistency §3o ⑬ 强制每个 None 条目都带这类探测，且只认探活脚本的【非注释代码】）。
@@ -97,6 +98,9 @@ consistency §3o ⑬ 强制每个 None 条目都带这类探测，且只认探�
 |---|---|---|---|
 | `codebuddy-code` | **`hy3`** | **0.00x** | ⭐ T0 免费池 priority **1**（免费至 **10-31**，10-01 二次延期） |
 | `qoderclicn` | **`qfmodel`** | **0.00x** | ⭐ T0 免费池 priority **2**（Qwen3.8-Flash，截止未公布，10-01 官方延期）。⚠️ ⛔ 不等于百炼版（09-24 第二轮显著更弱） |
+| `joycode` | **`joycode/JoyAI-Code-1.5`** | **0x** | ⭐ T0 免费池 priority **3**（2026-10-10 接入，免费至 **11-06**）。⚠️ GUI 桥接（SKILL §3.2f）：驱动 JoyCode 桌面版，⛔ 不是 Paseo provider ⇒ 只走 cli；无思考档 |
+| `joycode` | `joycode/GLM-5.3` · `Kimi-K2.6` · `MiniMax-M3` · `Doubao-Seed-2.0-pro` | 0.4x–0.6x（扣 JoyCode 月积分 1 万） | ⭐ 2026-10-10 起**显式可派**（`--provider joycode --model joycode/…`）；⛔ 不进任何自动池；无思考档 |
+| `trae-cn` | `trae/<20 个型号>`（GLM-5.3-Flash、DeepSeek-V4.1-Flash、Kimi-K3、Qwen3.8-Max …） | 0.06x–1.83x（扣 Trae 月积分，**随时段变**） | ⭐ 2026-10-10 起**显式可派**；⛔ 不进任何自动池。思考档按型号不同（TRAE_THINKING），派前用 `trae-dispatch.mjs models` 实时看倍率 |
 | 📜 `openrouter-free` | ~~`stealth/space-bunny-alpha`~~ | 0 | 🔴 2026-10-06 已下线（404）⇒ 条目删除、provider 移出白名单与 `PI_HOSTED`；⛔ 不再探测 / 派发 |
 | `codebuddy-code` | `hy4-preview` | 0.29x（白天）/ 0.00x（夜间 23:00-08:00，10-01 官方延至 10-31） | ⚠️ 仍在白名单，但 09-15 起⛔不自动派（不稳定，与免费窗口无关） |
 | 火山两套餐 · 百炼 | **`deepseek-v4.1-flash`** | 包月 | 🔴 T1 主落点·三池轮换·必须校验产出 |
@@ -191,6 +195,7 @@ consistency §3o ⑬ 强制每个 None 条目都带这类探测，且只认探�
 | 条目 | avoid | 依据 |
 |---|---|---|
 | `hy3` | `algorithm` · `perf` · `architecture` | hy3 盲评 LRU **22 分**；perf 无实测支撑；catalog `avoidFor: architecture-deep` |
+| `joycode/JoyAI-Code-1.5` | `algorithm` · `perf` · `architecture` | 2026-10-10 接入，⛔ 尚无盲评数据 ⇒ 照 hy3 先例保守取三项（有分后再放宽） |
 | `qfmodel` | `algorithm` · `perf`（perf 是 10-02 agent 推导所定，⛔ 非待决） | 09-24 第二轮 Qoder 版 LRU 19.5 / 23.2（其余臂 30–32）；perf 无实测，与 hy3 同理按 algorithm 同类保守；Kafka 34.0 / 35.5 同档 ⇒ ⛔ 不扩到 architecture |
 
 ### 2.c `--free` 的判定
@@ -676,7 +681,7 @@ copilot 全族已死 ⇒ Paseo 侧没有可用审查 provider。若将来 Paseo 
 ⚠️ **`concurrency` 仍要先判子类**——09-10 起两类的付费起步档相同（都是 T1）；`classify()` 产出的是
 `concurrency_diag` / `concurrency_impl`，⛔ 不是裸的 `concurrency`（裸值落空，付费起步档碰巧也是 T1）。
 📜 原 `cautionTaskTypes` 提醒来自 Space Bunny 的 concurrency_impl 弱点（用户 09-29 D3）；该模型 2026-10-06 下线后
-现役两条免费条目的 `cautionTaskTypes` 都是空集 ⇒ 免费池不再产生提醒（字段与机制保留）。
+现役三条免费条目（hy3 / qfmodel / joycode，10-10 起）的 `cautionTaskTypes` 都是空集 ⇒ 免费池不再产生提醒（字段与机制保留）。
 
 **多标签冲突裁决**：实现动词（"开发""写"）> 领域关键词（"并发""API"）> 修饰词（"优化""清理"）。
 

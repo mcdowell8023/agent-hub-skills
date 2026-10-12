@@ -1,5 +1,111 @@
 # Rift Dispatch — 变更记录
 
+## v11.15 (2026-10-10) — 本地用户策略（最高优先级，⛔ 不进仓库）
+
+**用户要求**：增加一条优先级最高、只在本机生效（⛔ 不进仓库）的派发规则 —— 指定的公司工作目录下只许用 Claude 与免费池，不花个人付费额度。
+同时确认：JoyCode 可以接公司目录的任务 ⇒ joycode 条目 `allowInSensitiveWorkspace: True` 由「暂定」改为「用户确认」。
+
+### 设计
+
+- **机制在仓库**：§2 第 0 段 `LOCAL_POLICY` / `match_policy` / `policy_allows`，新增 §3.2g 一节、`scripts/local-policy.py`，以及格式示例 `policy.local.example.json`（本身不生效）。
+- **规则在本机**：`~/.config/rift-dispatch/policy.local.json`，⛔ 不进仓库。已确认 Syncthing、dotfiles、hub-sync 都不同步 `~/.config`。文件不存在 ⇒ 行为与之前完全一致。
+- **匹配**：字面路径或物理路径，任一命中即算（覆盖「公司目录里的项目软链到别的盘」）。
+- **fail closed**：文件存在但读不出或结构不对 ⇒ exit 2，停止派发。
+- **卡点全部在探活之前**（探活就是真请求，也花钱）：
+  1. §1：显式指定的型号不在允许范围 ⇒ 停。
+  2. §3 审查：付费的 codex 不允许 ⇒ 走降级阶梯，付费档连探活都跳过。
+  3. §4：免费池拿不到 ⇒ 跳过 T1–T4，直接用规则的 fallback（默认 Claude）。过期但还没复核的免费条目不探活。
+  4. §5：候选池和同档替代先按策略过滤，再探活。
+  5. §6：收尾兜底。
+- 硬默认新增第 0 条；§6 前置检查加一行；§7 输出每次都打印「本地策略」状态。
+
+### 审查
+
+- 计划由 codex 审了两轮。
+  - r1 FAIL 4 条，采纳 3 条：拦截前移到探活之前、软链两个方向都覆盖、审查补上异族用例和零付费探活断言。「缺文件时放行」不采纳，理由是用户配置本来就是这个语义，§7 每次显示策略状态作为补偿。
+  - r2 FAIL 3 条，全部采纳：过期未复核的条目不再探活、§5 候选池加过滤、零付费探活断言补上 FREE_PROBES。
+- 防环到两轮为止；「缺文件时放行」这一分歧交给用户裁定。
+
+### 验证
+
+| 校验 | 结果 |
+| --- | --- |
+| `scripts/pipeline-test.py` | ✅ **183 / 183**（策略用例 22 条，另有 1 个 §6 兜底的变异测试） |
+| `scripts/coverage-check.py` | ✅ **100.0 %**（338 行） |
+| `scripts/consistency-check.py` | ✅ rc=0（新增 §3r） |
+| `scripts/local-policy-test.py` | ✅ 全部通过（第 7 项，用真实临时软链测试） |
+| `scripts/cooldown-test.sh` · `probe-models-test.sh` · `billing-test.py` | ✅ 19 · 59 · 全过 |
+
+**负向控制**：
+- 去掉 §1 关卡 ⇒ 付费型号在被拦之前已经探活，测试报红。
+- 去掉 §4 的 fallback ⇒「显式 cb、hy3 冷却」这条去探了付费 glm，测试报红。
+- 去掉 §6 兜底 ⇒ consistency §3r 报红。
+- 本机实测：公司目录本身及其子目录命中；其他工作区不命中。
+
+## v11.14 (2026-10-10) — 接入 GUI 桥接渠道 JoyCode / TRAE（含切模型、切思考强度）
+
+**用户要求（原文）：「继续，确保 agent 读完 rift-dispatch 知道怎么调用 JoyCode 和 TRAE，模型切换、切换思考强度」**
+背景：单一渠道额度不够，需要多渠道叠加（当天火山 Agent Plan 月额度、Coding Plan 周额度、codex 额度先后用尽）。
+
+### 判定依据（实测）
+
+- 两家**没有**给个人账号的 API / CLI / ACP（TRAE CLI 2.0 仅企业旗舰版；JoyCode「积分仅限 JoyCode 使用」）⇒ 用本机桥接 CLI 驱动官方桌面 App（⛔ 不碰凭据）。
+- **TRAE**（`~/AgentWorkspace/configs/trae-bridge`，CDP 127.0.0.1:39240，`~/.trae-cn/argv.json` 永久开启）：
+  模型菜单 + 悬停卡片给出每个型号的思考档（三档 10 / 轻高 4 / 高极高 1 / 无 5），倍率随时段变 ⇒ `models` 实时读。
+- **JoyCode**（`~/AgentWorkspace/configs/joycode-bridge`，drop-in 扩展）：⛔ 设置项 `JoyCode.config.chatModel` 不影响 agent（实测）；
+  ✅ 命令 `joycoder.getSidebarProvider` 返回 provider ⇒ `updateModelConfig` 切模型；实际型号由 JoyCode.log「模型路由结果」核对；**无思考档**。
+
+### 改动
+
+- **SKILL §2**：
+  - `WHITELIST` 新增 `joycode`（5）/ `trae-cn`（20），型号 id 带命名空间 `joycode/…` `trae/…`（两家都有 GLM-5.3 / MiniMax-M3，计划审查 #4）。
+  - 新增 `GUI_BRIDGE_UPSTREAMS` / `GUI_BRIDGE_CLI` / `TRAE_THINKING`（实测档位表）/ `clamp_bridge_thinking()`（只降不升）/ `bridge_command()`。
+  - `FREE_POOL` 加 priority 3 `joycode/JoyAI-Code-1.5`（freeUntil 2026-11-06T23:59，avoid 同 hy3）。
+  - `NO_THINKING_MODELS` 改为从 WHITELIST / TRAE_THINKING 推导（JoyCode 全部 + TRAE 无档型号）。
+  - 收尾：GUI 桥接强制 `channel='cli'`；算出 `bridge_argv`（TRAE 思考档再按实测表折一次，无可降 ⇒ `report_bridge_thinking_unsupported_and_stop`）。
+- **SKILL 其余**：
+  - 新增 **§3.2f「GUI 桥接通道」**：共同规则、执行步骤、退出码处理表，以及 `joycode` / `trae-cn` 两个小节（调用 / 查型号 / 切模型 / 切思考）。
+  - 硬默认 #1 / #2、通道判据总表、派发路径用例表（11 行）、§3.2e 能力表同步更新。
+- **model-catalog.json** 6.46.0 → **6.47.0**：
+  - whitelist、freePool 条目（creditRecord / verifyVia / evalRef）、`models['joycode/JoyAI-Code-1.5']`。
+  - 缩写 `JD` / `TR` 与 25 个型号缩写。
+  - entryTier skipFreeEntries、escalation.rule。
+  - 新记录 `joycodeBridge_20261010` / `traeBridge_20261010`。
+- **model-routing.md**：§0 T0 第 ③ 行、§1 provider 表三行、§2.b avoid 表、免费池时间线与「三条」口径。
+- **scripts**：
+  - `probe-models.sh` 新增 `probe_joycode`（`models`，被动，⛔ 不发任务）/ `probe_trae`（`status`，⛔ 不开菜单），DEFAULT 第 3 项 joycode。
+  - `consistency-check.py` 新增 **§3q**：每个 GUI 桥接渠道必须在 §3.2f 有自己的小节，写出调用脚本、`--model`、`--thinking`、`models`。
+  - `pipeline-test.py` 新增 15 条用例，并返回 `bridge_argv` 供断言；4 条「免费池清零」旧用例把 joycode 一并冷却 / 列入。
+  - `probe-models-test.sh` 新增 5 项（假桩，⛔ 不碰真 App）。
+- **桥接本身**（本仓之外）：两个 CLI 新增 `models` / `select` / `--model` / `--prompt-file`；TRAE 另有 `--thinking` / `--max-context`；退出码统一 0/1/2/3/4/5/64。
+  测试：trae-bridge 离线 33 + 真机 8、joycode-bridge 离线 24 + 真机 4，全绿。
+  桥接异构审查（codex，只读沙箱）：
+  - r1 ISSUES 6 条，全部修复：JoyCode 改为原子 rename 认领请求，取代 claim.lock；模型核对加时间上界，指定了型号时只有 match 才算成功；TRAE 改为在新建任务前预检；按 Radix `data-state` 认悬停卡片；多行提示词忽略空白。
+  - r2 ISSUES 2 条：日志刷新补等 5 秒，已修；「当前任务卡在审批面板上、菜单打不开时，先新建空任务」是有意的权衡，README 写明理由。
+
+### ⛔ 有意不动
+
+- **TRAE 不进任何自动池**（花积分、倍率随时段变）⇒ 只能显式 `--provider trae-cn --model trae/…`。
+- **JoyCode 的 `allowInSensitiveWorkspace` 暂为 True**：§2 还没有敏感目录闸门（CC ⑤：标 False 必须先有闸门）。
+  ⏳ JoyCode 能否接公司目录的任务待用户定（v11.15 已确认可以）。
+- **`cautionTaskTypes` 不写 `['review']`**：review 在 §3 就分流走，到不了 T0；写了反而让 §3m-bis / coverage 报红。
+- **⑬ 计费探测**：JoyCode 给了明确 freeUntil ⇒ 不适用；过期后由 `t0_still_free` 把关（窗口后 7 天内核到 credit=0 才续用）。
+
+### 验证
+
+| 校验 | 结果 |
+| --- | --- |
+| `scripts/pipeline-test.py` | ✅ **161 / 161** |
+| `scripts/consistency-check.py` | ✅ rc=0（仅 space-bunny 折扣过期的既有提醒） |
+| `scripts/coverage-check.py` | ✅ **100.0 %**（应覆盖 301 行 · 未覆盖 0 · 豁免 1） |
+| `scripts/cooldown-test.sh` | ✅ 19 / 0 |
+| `scripts/probe-models-test.sh` | ✅ 59 / 0 |
+| `scripts/billing-test.py` | ✅ 全部通过 |
+
+**负向控制**：在临时副本里把 §3.2f 的 `joycode` 小节中 `--thinking` 改坏 ⇒ §3q ❌「§3.2f 的 joycode 小节没写 `--thinking`」；真文件 0 条 ❌。
+**计划审查**：`.agent/plans/2026-10-10-rift-gui-bridges.md`，hy3 两轮（FAIL 7 条 → v2 修订 → PASS），已用 `agent-gates-plan-review` 登记。
+**本仓异构审查**：`agent-gates-review --due` 返回 79（业务分支轮不到）⇒ 按 gates 策略，合并进 main 时整批审一次。
+
 ## v11.13 (2026-10-06) — 下线 Space Bunny（OpenRouter）· 免费池剩 `hy3` / `qfmodel`
 
 **用户要求（原文，m07513）：「之前配置的 Space Bunny Alpha（OpenRouter 免费·隐身模型）已经不可用了吗？

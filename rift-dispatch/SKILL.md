@@ -21,8 +21,9 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 
 | # | 规则 | 落点 |
 |---|---|---|
-| 1 | **便宜优先，逐级升档** | 免费池（**`FREE_POOL` 登记表**：hy3@max → qfmodel，逐条按条目判，09-29 起；📜 原 priority 1 的 Space Bunny 2026-10-06 已下线删除）先试 → 付费从 **`deepseek-v4.1-flash`**（火山两套餐 + 百炼；🔴 **cb 上改用同档 `glm-5.3-flash` 0.06x** —— 09-24 cb 的 v4.1 涨到 0.11x）起步 → `deepseek-v4-flash`（0.17x）→ `qwen3.8-max` → `kimi-k3-1`（1.62x）。⛔ **每一级【质量/成本升档】的唯一入口是「上一档已在本任务做砸过一轮」**，理由里要写明哪一轮、砸在哪。写不出来不许升。⚠️ 这条⛔**不管【可用性换档】**——模型在所有 provider 都拿不到时允许向上换档（必须报告），见 §2 第 5 段。⚠️ 例外：`algorithm` / `perf` 两类从 `deepseek-v4-flash` 起步（⚠️ 依据比的是 v4-flash **对 glm**，⛔ 没比过现在的 T1 ⇒ **待补测**）。🔴 并发两类已改回 T1 起步 —— 4 臂拉丁方并发题 v4.1-flash 37.5 > v4-flash 30.5 |
-| 2 | 🔴 **按「要不要看得见」分通道，不是按工具分** | 🔴 **开发实施类 + 大审查 → Paseo；短任务 / 短审查 → `pi -p`；⭐ 审查（大/短审查）2026-10-06 起统一走 CLI `codex exec`（见 #4 与 §3.2c）**。判据是**规模**不是任务类型——Paseo 能看进度、中途干预、拿结构化状态；`pi -p` 跑完即退不堆 serve。⛔ **开发任务和大审查都不要走 `pi -p`**：它不进 Paseo agent 列表，你看不见也打不断（实测大审查走 `pi -p` 跑满 35 分钟零输出 ⚠️ 09-24 起**疑似 stdin 挂死**而非规模问题，见 §3.2b —— 当时未查 stdin，未复测） |
+| 0 | 🔴🔴 **本地用户策略压过一切**（2026-10-10，§3.2g） | 优先级 **本地策略 > 内置决策树（§2）> 模型自主**。派发前先跑 `python3 scripts/local-policy.py --cwd <工作目录>`：命中规则 ⇒ **只许**规则 `allow` 里的落点（例：公司目录只用 Claude + 此刻确实免费的免费池），免费池拿不到 ⇒ 跳过付费阶梯直接走规则的 `fallback`；⛔ 连探活都不碰付费落点（探活 = 花钱）。规则文件在仓库外（`~/.config/rift-dispatch/policy.local.json`），⛔ 不进仓库；没有文件 ⇒ 下面 1–4 照常 |
+| 1 | **便宜优先，逐级升档** | 免费池（**`FREE_POOL` 登记表**：hy3@max → qfmodel → joycode/JoyAI-Code-1.5（GUI 桥接，至 11-06，10-10 起），逐条按条目判，09-29 起；📜 原 priority 1 的 Space Bunny 2026-10-06 已下线删除）先试 → 付费从 **`deepseek-v4.1-flash`**（火山两套餐 + 百炼；🔴 **cb 上改用同档 `glm-5.3-flash` 0.06x** —— 09-24 cb 的 v4.1 涨到 0.11x）起步 → `deepseek-v4-flash`（0.17x）→ `qwen3.8-max` → `kimi-k3-1`（1.62x）。⛔ **每一级【质量/成本升档】的唯一入口是「上一档已在本任务做砸过一轮」**，理由里要写明哪一轮、砸在哪。写不出来不许升。⚠️ 这条⛔**不管【可用性换档】**——模型在所有 provider 都拿不到时允许向上换档（必须报告），见 §2 第 5 段。⚠️ 例外：`algorithm` / `perf` 两类从 `deepseek-v4-flash` 起步（⚠️ 依据比的是 v4-flash **对 glm**，⛔ 没比过现在的 T1 ⇒ **待补测**）。🔴 并发两类已改回 T1 起步 —— 4 臂拉丁方并发题 v4.1-flash 37.5 > v4-flash 30.5 |
+| 2 | 🔴 **按「要不要看得见」分通道，不是按工具分** | 🔴 **开发实施类 + 大审查 → Paseo；短任务 / 短审查 → `pi -p`；⭐ 审查（大/短审查）2026-10-06 起统一走 CLI `codex exec`（见 #4 与 §3.2c）**。⭐ **例外（2026-10-10）：GUI 桥接渠道（`joycode` / `trae-cn`）一律走桥接 CLI**（§3.2f）—— 它们没有 Paseo provider，可见性来自桌面 App 界面本身。判据是**规模**不是任务类型——Paseo 能看进度、中途干预、拿结构化状态；`pi -p` 跑完即退不堆 serve。⛔ **开发任务和大审查都不要走 `pi -p`**：它不进 Paseo agent 列表，你看不见也打不断（实测大审查走 `pi -p` 跑满 35 分钟零输出 ⚠️ 09-24 起**疑似 stdin 挂死**而非规模问题，见 §3.2b —— 当时未查 stdin，未复测） |
 | 3 | 🔴 **先判失败形态，再决定换什么** | **有产出但不合格** = `bad_output` ⇒ 走【质量/成本升档】（可换模型族）。**没产出**（静默停 / 唤不醒 / 探活不过）= `no_response` ⇒ 走【可用性】：**留在同 provider 降到下一档**，⛔ 不算做砸、⛔ 不跨钱包。⚠️ hy4 经常「碰墙」——允许你用但派发后静默停，**Paseo 抓不到明确错误** ⇒ ⛔ 别把它当成模型能力问题 |
 | 4 | 🔴 **审查的硬约束是「异构」** | ⛔ **评审模型族 ≠ 实施模型族**（全局红线 #8），是**不变量**，不是针对某个模型的禁令。🔴 **含主会话：主会话就是 Claude，我自己写的东西不得派 `claude/*` 去审**。族对照表见 routing §5。⭐ **未显式指定时**默认 **`codex`**（⭐ 2026-10-06 起；模型取 `~/.codex/config.toml` 的 `model`，实测 `gpt-5.6-sol`，可用 `RIFT_REVIEW_MODEL` 覆盖；⛔ 不是「不可覆盖」，显式换 provider 会报冲突）。⚠️ **通道统一走 CLI** `codex exec`（大/短审查同通道——Paseo 的 codex provider `out of credits`，⛔ copilot 全族 2026-10-06 已死）。🔴 codex 撞额度 ⇒ 按 §3.2c 降级阶梯换异族，**显式记录并告知用户** |
 
@@ -207,7 +208,65 @@ WHITELIST = {                                   # P0，routing §1
   #    stealth/space-bunny-alpha`，且 OpenRouter 公开清单（464 个模型）里已无任何含 bunny / stealth 的 id。
   #    ⚠️ 删掉这个键之后 `--provider openrouter-free` 落「未知 provider」被拦（它从来不在 EXEMPT 里）
   #    ⇒ 两道闸现在都关了，⛔ 不要只删白名单数组、把 provider 键留着（那会变成「谁都不许」的误导形态）。
+  # ⭐ 2026-10-10 GUI 桥接通道（§3.2f）：型号 id 一律带命名空间 `joycode/…` `trae/…`
+  #    —— 两边都有 GLM-5.3 / MiniMax-M3，裸名会让 S:948 合成池同时命中两家（计划审查 #4）。
+  #    派发时 bridge_command() 去掉前缀再交给桥接 CLI。清单以桥接 `models` 命令实时结果为准。
+  'joycode':          ['joycode/JoyAI-Code-1.5',   # 0x 免费（T0 priority 3，见 FREE_POOL）
+                       'joycode/GLM-5.3', 'joycode/Kimi-K2.6', 'joycode/MiniMax-M3',
+                       'joycode/Doubao-Seed-2.0-pro'],   # 后四个扣 JoyCode 月积分；⛔ 只能显式派
+  'trae-cn':          ['trae/Seed-Evolving', 'trae/Seed-2.1-Pro-0915', 'trae/Seed-2.1-Turbo', 'trae/Seed-Code',
+                       'trae/MiMo-V2.6-Flash', 'trae/MiMo-V2.6-Pro', 'trae/Step-5-Preview',
+                       'trae/GLM-5.3-FlashX', 'trae/GLM-5.3-Flash', 'trae/GLM-5.3', 'trae/GLM-5.2',
+                       'trae/DeepSeek-V4.1-Flash', 'trae/DeepSeek-V4-Flash', 'trae/DeepSeek-V4-Pro',
+                       'trae/Kimi-K3', 'trae/Kimi-K2.8-Preview', 'trae/MiniMax-M3',
+                       'trae/Qwen3.8-Flash', 'trae/Qwen3.8-Max', 'trae/Qwen3.7-Plus'],
+                      # ⬆ 全部扣 Trae 月积分（倍率随时段变）；⛔ 只能显式派。⚠️ 写成字面列表：CC 按字面解析白名单
 }
+# 🔴 GUI 桥接通道（2026-10-10，§3.2f）：驱动本机桌面 App 的 CLI，⛔ 不是 Paseo provider ⇒ 收尾强制 channel='cli'
+GUI_BRIDGE_UPSTREAMS = {'joycode', 'trae-cn'}
+GUI_BRIDGE_CLI = {'joycode': 'node ~/AgentWorkspace/configs/joycode-bridge/joycode-dispatch.mjs',
+                  'trae-cn': 'node ~/AgentWorkspace/configs/trae-bridge/trae-dispatch.mjs'}
+# TRAE 每个型号支持的思考档（rift id：轻=low 高=high 极高=xhigh）—— 2026-10-10 `trae-dispatch.mjs models` 实测（Trae 3.4.2）。
+# ⛔ 不在表里 = 无思考档（自动进 NO_THINKING_MODELS）。Trae 升级后先跑 models 核对。
+_T3, _LH = ('low', 'high', 'xhigh'), ('low', 'high')
+TRAE_THINKING = {**{f'trae/{m}': _T3 for m in ('GLM-5.3-FlashX', 'GLM-5.3-Flash', 'GLM-5.3', 'DeepSeek-V4.1-Flash',
+                                                 'DeepSeek-V4-Flash', 'DeepSeek-V4-Pro', 'Kimi-K3', 'Kimi-K2.8-Preview',
+                                                 'Qwen3.8-Flash', 'Qwen3.8-Max')},
+                 **{f'trae/{m}': _LH for m in ('Seed-2.1-Pro-0915', 'Seed-2.1-Turbo', 'Seed-Code', 'Step-5-Preview')},
+                 'trae/GLM-5.2': ('high', 'xhigh')}
+RIFT_LEVELS = ('minimal', 'low', 'medium', 'high', 'xhigh', 'max')
+def clamp_bridge_thinking(model, thinking):
+    """TRAE：按 TRAE_THINKING【只降不升】；没有 ≤ 请求值的档 ⇒ None（调用方停，⛔ 不许偷偷升档）。"""
+    ok = [l for l in TRAE_THINKING.get(model, ()) if RIFT_LEVELS.index(l) <= RIFT_LEVELS.index(thinking)]
+    return max(ok, key=RIFT_LEVELS.index) if ok else None
+def bridge_command(upstream, model, thinking):
+    """§3.2f 的执行 argv。`<prompt-file>` 由执行方替换成写好 §4 派发 prompt 的文件路径。"""
+    argv = GUI_BRIDGE_CLI[upstream].split() + ['ask', '--prompt-file', '<prompt-file>', '--timeout', '1800',
+                                               '--model', model.split('/', 1)[1]]
+    return argv + (['--thinking', thinking] if thinking is not None else [])
+# 🔴🔴 **本地用户策略（最高优先级，2026-10-10，§3.2g）** —— 规则放在仓库外 `~/.config/rift-dispatch/policy.local.json`，
+#    ⛔ 永不进仓库；文件不存在 ⇒ None（行为与之前完全一致）；文件存在但读不出 ⇒ load_local_policy 自己报错停（fail closed）。
+#    用户要求：公司目录下只许 Claude 与免费池，不花个人付费额度
+LOCAL_POLICY = load_local_policy()                  # 实现：`python3 scripts/local-policy.py --cwd <dir>`
+def path_under(path, root):
+    return path == root or path.startswith(root.rstrip('/') + '/')
+def match_policy(policy, cwd):
+    """第一条 workspaceUnder 命中 cwd 的规则。🔴 字面路径（展开 ~ + normpath）**或**物理路径任一命中即算 ——
+       只看物理路径会漏掉「公司目录里的项目软链到别的盘」（= 付费被放行）；多判只会更严，⛔ 不会多花钱。"""
+    lit = normpath(expand_home(cwd))
+    phy = physical_path(lit)
+    for r in (policy or {}).get('rules', []):
+        for root in r['when']['workspaceUnder']:
+            rt = normpath(expand_home(root))
+            if path_under(lit, rt) or path_under(phy, physical_path(rt)):
+                return r
+    return None
+def policy_allows(rule, upstream, model):
+    """无规则 ⇒ 全放行。有规则 ⇒ 只放 allow.upstreams，以及【此刻确实免费】的 FREE_POOL 条目（过期的⛔不算）。"""
+    if rule is None or upstream in rule['allow'].get('upstreams', ()):
+        return True
+    e = next((e for e in FREE_POOL if (e['upstream'], e['model']) == (upstream, model)), None)
+    return bool(rule['allow'].get('freePool')) and e is not None and (promo_active(e) or t0_still_free(e))
 # ⛔ jdcloud-joyagent 2026-09-09 停用（额度用尽、消耗太快）——已从 ~/.pi/agent/models.json 移除。
 #    ⚠️ 配置完整归档在 ~/.pi/agent/providers-disabled/jdcloud-joyagent.json（含恢复清单）。
 #    ⇒ 现在派它会落到「未知 provider」被拦，这是预期行为。
@@ -412,11 +471,22 @@ FREE_POOL = [
    # avoid perf：⭐ 2026-10-02 agent 自行定下（⛔ 非待决，改回只需删这一项）—— perf 无任何模型的实测；推导：付费阶梯对 perf 跳过 T1、
    #    从 T2 起步（见 ENTRY），比 T1 还弱的免费模型更不该接（审查 r2 也指出只挡 algorithm 会让 perf 落到它）；
    #    架构题（Kafka 34.0 / 35.5）与其余臂同档 ⇒ ⛔ 不扩大到 architecture
+  {'upstream': 'joycode', 'model': 'joycode/JoyAI-Code-1.5', 'priority': 3,
+   'freeUntil': '2026-11-06T23:59', 'thinking': None, 'multimodal': False,
+   # ⭐ 2026-10-10 接入（GUI 桥接，§3.2f）：JoyCode 模型菜单标 0x；用户账号「团队版（限免）有效期至 2026年11月6日」（用户截图）。
+   #    🔴 给了明确截止 ⇒ 不走 ⑬ 的计费探测；过期后由 t0_still_free 把关（窗口之后 7 天内核到 credit=0 才续用，否则自动退出）。
+   'avoidTaskTypes': {'algorithm', 'perf', 'architecture'}, 'cautionTaskTypes': set(),
+   # avoid 三项照 hy3 先例：⛔ 还没有盲评数据，先保守。caution 不写 review：review 在 §3 就分流走了，到不了 T0。
+   'retainsData': True, 'allowInSensitiveWorkspace': True},
+   # retainsData：prompt 进 JoyCode（京东）服务端任务存储。
+   # ⭐ allowInSensitiveWorkspace=True：用户 2026-10-10 确认 JoyCode 可以接公司目录的任务。
 ]
 # 🔴 没有思考档的模型 ⇒ 收尾 thinking 置 None、build_settings ⛔ 不写 thinkingOptionId
 #    （⛔ 否则收尾的 `thinking or default_thinking(model)` 会给它补一个 xhigh）
 #    ⭐ 免费条目的那部分**由 FREE_POOL 推**（thinking=None 即无思考档）⇒ 新增免费模型⛔不用再改这里（审查 09-29）
-NO_THINKING_MODELS = {'kimi-k2.7-code'} | {e['model'] for e in FREE_POOL if e['thinking'] is None}
+NO_THINKING_MODELS = ({'kimi-k2.7-code'} | {e['model'] for e in FREE_POOL if e['thinking'] is None}
+                      | set(WHITELIST['joycode'])                                         # JoyCode 没有思考档（§3.2f）
+                      | {m for m in WHITELIST['trae-cn'] if m not in TRAE_THINKING})      # TRAE 无档位型号
 def default_thinking(m):
     """没给 --thinking 时的默认档：免费条目取 FREE_POOL.thinking，其余 xhigh（routing §4）。"""
     return next((e['thinking'] for e in FREE_POOL if e['model'] == m and e['thinking'] is not None), 'xhigh')
@@ -701,6 +771,7 @@ explicit_thinking = args.thinking                                # 可为 None
 task_type = classify(user_input)          # routing §6；⚠️ concurrency 要先判子类
 scope     = estimate_scope(user_input, args)   # 文件数 / 预计工具调用数 —— 供 is_large_review
 cwd       = resolve_worktree(args.worktree)
+policy_rule = match_policy(LOCAL_POLICY, cwd)   # 🔴 命中 ⇒ 下面每个选落点 / 探活的地方都先过 policy_allows（§3.2g）
 agent_id  = None                          # 🔴 只有 Paseo 派发才会被赋上，CLI 路径保持 None
 # 🔴 只数 **'quality'** 那一类（= 有产出但产出不合格）—— 判据见 FAILURE_SHAPES。
 #    ⛔ 「没回复 / 静默停」是 **availability**，⛔ 不计入 —— 否则通道没响应会把任务一路顶到 K3。
@@ -755,6 +826,13 @@ if task_type == 'review' and explicit_upstream not in (None, REVIEW_DEFAULT_PROV
     report_review_provider_conflict_and_stop(explicit_upstream)
 if explicit_upstream is not None:
     validate(explicit_upstream, explicit_model)
+# 🔴 本地策略：显式型号在【任何探活之前】就要判 —— 探活本身就是真请求（= 花钱，codex 计划审 r1 #1）
+if policy_rule is not None and explicit_model is not None:
+    _cands = ([explicit_upstream] if explicit_upstream is not None else
+              sorted({u for u, _ in WALLET_PREF.get(explicit_model, [])}
+                     | {u for u, ms in WHITELIST.items() if explicit_model in ms}) or ['codebuddy-code'])
+    if not any(policy_allows(policy_rule, u, explicit_model) for u in _cands):
+        report_policy_blocked_and_stop(policy_rule, explicit_upstream, explicit_model)
 
 # ═══ 2. --free 只置标志，⛔ 不提前退出（落点在第 4 段）═══
 want_free = args.free and explicit_model is None
@@ -805,9 +883,13 @@ if task_type == 'review':
     #    ⛔ 不许回落 claude 族（主会话）/ copilot 族（全族已死）；同族档直接跳过（异构不变量）。
     #    ⛔ 本段不许 return（统一收尾在 §6/§7）——这里只改 `upstream`/`model` 两个落点变量。
     _cx = codex_exhausted_report()
+    if _cx is None and not policy_allows(policy_rule, upstream, model):
+        _cx = (review_impl_family(), f"本地策略 {policy_rule['id']}：⛔ {upstream}（付费）")   # 走同一条降级阶梯
     if _cx is not None:
         _impl_family, _detail = _cx
         for _prov, _mid in REVIEW_FALLBACK_LADDER:   # ① qoderclicn/qfmodel ② codebuddy-code/hy3 ③ …/glm-5.3-flash
+            if not policy_allows(policy_rule, _prov, _mid):
+                continue                             # 🔴 本地策略：⛔ 付费档连探活都不许（探活 = 花钱）
             if family_of(_prov, _mid) == _impl_family:
                 continue                             # 🔴 评审族 ≠ 实施族
             if not family_is_alive(_prov):            # ⛔ 死族（copilot / 已停用 provider）直接跳
@@ -858,7 +940,7 @@ elif model is None:
             rec = catalog_credit_record(u, m)
             if rec and rec.get('credit') not in (None, 0.0):
                 t0_now_billed.append((m, rec['credit']))   # 🔴 核过了，确认已计费
-            elif probe_ok(u, m):
+            elif policy_rule is None and probe_ok(u, m):   # 🔴 本地策略：过期未复核的可能已在收费 ⇒ ⛔ 连探活都不许（codex 计划审 r2）
                 t0_free_unverified.append(m)    # ⇒ §7 提示，⛔ 不静默丢掉这个机会
             free_skipped.append((u, m, {'expired'}))
             continue
@@ -868,7 +950,7 @@ elif model is None:
             upstream, model, t0_probed = u, m, True
             thinking = explicit_thinking if explicit_thinking is not None else e['thinking']
             #          ↑ ⛔ 用 `is not None`，⛔ 不用 `or`（见第 1 段）；条目 thinking 为 None ⇒ 该模型无思考档
-            # 🔴 2026-10-06：现役两条免费条目（hy3 / qfmodel）的 `cautionTaskTypes` 都是空集
+            # 🔴 2026-10-06：现役免费条目（hy3 / qfmodel；10-10 加 joycode）的 `cautionTaskTypes` 都是空集
             #    —— 唯一的非空值原本挂在 Space Bunny 上（D3 的 concurrency_impl 提醒），它已下线
             #    ⇒ 本分支当前构造不出来。⚠️ 一旦有免费条目的 cautionTaskTypes 非空，必须删掉本行的
             #    pragma 并补用例（由 consistency-check §3m-bis 守着）。
@@ -878,6 +960,15 @@ elif model is None:
         free_skipped.append((u, m, {'probe_failed'}))
     if model is None and want_free:
         report_free_unavailable_and_stop(free_skipped)   # 🔴 显式要免费却拿不到 ⇒ 停，并列出每条为什么不行
+    # 🔴 本地策略：免费池拿不到 ⇒ **整条付费阶梯 T1–T4 跳过**，直接走规则的 fallback（默认 Claude）。
+    #    显式给了别的 provider（如 --provider codebuddy-code）⇒ 当场停，⛔ 去付费档 / 同档替代里探活。
+    if model is None and policy_rule is not None:
+        _fb = policy_rule.get('fallback') or dict(zip(('upstream', 'model', 'thinking'), LAST_RESORT))
+        if explicit_upstream not in (None, _fb['upstream']):
+            report_policy_blocked_and_stop(policy_rule, explicit_upstream, None)
+        upstream, model = _fb['upstream'], _fb['model']
+        thinking = explicit_thinking if explicit_thinking is not None else _fb['thinking']   # ⛔ 不覆盖显式 --thinking
+        warn(f"本地策略 {policy_rule['id']}：免费池拿不到 ⇒ 跳过付费阶梯，落 {upstream}/{model}（⛔ 不贴自己的钱）")
     if model is None:                                # T1..T4
         i = ENTRY.get(task_type, 0) + failed_paid_tiers_in_this_task
         # ⛔ failed_paid_tiers 只数【付费阶梯内】做砸的档数：T0 不计、同档重试不计
@@ -969,14 +1060,14 @@ if upstream is None:
         pool = sorted(pool, key=lambda x: (x[0] != provider_affinity,
                                            not is_discounted_now(x[0], x[1])))
         # 🔴 本任务里反复无响应的落点直接排除 —— ⛔ 不许原地无限重派
-        pool = [x for x in pool if x not in dead_landings]
+        pool = [x for x in pool if x not in dead_landings and policy_allows(policy_rule, *x)]   # 🔴 本地策略：探活前过滤
         landed = first_available(pool)
         if landed is None:
             # ⭐ 本档模型所有池都拿不到 ⇒ 先在【同档】里换落点（⛔ 优先于升档：同档能落就别涨价）
             # ⛔ 同档替代⛔不参与上面的折扣排序 —— 它没有价格依据，只是兜底。
             # ⚠️ affinity 同样作用于同档替代 —— 「留在已知活着的 provider」这个意图
             #    ⛔ 不该在换 peer 这一步丢掉（cb 上的 v4.1 拿不到，但 cb 上的 glm 可能可以）。
-            peers = [x for x in TIER_PEERS.get(model, []) if x not in dead_landings]
+            peers = [x for x in TIER_PEERS.get(model, []) if x not in dead_landings and policy_allows(policy_rule, *x)]
             peers = sorted(peers, key=lambda x: x[0] != provider_affinity)
             landed = first_available(peers)
             # 🔴 落到同档替代**必须留痕** —— ⛔ 否则 §7 只打得出 availability_escalations，
@@ -1035,11 +1126,17 @@ else:
 
 # ═══ 6. 统一收尾 ═══ 🔴 所有路径都走到这里，⛔ 上面任何分支都不许自己返回结果
 validate(upstream, model)                  # 🔴 自动选出的组合同样要过 P0
+if not policy_allows(policy_rule, upstream, model):   # 🔴 本地策略第二道：任何路径漏过来的都在这里停（⛔ 删，consistency §3r 守着）
+    report_policy_blocked_and_stop(policy_rule, upstream, model)
 # 🔴 审查 2026-10-06 起**全走 CLI**（默认 `codex exec`）—— ⛔ 不再按规模上 Paseo：
 #    Paseo 的 codex provider `out of credits`（2026-10-06 实测），copilot 全族已死 ⇒ 没有可用的
 #    Paseo 审查 provider。大审查的可见性用【后台跑 + 输出落文件】补偿（§3.2c），⛔ 不是没人盯。
 channel = 'paseo' if (is_dev_task(task_type) or is_large_review(scope)) and task_type != 'review' else 'cli'
 #   🔴 判据是「要不要看得见」（§3 通道判据总表）：开发实施类 + 大审查 → paseo；其余 → cli
+if upstream in GUI_BRIDGE_UPSTREAMS:
+    channel = 'cli'
+    # 🔴 2026-10-10：JoyCode / TRAE 是驱动桌面 App 的本机 CLI，⛔ 没有 Paseo provider ——
+    #    按规模判成 paseo 会到 build_settings 报 unknown provider。可见性来自 App 界面本身（§3.2f）。
 if upstream == 'claude':
     channel = 'paseo'
     # 🔴 claude 在 provider 表里【只有 Paseo create_agent 一条路径】（mode=auto，§8）——
@@ -1066,7 +1163,14 @@ if _listed is not True:                      # 🔴 fail-closed：False 与 None
 provider = normalize_provider(upstream, channel)
 thinking = (None if model in NO_THINKING_MODELS             # 🔴 没有思考档 ⇒ ⛔ 不传（显式 --thinking 也作废，§7 回显）
             else clamp_to_supported(model, thinking or default_thinking(model)))  # §3.2e，⛔ 只降不升
-result   = execute(channel, provider, model, thinking)    # §3
+bridge_argv = None
+if upstream in GUI_BRIDGE_UPSTREAMS:                       # §3.2f：执行体是桥接 CLI，⛔ 没有 Paseo / pi 形态
+    if thinking is not None:
+        thinking = clamp_bridge_thinking(model, thinking)  # 🔴 按 TRAE 实测档位表再折一次，⛔ 只降不升
+        if thinking is None:
+            report_bridge_thinking_unsupported_and_stop(upstream, model)   # 报「该型号最低档是 X」
+    bridge_argv = bridge_command(upstream, model, thinking)
+result   = execute(channel, provider, model, thinking)    # §3（GUI 桥接 ⇒ 执行 bridge_argv）
 agent_id = result.agent_id if channel == 'paseo' else None
 # ⚠️ `pi -p` 是一次性进程，⛔ 没有 agent_id —— 用 result.run_id 留痕
 save_memory(agent_id=agent_id, run_id=(None if channel == 'paseo' else result.run_id),
@@ -1104,6 +1208,7 @@ print_summary()                                      # §7
 | **大审查**（多文件 / 读大量源 / 预计 20+ 工具调用） | ⭐ **`codex exec` CLI（后台跑 + 输出落文件）** | 🔴 2026-10-06 起审查**全走 CLI**：Paseo 的 codex provider `out of credits`（实测）、copilot 全族已死 ⇒ 没有可用的 Paseo 审查 provider。可见性用后台 + 日志文件补偿 |
 | **短任务**（单文件、明确问题、只读分析、短审查） | `pi -p` CLI（实施侧）/ `codex exec`（审查侧） | 跑完看结论就行，省机器不堆 serve |
 | **兜底** | `opencode` 🔻 | 无常规用途，仅前面都不可用时 |
+| **GUI 桥接渠道**（upstream ∈ `GUI_BRIDGE_UPSTREAMS` = `joycode` / `trae-cn`，2026-10-10） | ⭐ **桥接 CLI**（§3.2f，执行 §2 收尾算出的 `bridge_argv`；后台跑 + 输出落文件） | 驱动本机桌面 App，⛔ 没有 Paseo provider（规模判成 paseo 会报 unknown provider）；可见性来自 App 界面本身（JoyCode / Trae 窗口里实时看得到任务） |
 
 ⚠️ **本表 2026-09-08 修正**：原先把「审查类」整类钉给 `pi -p`，理由写的是「审查不需要盯」。
 本轮实测推翻该前提——`pi -p` + gpt-5.5 跑满 **35 分钟零输出**，全程不可见、只能盲杀（⚠️ 09-24 起**疑似其实是 stdin 挂死**，见 §3.2b，未复测）；
@@ -1121,13 +1226,24 @@ copilot 凭据被删、Paseo codex provider 撞额度后，Paseo 侧没有可用
 ⛔ 别只照着人眼自查：`scripts/pipeline-test.py` 会**直接执行 §2 的伪代码**跑这些用例并断言落点。
 🔴 **改了本 skill 任何一处，六项校验都要跑**（`S=scripts`）：`python3 $S/pipeline-test.py` · `python3 $S/coverage-check.py`（§2 每行都要被用例走到）·
 `python3 $S/consistency-check.py`（SKILL ⇔ catalog ⇔ routing 结构性比对）· `bash $S/cooldown-test.sh` · `bash $S/probe-models-test.sh`（本地假端点，⛔ 不打真服务）·
-`python3 $S/billing-test.py`。「绿」不等于「还在测目标规则」——改了测试夹具里的日期 / 阈值，要对该规则做一次注入验证（见 MEMORY feedback-prove-the-detector-detects）。
+`python3 $S/billing-test.py` · `python3 $S/local-policy-test.py`（本地策略解析 / 匹配 / 软链 / fail closed，2026-10-10 起第 7 项）。「绿」不等于「还在测目标规则」——改了测试夹具里的日期 / 阈值，要对该规则做一次注入验证（见 MEMORY feedback-prove-the-detector-detects）。
 改了 §2 就跑它（连同 `scripts/consistency-check.py`）。
 ✅ 已验证它能抓住 5 类真实破坏：channel 写死 · 入口档改错 · 审查换模型 · 丢 `pi/` 前缀 · 新增未赋值变量。
 
 
 | 输入 | 期望结果 |
 |---|---|
+| `core` 任务，hy3 / qfmodel 都冷却 | ⭐ 落 T0 第 3 位 `joycode/joycode/JoyAI-Code-1.5`，channel=`cli`，thinking=None，`bridge_argv` 带 `--model JoyAI-Code-1.5` |
+| `algorithm` 任务，hy3 / qfmodel 都冷却 | ⛔ 不落 joycode（avoid 同 hy3）|
+| JoyCode 免费期（11-06）之后、无窗口后复核 | ⛔ 不落 joycode（过期自动退出免费池）；窗口后 7 天内核到 credit=0 ⇒ 仍可落 |
+| `--provider joycode --model joycode/GLM-5.3` | channel=`cli`，⛔ 不传思考档，argv `--model GLM-5.3` |
+| `--provider joycode --model GLM-5.3`（裸名） | ⛔ 白名单冲突 —— 必须带命名空间 |
+| `--provider trae-cn --model trae/GLM-5.3-Flash` | channel=`cli`，默认 xhigh ⇒ argv `--thinking xhigh`（=极高） |
+| `--provider trae-cn --model trae/Seed-Code`（只有轻/高） | xhigh **只降不升** ⇒ `high` |
+| `trae/Kimi-K3 --thinking max` / `trae/GLM-5.3-Flash --thinking medium` | `max`⇒`xhigh` · `medium`⇒`low` |
+| `trae/GLM-5.3-Flash --thinking minimal` · `trae/GLM-5.2 --thinking low` | ⛔ 停（没有 ≤ 请求值的档，⛔ 不许偷偷升档）|
+| `trae/MiMo-V2.6-Flash --thinking high`（无档位型号） | thinking=None，argv ⛔ 不带 `--thinking` |
+| 只给 `--model trae/GLM-5.3` | 唯一落 `trae-cn`（⛔ 不与 `joycode/GLM-5.3` 撞名）|
 | `--provider jdcloud-joyagent --model GLM-5.2` | ⛔ **拦住**（JD 白名单只有两个 DeepSeek） |
 | `--provider pi/jdcloud-joyagent --model GLM-5.2` | ⛔ **同样拦住** —— 先 `split_provider` 取 upstream 再校验 |
 | `--provider pi/jdcloud-joyagent --model DeepSeek-V4-pro` | ⛔ **拦住** —— 京东 2026-09-09 停用，已移出白名单与豁免集 ⇒ 落「未知 provider」 |
@@ -1138,7 +1254,7 @@ copilot 凭据被删、Paseo codex provider 撞额度后，Paseo 侧没有可用
 | hy3 冷却中 / 探活不过 / 当日赠额耗尽 | → `qoderclicn` + **`qfmodel`**（priority 2，⛔ 不传 thinking） |
 | `concurrency_impl` 类，免费池可用 | → 落 hy3（它的 `cautionTaskTypes` 为空 ⇒ ⛔ 不产生提醒；📜 该弱点只属于已下线的 Space Bunny） |
 | `algorithm` / `perf` 类，免费池可用 | → hy3 / qfmodel 都 avoid ⇒ 付费 T2 `deepseek-v4-flash`；⭐ 带 `--free` 则放宽，落 hy3 |
-| 多模态任务 | → 免费池两条都接不了图（会被切到付费模型）⇒ 进付费阶梯；`--free` ⛔ 也不放宽 ⇒ 停止并报告 |
+| 多模态任务 | → 免费池三条（hy3 / qfmodel / joycode）都接不了图（会被切到付费模型）⇒ 进付费阶梯；`--free` ⛔ 也不放宽 ⇒ 停止并报告 |
 | 默认任务，免费池三条都拿不到，0 次付费档做砸 | → `pi/volcengine-coding` + `deepseek-v4.1-flash`（T1 三池轮换首位：火山 coding → agent-plan → 百炼）🔴 **必须校验产出** |
 | T1 三池都拿不到 | → 同档替代 `glm-5.3-flash`（火山两套餐 / cb 三池），⛔ 不升 T2 |
 | 🔴 显式 `--provider codebuddy-code`，不给 model，落到 T1 | → `codebuddy-code` + **`glm-5.3-flash`**（同档换落点，`tier_substitutions` 留痕）—— 09-24 cb 的 v4.1 涨到 0.11x，已移出其池 |
@@ -1465,6 +1581,8 @@ codebuddy -p --output-format json --model <m> --tools "" "<prompt>" > out.json
 | `pi/volcengine-*/kimi-k2.7-code` | ⚠️ `thinkingOptions` 为 `null` | ⛔ 不要传 |
 | ~~`openrouter-free/stealth/space-bunny-alpha`~~（📜 2026-10-06 下线） | ⚠️ 无映射表（pi 按默认处理，⛔ 未验证 pi 实际往请求里塞了什么）。服务端支持参数含 `reasoning` / `reasoning_effort`（OpenRouter 公开 models API） | ⚠️ 09-29 bench 是**直连 API** `reasoning.effort=high`，⛔ 不是经 pi |
 | `qoderclicn/qfmodel` | ⛔ **无思考档**（`NO_THINKING_MODELS`）⇒ 一个档位字段都不传 | ✅ 09-24 bench |
+| `joycode/*`（5 个型号，§3.2f） | ⛔ **无思考档**（JoyCode agent 请求不带 thinking 参数）⇒ 自动进 `NO_THINKING_MODELS`，桥接 `--thinking` 只认 `default` | ✅ 2026-10-10 读源码 + e2e |
+| `trae/*`（20 个型号，§3.2f） | 🔴 **按型号不同**，见 §2 `TRAE_THINKING`（rift id `low`=轻 `high`=高 `xhigh`=极高）：三档 10 个 · 轻/高 4 个 · 高/极高 1 个（GLM-5.2）· 无档 5 个（自动进 NO_THINKING）。收尾由 `clamp_bridge_thinking()` **只降不升**再折一次，无可降 ⇒ 停 | ✅ 2026-10-10 `trae-dispatch.mjs models` 实测（Trae 3.4.2） |
 | ~~claude 系~~ | ⛔ 已从 pi 的 Copilot 通道移除（§3.2c）；Paseo 派 `claude/*` 时是 `low`/`medium`/`high`/`max` | — |
 
 🔴 **读法**：`thinkingLevelMap` 里 **value 为 `null` 就是不支持该档**，⛔ 不要只看 key。
@@ -1506,6 +1624,98 @@ agent-plan = **0 / 165**。⛔ 那条结论的主语是**客户端**不是 provi
 
 > 这条和「⛔ 创建后必须核实实际生效的模型」是同一类问题：**请求值 ≠ 运行值**。
 > 那次是静默降级到别的模型，这次是档位不存在被静默忽略。
+
+### 3.2f GUI 桥接通道（JoyCode / TRAE）—— 2026-10-10
+
+用途：**叠加额度**。用户的 JoyCode、Trae CN 桌面版有每月积分（JoyCode 的 `JoyAI-Code-1.5` 还不扣积分），
+但两家都**没有**给个人账号的 API / CLI / ACP（TRAE CLI 仅企业旗舰版；JoyCode「积分仅限 JoyCode 使用」）。
+⇒ 用本机桥接 CLI **驱动官方桌面 App**（⛔ 不碰登录凭据、⛔ 不是 2api 代理）。
+
+🔴 **它们不是 Paseo provider** ⇒ §2 收尾 `channel='cli'`，执行体是 `bridge_argv = bridge_command(upstream, model, thinking)`。
+🔴 **型号 id 带命名空间**：`joycode/<label>`、`trae/<名称>`（两家都有 GLM-5.3 / MiniMax-M3）。调用方 `--model` **必须传全限定名**，
+`bridge_command` 去掉前缀再交给桥接。
+
+**共同规则**
+- ⛔ **只在本机 Mac**（App 跑在这台机器上）；`--hub` 不适用。
+- **单任务串行**：每个桥接各有一把锁（`$TMPDIR/*-bridge.lock`），⛔ 别放进并发批量路径。
+- **只往专用工作区 / worktree 派**：App 打开哪个目录，任务就在哪个目录跑（⛔ 不是 `--worktree` / cwd）。
+  🔴 Trae 的审批只拦终端命令 —— 实测跳过 `rm` 后它改用内置删除工具照删。
+- 用户协议（两家 §5.2）字面禁止「自动化程序接入」⇒ **低频、真实开发任务、⛔ 不整夜循环**。
+- prompt 会进两家服务端（`retainsData`）。
+
+**执行步骤**
+1. 把 §4 的派发 prompt 写进文件 `F`（例：`~/AgentWorkspace/sessions/<id>/dispatch-prompt.md`）。
+2. 把 `bridge_argv` 里的 `<prompt-file>` 换成 `F`，**后台跑、stdout 落文件**（`--timeout 1800`）。
+3. 读 stdout 的**单行 JSON**；按退出码处理（两个桥接口径一致）：
+
+| 退出码 | 含义 | 派发方怎么办 |
+|---|---|---|
+| 0 | 拿到最终答案（`text`；`model` 为读回的实际型号） | 收割，⛔ 照样按 §5 收割清单验收 |
+| 1 | 超时 | 去 App 里看任务状态；⛔ 别直接重发（可能还在跑 ⇒ 重复执行） |
+| 2 | 通道不可用（App 没开 / 桥接没装 / 窗口没开工作区 / 另一单占着） | 当作**落点不可用** ⇒ §5 可用性规则（免费池下一条 / T1） |
+| 3 | 任务停在审批或追问上（JSON 带 `approval` / `ask`） | 报给用户；⛔ 未经用户同意不许改用 `--approve terminal` 重发 |
+| 4 | 发出去但没确认到 | 去 App 里看；⛔ 别盲目重发 |
+| 5 | 型号 / 思考档 / Max 不可用（**在新建任务之前就预检出来，App 界面不动**），或实际型号 ≠ 请求 / 指定了型号却无法从日志证实（JoyCode） | 跑 `models` 看实时清单，重选；⛔ 别静默换型号 |
+| 64 | 用法错误 | 修参数 |
+
+#### `joycode`（JoyCode 桌面版，京东）
+
+- **前置**：JoyCode 开着 + drop-in 扩展已装（`bash ~/AgentWorkspace/configs/joycode-bridge/install.sh --install` 后重启 JoyCode）+ 窗口打开了工作区。
+  自检：`node ~/AgentWorkspace/configs/joycode-bridge/joycode-dispatch.mjs status`
+- **调用**：`node ~/AgentWorkspace/configs/joycode-bridge/joycode-dispatch.mjs ask --prompt-file F --timeout 1800 --model <label>`
+- **查型号**：`node ~/AgentWorkspace/configs/joycode-bridge/joycode-dispatch.mjs models`（走扩展 API，⛔ 不发任务、不花积分）
+- **切模型**：`--model <label>`（例 `JoyAI-Code-1.5`、`GLM-5.3`）。只切不发：`… select --model <label>`。
+  选择会**保留**（下次不带 `--model` 沿用）。输出 `model.verified`：`match` = JoyCode.log「模型路由结果」（派发 → 完成的时间窗内）证实实际就是它；`mismatch` / `unverified` ⇒ exit 5（指定了型号就必须证实）。
+  ⛔ 改设置项 `JoyCode.config.chatModel` **无效**（实测），桥接用的是 `joycoder.getSidebarProvider` → `updateModelConfig`。
+- **切思考**：⛔ **JoyCode 没有思考档**。`--thinking` 只认 `default`，其他值 exit 5；rift 收尾 thinking=None（NO_THINKING）⇒ argv 不带 `--thinking`。
+- **型号与费用**：`joycode/JoyAI-Code-1.5` **0x**（T0 priority 3，至 2026-11-06）· `GLM-5.3` 0.6x · `Kimi-K2.6` 0.5x · `MiniMax-M3` 0.4x · `Doubao-Seed-2.0-pro` 0.4x（扣月积分 1 万）。后四个⛔只能显式派。
+- 详细：`~/AgentWorkspace/configs/joycode-bridge/README.md`
+
+#### `trae-cn`（Trae CN 桌面版，字节）
+
+- **前置**：Trae CN 开着（调试端口 127.0.0.1:39240 已在 `~/.trae-cn/argv.json` 永久开启）+ **IDE 窗口**打开专用工作区（SOLO 窗口不算）。
+  自检：`node ~/AgentWorkspace/configs/trae-bridge/trae-dispatch.mjs status`
+- **调用**：`node ~/AgentWorkspace/configs/trae-bridge/trae-dispatch.mjs ask --prompt-file F --timeout 1800 --model <名称> [--thinking low|high|xhigh] [--max-context on|off] [--approve none|terminal]`
+- **查型号**：`node ~/AgentWorkspace/configs/trae-bridge/trae-dispatch.mjs models` —— 实时输出每个型号的倍率、折扣标签、**支持的思考档**、features、Max 开关（约 8 秒）。
+  🔴 倍率**随时段变**（「闲时折扣」），⛔ 不写死，派前看一眼。
+- **切模型**：`--model <名称>`（例 `GLM-5.3-Flash`、`DeepSeek-V4.1-Flash`、`Kimi-K3`）；只切不发：`… select --model <名称>`。输出 `model` 是从界面读回的实际值。
+- **切思考**：`--thinking` 收 rift id `low` / `high` / `xhigh`（= 轻 / 高 / 极高；也收中文）。
+  rift 收尾先按 §2 `TRAE_THINKING`（实测表）`clamp_bridge_thinking()` **只降不升**：`max`⇒`xhigh`、`medium`⇒`low`，没有 ≤ 请求值的档 ⇒ 停；
+  无档位型号（MiMo / MiniMax-M3 / Seed-Evolving / Qwen3.7-Plus）⇒ 不传。档位是**跟型号保存**的，Trae 会记住。
+  `--max-context on` = 1M 上下文（更耗积分），只在确有长任务时开。
+- **审批**：默认 `--approve none` ⇒ 遇审批 exit 3；`--approve terminal` 只点「是否允许运行这个命令」面板的「运行」，其他面板一律停。
+- **费用**：全部扣 Trae 月积分（10-10 余额 1,9xx；每日签到 +100）。⛔ 不进任何自动池，只能显式派。
+- 详细：`~/AgentWorkspace/configs/trae-bridge/README.md`
+
+### 3.2g 本地用户策略（最高优先级，⛔ 不进仓库）—— 2026-10-10
+
+**优先级（用户 2026-10-10 定）：① 本地用户策略 ⇒ ② 没有策略文件 / 未命中 ⇒ 本 skill 内置决策树（§2）⇒ ③ 决策树没覆盖到的情形 ⇒ 模型自主判断**（⛔ 不许跳过 ① ② 直接自主）。
+
+**概念**：同编辑器的「用户设置 ⇒ 覆盖仓库默认值」。**机制在仓库**（§2 第 0 段 `LOCAL_POLICY` / `match_policy` / `policy_allows`，
+本节 + `scripts/local-policy.py`），**规则在本机** `~/.config/rift-dispatch/policy.local.json` —— 不在任何仓库里、⛔ 永不推送。
+没有这个文件 ⇒ 本 skill 行为与之前**完全一致**。格式见仓库里的 `policy.local.example.json`（只作示例，⛔ 不生效）。
+
+```json
+{"rules": [{"id": "<规则名>", "when": {"workspaceUnder": ["~/<目录>"]},
+            "allow": {"upstreams": ["claude"], "freePool": true},
+            "fallback": {"upstream": "claude", "model": "claude-sonnet-5", "thinking": "max"},
+            "reason": "<为什么>"}]}
+```
+
+- **匹配**：取第一条命中的规则。`cwd` 的字面路径（展开 `~` + normpath）**或**物理路径（realpath）在某个 `workspaceUnder` 根之下即命中
+  —— 只看物理路径会漏掉「目录里的项目软链到别的盘」（= 付费被放行）；多判只会更严。
+- **允许**：`allow.upstreams` 里的 provider（任何型号）+ `freePool: true` 时 FREE_POOL 里**此刻确实免费**的条目
+  （`promo_active` 或 `t0_still_free`；过期未复核的⛔不算，连探活都不许 —— 它可能已在收费）。
+- **卡点**（全部在**探活之前**，探活本身就是真请求 = 花钱）：
+  ① §1 显式型号不在允许范围 ⇒ 停（`report_policy_blocked_and_stop`）；
+  ② §3 审查：默认 codex（付费）不允许 ⇒ 走降级阶梯，⛔ 付费档连探活都跳过；全部不可用 ⇒ 停（⛔ 拿同族 Claude 审 Claude）；
+  ③ §4 免费池拿不到 ⇒ **整条付费阶梯 T1–T4 跳过**，直接落规则的 `fallback`（缺省 = LAST_RESORT）；显式给了别的 provider ⇒ 停；
+  ④ §5 候选池 / 同档替代先按策略过滤再探活；
+  ⑤ §6 收尾兜底：任何路径漏过来的都停（pipeline-test 用「拆掉 ①」的变异体证明它真能拦）。
+- **fail closed**：文件存在但读不出 / 结构不对 ⇒ `local-policy.py` exit 2 ⇒ **停止派发**，⛔ 当成没有策略放行。
+- **可见性**：§7 输出**每次**都打印「本地策略」一行（命中 X / 未命中 / 未找到文件）—— 文件丢了用户当场看得见。
+- **多机**：只在本机生效。⚠️ 在 Hub 上派发同一目录的任务，要先把这个文件同步过去（⛔ 不靠记性：Hub 上派发前同样先跑 `local-policy.py`）。
+- **审查质量**：命中「只许 Claude + 免费」类规则时，审查只能落免费异族模型（qfmodel / hy3），§7 要提示审查强度下降。
 
 ### 3.3 Hub 远程（`--hub`）
 
@@ -1623,6 +1833,7 @@ ssh hub "paseo run --detach \
 | Agent-gates | `ls {cwd}/.agent-gates/` | 警告但不阻断 |
 | 🔴 **审查时机**（仅 CHECK 5） | `bash ${AGENT_GATES_DIR:-$HOME/.agent-gates}/bin/agent-gates-review --due -C {cwd}` | **exit 79 ⇒ 停止派发**并报告 `when=` 与逃生门 `--early`。<br>🔴 **其余一律 fail-open 照派** —— 已装 2.9.8 还不认 `--due`（实测 `exit 1` + `unknown arg: -C`）；把「问不出来」当成 `due=no` 会**把审查派发整体掐死**，比不拦更糟 |
 | 工作目录 | `--worktree` > 当前 worktree > 主仓 | 主仓时提醒用 worktree |
+| 🔴🔴 **本地用户策略**（§3.2g） | `python3 scripts/local-policy.py --cwd {cwd}` | rc=2（策略文件坏了）⇒ **停止派发**并报告，⛔ 当成没有策略放行；命中 ⇒ 按规则限落点 |
 
 ---
 
@@ -1647,6 +1858,7 @@ ssh hub "paseo run --detach \
 子会话已创建
   Agent:  {short_id} — {title}          # 🔴 title 必须已带 · {渠道}-{模型缩写}（§3.1 标题规范）
   Model:  {provider}/{model} · thinking: {thinking（为 None 时写「不适用（该模型无思考档）」；显式给过 --thinking 则追加「，已忽略 --thinking X」）}{requires_output_validation 时追加 " · 🔴 必须校验产出"}
+  本地策略: {policy_rule 命中 ⇒「{id} 生效（只许 {allow}）」；未命中 ⇒「未命中」；没有策略文件 ⇒「未找到本地策略文件」}   # 🔴 ⛔ 不许省略（§3.2g：文件丢了要当场看得见）
 {落在 T0 免费条目时追加一行 —— ⛔ 不许省略：
   ⭐ 免费档 priority {n}：{model}（{freeUntil 为 None ⇒ 「截止未公布，随时可能结束 / 下线」；否则「免费至 {freeUntil}」}）
      跳过的免费条目：{free_skipped 逐条「model（原因）」；为空就不写}}

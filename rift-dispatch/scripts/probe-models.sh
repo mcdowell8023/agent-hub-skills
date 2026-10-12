@@ -41,9 +41,11 @@ PROBE_DIR="${TMPDIR:-/tmp}/rift-probe"; mkdir -p "$PROBE_DIR"
 S="$(cd "$(dirname "$0")" && pwd)"
 # 🔴 2026-09-24 同步：cb 已移出 T1 池（cb 上 T1 改落 glm）；火山 coding 09-23 已进池（此前漏写）
 # ⭐ T0 免费池按 priority 排在最前（与 SKILL FREE_POOL 同序）
-#    📜 2026-10-06：原 priority 1 的 openrouter-free/stealth/space-bunny-alpha 已下线（404）并删除 ⇒ 现为两条
+#    📜 2026-10-06：原 priority 1 的 openrouter-free/stealth/space-bunny-alpha 已下线（404）并删除。
+#    ⭐ 2026-10-10：priority 3 joycode/JoyAI-Code-1.5（GUI 桥接，被动探测）⇒ 现为三条
 DEFAULT=(codebuddy-code/hy3
          qoderclicn/qfmodel
+         joycode/joycode/JoyAI-Code-1.5
          codex/codex
          volcengine-coding/deepseek-v4.1-flash
          volcengine-agent-plan/deepseek-v4.1-flash
@@ -244,6 +246,25 @@ else:
 PY
 }
 
+# ⭐ GUI 桥接（2026-10-10，SKILL §3.2f）：⛔ 不发任务、⛔ 不花积分。桥接不在线 ⇒ 普通失败、⛔ 不写冷却（开 App 就好，不是额度问题）。
+#    命令可用环境变量替换（测试用假桩）；⚠️ 故意不加引号以便拆成 `node <path>`。
+probe_joycode() {   # $1=model（joycode/<label>）；`models` 走扩展 API，顺带核型号在不在 JoyCode 清单
+  local out rc label="${1#joycode/}"
+  out=$(${RIFT_JOYCODE_CMD:-node $HOME/AgentWorkspace/configs/joycode-bridge/joycode-dispatch.mjs} models < /dev/null 2>&1); rc=$?
+  if [ "$rc" -ne 0 ]; then echo "FAIL|JoyCode 桥接不可用：$(printf '%s' "$out" | tr -d '\n|' | head -c 150)|"; return; fi
+  if printf '%s' "$out" | python3 -c 'import json,sys; sys.exit(0 if sys.argv[1] in [m.get("label") for m in json.load(sys.stdin).get("models",[])] else 1)' "$label"; then
+    echo "OK|JoyCode 桥接在线，型号在清单（被动探测，未发请求）|"
+  else
+    echo "FAILM|JoyCode 清单里没有 ${label}|"
+  fi
+}
+probe_trae() {   # $1=model；只跑 status（⛔ models 会弹开 Trae 的模型菜单）⇒ 型号是否可用在派发时由桥接 exit 5 报
+  local out rc
+  out=$(${RIFT_TRAE_CMD:-node $HOME/AgentWorkspace/configs/trae-bridge/trae-dispatch.mjs} status < /dev/null 2>&1); rc=$?
+  if [ "$rc" -eq 0 ]; then echo "OK|Trae 桥接在线（status；⚠️ 未核型号，派发时桥接会核）|"
+  else echo "FAIL|Trae 桥接不可用：$(printf '%s' "$out" | tr -d '\n|' | head -c 150)|"; fi
+}
+
 probe_pi() {   # $1=provider $2=model
   local out
   # 🔴 必须 < /dev/null：继承的管道 stdin 会让 pi -p 永久阻塞（2026-09-24 A/B 实证）
@@ -274,6 +295,8 @@ for t in "${TARGETS[@]}"; do
     volcengine-*|bailian-*|openrouter-*)    r=$(probe_http "$prov" "$model") ;;
     qoderclicn)                             r=$(probe_qcn "$model") ;;
     codex)                                  r=$(probe_codex "$model") ;;
+    joycode)                                r=$(probe_joycode "$model") ;;
+    trae-cn)                                r=$(probe_trae "$model") ;;
     *)                                      r=$(probe_pi "$prov" "$model") ;;
   esac
   status="${r%%|*}"; rest="${r#*|}"; detail="${rest%|*}"; cool="${rest##*|}"

@@ -1,0 +1,12 @@
+{
+  "_note": "rift-dispatch 本地用户策略的【格式示例】（SKILL §3.2g）。⛔ 本文件不生效；真正生效的是 ~/.config/rift-dispatch/policy.local.json（不在任何仓库里、不推送）。",
+  "rules": [
+    {
+      "id": "example-company-free-or-claude",
+      "when": { "workspaceUnder": ["~/company"] },
+      "allow": { "upstreams": ["claude"], "freePool": true },
+      "fallback": { "upstream": "claude", "model": "claude-sonnet-5", "thinking": "max" },
+      "reason": "示例：公司目录只用 Claude（公司付费）和此刻确实免费的免费池条目"
+    }
+  ]
+}

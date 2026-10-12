@@ -44,7 +44,7 @@ class Result:
 PROVIDER_ID = {'jdcloud-joyagent': {'deepseek-v4-pro': 'DeepSeek-V4-pro',
                                     'deepseek-v4-flash': 'DeepSeek-V4-Flash'}}
 
-def run_case(c):
+def run_case(c, body=None):
     class A:
         model = c.get('model'); provider = c.get('provider')
         thinking = c.get('thinking'); free = c.get('free', False); worktree = None
@@ -56,7 +56,13 @@ def run_case(c):
         # ⚠️ 空串要原样透传 —— 空 --model 的校验靠 args.model 本身，⛔ 不靠 resolve 结果
         'classify':          lambda _: c['task_type'],
         'estimate_scope':    lambda *_: c.get('scope', 'small'),
-        'resolve_worktree':  lambda _: '/tmp/wt',
+        'resolve_worktree':  lambda _: c.get('cwd', '/tmp/wt'),
+        # ⭐ 2026-10-10 本地用户策略（~/.config/rift-dispatch/policy.local.json，⛔ 不进仓库）
+        'load_local_policy': lambda: c.get('policy'),
+        'expand_home':       lambda p: ('/home/u' + p[1:]) if p.startswith('~') else p,
+        'physical_path':     lambda p: c.get('symlinks', {}).get(p, p),
+        'normpath':          __import__('posixpath').normpath,
+        'review_impl_family': lambda: c.get('impl_family', 'Claude'),
         # 🔴 按【档 + 形态】给，⛔ 不是给个计数 —— 形态决定它算不算「做砸」
         'past_failures': lambda _: (
             [{'tier': i, 'shape': 'bad_output'} for i in range(c.get('failed', 0))]
@@ -98,7 +104,7 @@ def run_case(c):
         'family_of':         lambda u, m: FAMILY.get(f'{u}/{m}', 'Unknown'),
         'family_is_alive':   lambda u: (u != 'github-copilot' and not u.startswith('claude')
                                         and u not in set(c.get('dead_providers', ()))),
-        'probe_model':       lambda u, m: ProbeResult(f'{u}/{m}' not in set(c.get('ladder_unavailable', ()))),
+        'probe_model':       lambda u, m: (REVIEW_PROBES.append(f'{u}/{m}') or ProbeResult(f'{u}/{m}' not in set(c.get('ladder_unavailable', ())))),
         'report_review_channel_unavailable_and_stop': lambda d=None: (
             _ for _ in ()).throw(ReviewChannelUnavailable()),
         # ⚠️ force_cli 是【测试专用】旋钮：review 改成顶层分支后，review 永远落 codex（CLI），
@@ -144,8 +150,11 @@ def run_case(c):
             FREE_REPORT.extend((f'{u}/{m}', sorted(r)) for u, m, r in (a[3] if len(a) > 3 else ()))
             or (_ for _ in ()).throw(Blocked('mismatch'))),
         'report_review_not_due_and_stop': lambda d: (_ for _ in ()).throw(Blocked('not_due')),
+        # ⭐ 2026-10-10 GUI 桥接：TRAE 型号没有 ≤ 请求值的思考档 ⇒ 停（只降不升，⛔ 不许偷偷升档）
+        'report_bridge_thinking_unsupported_and_stop': lambda *a: (_ for _ in ()).throw(Blocked('bridge_thinking')),
+        'report_policy_blocked_and_stop': lambda *a: (_ for _ in ()).throw(Blocked('policy')),
     }
-    src = ("def _decide():\n" + textwrap.indent(BODY, '    ')
+    src = ("def _decide():\n" + textwrap.indent(BODY if body is None else body, '    ')
            + "\n    return dict(upstream=upstream, model=model, provider=provider,"
              " channel=channel, thinking=thinking,"
              " availability_escalations=availability_escalations,"
@@ -153,7 +162,9 @@ def run_case(c):
              " requires_output_validation=requires_output_validation,"
              " t0_free_unverified=t0_free_unverified,"
              " t0_now_billed=t0_now_billed,"
-             " free_cautions=free_cautions)\n")
+             " free_cautions=free_cautions,"
+             " bridge_argv=bridge_argv,"
+             " policy=(policy_rule or {}).get('id'))\n")
     ns = dict(stub)
     exec(compile(src, '<SKILL.md §2>', 'exec'), ns)     # 🔴 NameError 会在这里炸出来
     return ns['_decide']()
@@ -163,6 +174,7 @@ PROBES = []          # 🔴 记录 first_available 探过哪些落点（供 no_p
 FREE_PROBES = []     # 🔴 记录 T0 的 probe_ok 探过哪些免费落点（供 free_probes 断言）
 FREE_REPORT = []     # 🔴 --free 拿不到时报给用户的逐条原因（供 free_report 断言）
 PASEO_REPORT = []    # 🔴 Paseo 前置守卫停下时报给用户的 (落点, 是否「无法确认清单」)（供 paseo_report 断言）
+REVIEW_PROBES = []   # ⭐ 2026-10-10：审查降级阶梯 probe_model 探过谁（供 review_probes / no_paid_probe 断言）
 # 🔴 T0 登记表化后已删除的旋钮 —— 用例里再出现就是**静默失效**（桩不读它，断言照样可能碰巧通过）⇒ 直接判错
 REMOVED_KNOBS = {'blockers': "改用 free_off=True / cooldowns / multimodal / 条目自己的 avoidTaskTypes",
                  'promo_ok': "改用 when=<freeUntil 之后的时间>（窗口由条目 freeUntil 推）"}
@@ -175,9 +187,103 @@ HY3, QFM = 'codebuddy-code/hy3', 'qoderclicn/qfmodel'
 #    qfmodel（Qoder CN 10-01 延期公告：「结束时间将提前在本页公告」）是 freeUntil=None、永不过期。
 #    ⇒ 凡是要测「hy3 过期分支」的用例，必须把 qfmodel 冷却掉，否则它会被选中、测不到 hy3 的过期逻辑。
 AFTER_EXPIRY = DT(2026, 11, 2, 15)   # hy3 已过期（10-31 23:59 之后）
-COOL_NON_HY3 = {QFM: DT(2099, 1, 1)}   # 只留 hy3 参与 ⇒ 隔离出过期分支
+JOY = 'joycode/JoyAI-Code-1.5'
+JOYK = f'joycode/{JOY}'              # 冷却 / 核价记录的键是 'upstream/model'
+# ⭐ 2026-10-10 第三条免费条目 JoyCode（freeUntil 11-06）进池 ⇒「只留 hy3」必须连它一起冷却
+COOL_NON_HY3 = {QFM: DT(2099, 1, 1), JOYK: DT(2099, 1, 1)}   # 只留 hy3 参与 ⇒ 隔离出过期分支
+CO = '/home/u/company/projects/app'        # 公司目录下的工作区（expand_home 桩把 ~ 展开成 /home/u）
+CO_POLICY = {'rules': [{'id': 'company-no-personal-spend', 'when': {'workspaceUnder': ['~/company']},
+                        'allow': {'upstreams': ['claude'], 'freePool': True},
+                        'fallback': {'upstream': 'claude', 'model': 'claude-sonnet-5', 'thinking': 'max'}}]}
+COOL_ALL_FREE = {HY3: DT(2099, 1, 1), QFM: DT(2099, 1, 1), f'joycode/joycode/JoyAI-Code-1.5': DT(2099, 1, 1)}
+JOY_AFTER = DT(2026, 11, 7, 15)      # JoyCode 免费期（2026-11-06 23:59）之后
+JOY_ARGV = ['node', '~/AgentWorkspace/configs/joycode-bridge/joycode-dispatch.mjs', 'ask', '--prompt-file', '<prompt-file>', '--timeout', '1800']
+TRAE_ARGV = ['node', '~/AgentWorkspace/configs/trae-bridge/trae-dispatch.mjs', 'ask', '--prompt-file', '<prompt-file>', '--timeout', '1800']
 
 CASES = [
+ # ═══ 2026-10-10 本地用户策略：公司目录（~/company）只用 Claude + 当前确实免费的免费池（⛔ 不花个人付费额度）═══
+ dict(n='策略·company：免费可用 ⇒ 照常落免费池', task_type='core', cwd=CO, policy=CO_POLICY,
+      want=dict(upstream='codebuddy-code', model='hy3', policy='company-no-personal-spend')),
+ dict(n='策略·company：免费池全挂 ⇒ 直接 Claude，⛔ 不落 T1–T4', task_type='core', cwd=CO, policy=CO_POLICY,
+      cooldowns=COOL_ALL_FREE, no_paid_probe=True,
+      want=dict(upstream='claude', model='claude-sonnet-5', thinking='max', channel='paseo')),
+ dict(n='策略·company：显式 --thinking low 落 Claude 时不被覆盖', task_type='core', cwd=CO, policy=CO_POLICY,
+      cooldowns=COOL_ALL_FREE, thinking='low', want=dict(upstream='claude', thinking='low')),
+ dict(n='策略·company：hy3 过期未复核 + 其余冷却 ⇒ Claude（过期的不算免费）', task_type='core', cwd=CO, policy=CO_POLICY,
+      when=AFTER_EXPIRY, cooldowns=COOL_NON_HY3, free_probes=[], no_paid_probe=True,
+      want=dict(upstream='claude', model='claude-sonnet-5')),
+ dict(n='策略·company：显式 --model hy3（免费，不给 provider）⇒ 允许', task_type='core', cwd=CO, policy=CO_POLICY,
+      model='hy3', want=dict(upstream='codebuddy-code', model='hy3')),
+ dict(n='策略·company：显式 --model hy3 但它不可用 ⇒ 落 Claude，⛔ 探付费', task_type='core', cwd=CO, policy=CO_POLICY,
+      model='hy3', unavailable=[HY3], no_paid_probe=True, want=dict(upstream='claude')),
+ dict(n='策略·company 内的软链指向盘外 ⇒ 按字面路径照样命中', task_type='core', cwd='/home/u/company/projects/ext', policy=CO_POLICY,
+      symlinks={'/home/u/company/projects/ext': '/Volumes/data/ext'}, cooldowns=COOL_ALL_FREE, want=dict(upstream='claude')),
+ dict(n='策略·盘外软链指进 company ⇒ 按物理路径命中', task_type='core', cwd='/tmp/link-app', policy=CO_POLICY,
+      symlinks={'/tmp/link-app': '/home/u/company/projects/app'}, cooldowns=COOL_ALL_FREE, want=dict(upstream='claude')),
+ dict(n='策略·company：显式火山 v4.1 ⇒ 策略拦下', task_type='core', cwd=CO, policy=CO_POLICY,
+      provider='volcengine-coding', model='deepseek-v4.1-flash', block='policy', no_paid_probe=True),
+ dict(n='策略·company：显式 TRAE（花积分）⇒ 策略拦下', task_type='core', cwd=CO, policy=CO_POLICY,
+      provider='trae-cn', model='trae/GLM-5.3-Flash', block='policy', no_paid_probe=True),
+ dict(n='策略·company：显式 JoyCode 免费条目 ⇒ 允许', task_type='core', cwd=CO, policy=CO_POLICY,
+      provider='joycode', model='joycode/JoyAI-Code-1.5', want=dict(upstream='joycode')),
+ dict(n='策略·company：显式 Claude ⇒ 允许', task_type='core', cwd=CO, policy=CO_POLICY,
+      provider='claude', model='claude-opus-5', want=dict(upstream='claude', model='claude-opus-5')),
+ dict(n='策略·company：显式 cb 不给 model、hy3 冷却 ⇒ 收尾兜底拦下（⛔ 落 cb 付费 glm）', task_type='core', cwd=CO,
+      policy=CO_POLICY, provider='codebuddy-code', cooldowns={HY3: DT(2099, 1, 1)}, block='policy', no_paid_probe=True),
+ dict(n='策略·company：review ⇒ ⛔ codex，落免费异族审查档', task_type='review', scope='small', cwd=CO, policy=CO_POLICY,
+      review_probes=[QFM], no_paid_probe=True,
+      want=dict(upstream='qoderclicn', model='qfmodel', policy='company-no-personal-spend')),
+ dict(n='策略·company：review 实施族是 Qwen ⇒ 跳过 qfmodel 落 hy3', task_type='review', scope='small', cwd=CO, policy=CO_POLICY,
+      impl_family='Qwen', review_probes=[HY3], no_paid_probe=True, want=dict(upstream='codebuddy-code', model='hy3')),
+ dict(n='策略·company：review 实施族是 Hy3 ⇒ 落 qfmodel', task_type='review', scope='small', cwd=CO, policy=CO_POLICY,
+      impl_family='Hy3(混元)', review_probes=[QFM], no_paid_probe=True, want=dict(upstream='qoderclicn', model='qfmodel')),
+ dict(n='策略·company：显式 --model 付费型号（不给 provider）⇒ 探活前就拦', task_type='core', cwd=CO, policy=CO_POLICY,
+      model='deepseek-v4-flash', block='policy', no_paid_probe=True, probes=[]),
+ dict(n='策略·company：review 免费档都不可用 ⇒ 审查通道不可用（⛔ Claude 审 Claude、⛔ 付费 glm）', task_type='review',
+      scope='small', cwd=CO, policy=CO_POLICY, ladder_unavailable=[QFM, HY3], review_channel_unavailable=True,
+      review_probes=[QFM, HY3], no_paid_probe=True),
+ dict(n='策略·非 company 目录 ⇒ 不生效，照常 T1', task_type='core', cwd='/home/u/AgentWorkspace/x', policy=CO_POLICY,
+      cooldowns=COOL_ALL_FREE, want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash', policy=None)),
+ dict(n='策略·~/company2（仅前缀相同）⇒ 不命中', task_type='core', cwd='/home/u/company2/x', policy=CO_POLICY,
+      cooldowns=COOL_ALL_FREE, want=dict(upstream='volcengine-coding', policy=None)),
+ dict(n='策略·没有本地策略文件 ⇒ 与原行为一致', task_type='core', cwd=CO, cooldowns=COOL_ALL_FREE,
+      want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash', policy=None)),
+ dict(n='策略·company 根目录本身也命中', task_type='core', cwd='/home/u/company', policy=CO_POLICY, cooldowns=COOL_ALL_FREE,
+      want=dict(upstream='claude')),
+ # ═══ 2026-10-10 GUI 桥接通道（JoyCode / TRAE）—— 型号 id 带命名空间，执行走 bridge_command 生成的 argv ═══
+ dict(n='JoyCode：T0 第 3 位（hy3 / qfmodel 都冷却）', task_type='core',
+      cooldowns={HY3: DT(2099, 1, 1), QFM: DT(2099, 1, 1)},
+      want=dict(upstream='joycode', model=JOY, channel='cli', thinking=None, bridge_argv=JOY_ARGV + ['--model', 'JoyAI-Code-1.5'])),
+ dict(n='JoyCode：algorithm 任务跳过（avoid 同 hy3）', task_type='algorithm',
+      cooldowns={HY3: DT(2099, 1, 1), QFM: DT(2099, 1, 1)}, want_not_upstream='joycode'),
+ dict(n='JoyCode：免费期过后无新鲜复核 ⇒ 退出免费池', task_type='core', when=JOY_AFTER,
+      cooldowns={HY3: DT(2099, 1, 1), QFM: DT(2099, 1, 1)}, want_not_upstream='joycode'),
+ dict(n='JoyCode：过期后 7 天内复核 credit=0 ⇒ 仍免费', task_type='core', when=JOY_AFTER,
+      cooldowns={HY3: DT(2099, 1, 1), QFM: DT(2099, 1, 1)},
+      credit_records={f'joycode/{JOY}': {'credit': 0.0, 'verifiedOn': '2026-11-08'}},
+      want=dict(upstream='joycode', model=JOY)),
+ dict(n='JoyCode 显式付费型号：走 cli，⛔ 不传思考档', task_type='core', provider='joycode', model='joycode/GLM-5.3',
+      want=dict(upstream='joycode', channel='cli', thinking=None, bridge_argv=JOY_ARGV + ['--model', 'GLM-5.3'])),
+ dict(n='JoyCode 型号必须带命名空间（裸名 ⇒ 白名单冲突）', task_type='core', provider='joycode', model='GLM-5.3', block='conflict'),
+ dict(n='TRAE 显式开发任务：强制 cli，默认 xhigh ⇒ 极高', task_type='core', provider='trae-cn', model='trae/GLM-5.3-Flash',
+      want=dict(upstream='trae-cn', channel='cli', thinking='xhigh',
+                bridge_argv=TRAE_ARGV + ['--model', 'GLM-5.3-Flash', '--thinking', 'xhigh'])),
+ dict(n='TRAE 只降不升：Seed-Code 只有轻/高 ⇒ xhigh 落 high', task_type='core', provider='trae-cn', model='trae/Seed-Code',
+      want=dict(thinking='high', bridge_argv=TRAE_ARGV + ['--model', 'Seed-Code', '--thinking', 'high'])),
+ dict(n='TRAE max ⇒ xhigh', task_type='core', provider='trae-cn', model='trae/Kimi-K3', thinking='max',
+      want=dict(thinking='xhigh')),
+ dict(n='TRAE medium ⇒ low', task_type='core', provider='trae-cn', model='trae/GLM-5.3-Flash', thinking='medium',
+      want=dict(thinking='low')),
+ dict(n='TRAE minimal 无更低档 ⇒ 停', task_type='core', provider='trae-cn', model='trae/GLM-5.3-Flash', thinking='minimal',
+      block='bridge_thinking'),
+ dict(n='TRAE GLM-5.2 只有高/极高，请求 low ⇒ 停', task_type='core', provider='trae-cn', model='trae/GLM-5.2', thinking='low',
+      block='bridge_thinking'),
+ dict(n='TRAE 无档位型号（MiMo）：⛔ 不传思考档', task_type='core', provider='trae-cn', model='trae/MiMo-V2.6-Flash', thinking='high',
+      want=dict(thinking=None, bridge_argv=TRAE_ARGV + ['--model', 'MiMo-V2.6-Flash'])),
+ dict(n='只给 --model trae/GLM-5.3 ⇒ 唯一落 trae-cn（⛔ 不与 joycode/GLM-5.3 撞名）', task_type='core', model='trae/GLM-5.3',
+      want=dict(upstream='trae-cn', model='trae/GLM-5.3', channel='cli')),
+ dict(n='非桥接落点 ⇒ bridge_argv 为 None', task_type='core', provider='codebuddy-code', model='hy3',
+      want=dict(bridge_argv=None)),
  # 拦截类
  dict(n='cb 白名单外必拦', provider='codebuddy-code', model='GLM-5.2', task_type='core', block='conflict'),
  dict(n='已停用 provider 必拦', provider='deepseek', model='deepseek-v4-pro', task_type='core', block='disabled'),
@@ -284,7 +390,7 @@ CASES = [
  #    的既有不变量回到轮换落火山 coding。⚠️ 与 09-10「⛔ 不要换 pi」字面冲突（见 SKILL §4 affinity 注释）。
  #    若用户选「留 cb 用 glm」，本条改断言 upstream='codebuddy-code', model='glm-5.3-flash'。
  dict(n='hy3 连续无响应 2 次 + 其它免费条目也不可用 ⇒ 转 T1（affinity=cb 在 T1 主池无作用点）',
-      task_type='core', cooldowns={QFM: DT(2099, 1, 1)},
+      task_type='core', cooldowns={QFM: DT(2099, 1, 1), JOYK: DT(2099, 1, 1)},   # 「其它免费条目」含 10-10 加入的 JoyCode
       extra_failures=[{'tier': None, 'upstream': 'codebuddy-code',
                        'model': 'hy3', 'shape': 'no_response', 'count': 2}],
       want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash')),
@@ -362,8 +468,8 @@ CASES = [
       want=dict(upstream='qoderclicn', model='qfmodel', provider='qoderclicn', thinking=None)),
  # ⭐ qfmodel 没有思考档 ⇒ thinking 必须是 None（⛔ 不许被收尾的 default_thinking 补成 xhigh）
  #    📜 原「第三条 priority 3 = Bunny」下线后免费池只剩两条 ⇒ 「两条都不可用」= 直接进付费阶梯
- dict(n='hy3 + qfmodel 都冷却 ⇒ 免费池清零 ⇒ 进 T1（⛔ 不静默卡在 T0）', task_type='core',
-      cooldowns={HY3: DT(2099, 1, 1), QFM: DT(2099, 1, 1)},
+ dict(n='hy3 + qfmodel + joycode 都冷却 ⇒ 免费池清零 ⇒ 进 T1（⛔ 不静默卡在 T0）', task_type='core',
+      cooldowns={HY3: DT(2099, 1, 1), QFM: DT(2099, 1, 1), JOYK: DT(2099, 1, 1)},
       want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash')),
  dict(n='qfmodel + 显式 --thinking high ⇒ 仍⛔不传（该模型没有思考档）', task_type='core',
       thinking='high', cooldowns={HY3: DT(2099, 1, 1)},   # ⚠️ hy3 现在是 priority 1，必须挡掉才轮到 qfmodel
@@ -674,10 +780,11 @@ CASES = [
  dict(n='--free + 多模态 → 停止（⛔ 能力放宽不含物理不可用）', free=True,
       task_type='algorithm', multimodal=True,
       free_unavailable=True, free_probes=[],
-      free_report=[(HY3, ['algorithm', 'multimodal']), (QFM, ['algorithm', 'multimodal'])]),
+      free_report=[(HY3, ['algorithm', 'multimodal']), (QFM, ['algorithm', 'multimodal']),
+                   (JOYK, ['algorithm', 'multimodal'])]),
  dict(n='--free + 全池探活不过 → 停止', free=True, task_type='core', probe_ok=False,
-      free_unavailable=True, free_probes=[HY3, QFM],
-      free_report=[(HY3, ['probe_failed']), (QFM, ['probe_failed'])]),
+      free_unavailable=True, free_probes=[HY3, QFM, JOYK],
+      free_report=[(HY3, ['probe_failed']), (QFM, ['probe_failed']), (JOYK, ['probe_failed'])]),
  dict(n='--free + review → 冲突停止', free=True, task_type='review', conflict_free_review=True),
  dict(n='--free --provider codebuddy-code → 不冲突走 T0', free=True,
       provider='codebuddy-code', task_type='core',
@@ -822,7 +929,7 @@ CASES = [
 
 fails = []
 for c in CASES:
-    PROBES.clear(); FREE_PROBES.clear(); FREE_REPORT.clear(); PASEO_REPORT.clear()
+    PROBES.clear(); FREE_PROBES.clear(); FREE_REPORT.clear(); PASEO_REPORT.clear(); REVIEW_PROBES.clear()
     _stale = sorted(set(c) & set(REMOVED_KNOBS))
     if _stale:
         fails.append(f"{c['n']}: 🔴 用了已删除的旋钮 {_stale} —— " + '；'.join(REMOVED_KNOBS[k] for k in _stale))
@@ -840,7 +947,9 @@ for c in CASES:
             fails.append(f"{c['n']}: 期望「Paseo 清单缺该型号 ⇒ 停止」，实际落到 {got.get('upstream')}/{got.get('model')} ({got.get('channel')})"); continue
         if c.get('no_landing'):
             fails.append(f"{c['n']}: 期望明确报「无可用落点」并停止，实际落到 {got.get('upstream')}/{got.get('model')}"); continue
-        for k, v in c['want'].items():
+        if 'want_not_upstream' in c and got.get('upstream') == c['want_not_upstream']:
+            fails.append(f"{c['n']}: 不应落到 {c['want_not_upstream']}，实际 {got.get('upstream')}/{got.get('model')}")
+        for k, v in c.get('want', {}).items():
             if got.get(k) != v:
                 fails.append(f"{c['n']}: {k} 期望 {v!r} 实际 {got.get(k)!r}")
     except BlockedModel:
@@ -879,8 +988,28 @@ for c in CASES:
         fails.append(f"{c['n']}: first_available 探活 期望 {c['probes']} 实际 {PROBES}")
     if 'paseo_report' in c and PASEO_REPORT != c['paseo_report']:
         fails.append(f"{c['n']}: Paseo 守卫报告 期望 {c['paseo_report']} 实际 {PASEO_REPORT}")
+    if 'review_probes' in c and REVIEW_PROBES != c['review_probes']:
+        fails.append(f"{c['n']}: 审查降级探活 期望 {c['review_probes']} 实际 {REVIEW_PROBES}")
+    if c.get('no_paid_probe'):   # 🔴 本地策略：被拦之前⛔不许探付费落点（探活 = 真请求 = 花钱）
+        _paid = [p for p in PROBES + REVIEW_PROBES + FREE_PROBES if p not in (HY3, QFM, JOYK) and not p.startswith('claude/')]
+        if _paid: fails.append(f"{c['n']}: 🔴 策略生效时探活了付费落点 {_paid}")
     if 'free_report' in c and FREE_REPORT != c['free_report']:
         fails.append(f"{c['n']}: --free 逐条原因 期望 {c['free_report']} 实际 {FREE_REPORT}")
+
+# 🔴 本地策略第二道（§6 收尾兜底）—— 正常配置下构造不出来（前几道已经拦在探活之前），
+#    ⛔ 不打 pragma 豁免：用「拆掉 §1 策略关卡」的变异体证明它真能拦（单行替换 ⇒ 行号不变，覆盖率照常记到 §2）。
+_mut = BODY.replace("if policy_rule is not None and explicit_model is not None:", "if False:", 1)
+if _mut == BODY:
+    fails.append("🔴 变异测试找不到 §1 的本地策略关卡（改名了？）")
+else:
+    PROBES.clear(); FREE_PROBES.clear(); REVIEW_PROBES.clear()
+    try:
+        run_case(dict(n='变异', task_type='core', cwd=CO, policy=CO_POLICY,
+                      provider='volcengine-coding', model='deepseek-v4.1-flash'), body=_mut)
+        fails.append("🔴 拆掉 §1 策略关卡后，付费落点没被 §6 兜底拦下 —— 第二道是摆设")
+    except Blocked as e:
+        if str(e) != 'policy':
+            fails.append(f"🔴 变异体被拦于 {e}，期望由 §6 本地策略兜底拦下")
 
 print("=== §2 管线表驱动验证 ===")
 print(f"用例 {len(CASES)} 条")

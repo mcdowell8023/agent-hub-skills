@@ -935,6 +935,46 @@ _oc_txt = ' '.join(_oc) if isinstance(_oc, list) else str(_oc)
 chk('Copilot' not in _oc_txt or '已死' in _oc_txt or '2026-10-06' in _oc_txt,
     "catalog whitelist.exempt.opencode 仍把 Copilot 写成现行审查通道（异构审 P1-4）")
 
+# ── §3q（2026-10-10）GUI 桥接：每个 GUI_BRIDGE_UPSTREAMS 都必须在 §3.2f 写清「调用 / 切模型 / 切思考 / 查型号」──
+#    用户原话：「确保 agent 读完 rift-dispatch 知道怎么调用 JoyCode 和 TRAE，模型切换、切换思考强度」
+#    ⇒ 新增桥接渠道却漏写文档 = agent 读完不会用 ⇒ 这里报红。⚠️ 查的是【该渠道小节里】有没有，⛔ 不是全文有没有。
+_gb = re.search(r"^GUI_BRIDGE_UPSTREAMS\s*=\s*\{([^}]*)\}", S, re.M)
+_gb_ups = sorted(set(re.findall(r"'([a-z0-9._\-]+)'", _gb.group(1)))) if _gb else []
+chk(bool(_gb_ups), "SKILL §2 没有 GUI_BRIDGE_UPSTREAMS")
+_sec = re.search(r"^### 3\.2f .*?(?=^### |^## )", S, re.S | re.M)
+chk(bool(_sec), "SKILL 缺 §3.2f「GUI 桥接通道」一节（agent 读完要知道怎么调用 / 切模型 / 切思考）")
+_sec = _sec.group(0) if _sec else ''
+for _up in _gb_ups:
+    _cli = re.search(rf"'{re.escape(_up)}':\s*'node ([^']+)'", S)
+    _script = _cli.group(1).rsplit('/', 1)[-1] if _cli else None
+    chk(bool(_script), f"GUI_BRIDGE_CLI 里没有 {_up} 的命令")
+    _sub = re.search(rf"^#### [^\n]*{re.escape(_up)}.*?(?=^#### |\Z)", _sec, re.S | re.M)
+    chk(bool(_sub), f"§3.2f 缺 {_up} 的小节（标题行 `#### … {_up} …`）")
+    if _sub:
+        for _need in ([_script] if _script else []) + ['--model', '--thinking', ' models']:
+            chk(_need in _sub.group(0), f"§3.2f 的 {_up} 小节没写 `{_need.strip()}`（调用 / 切模型 / 切思考 / 查型号）")
+
+# ── §3r（2026-10-10）本地用户策略：机制在仓库、规则在本机（~/.config/rift-dispatch/policy.local.json，⛔ 不进仓库）──
+#    ① §6 收尾的策略兜底必须在（它是「前几道关卡被改坏」时的最后一道，pipeline-test 用变异体证明它能拦）
+#    ② 示例文件必须是合法策略，且 allow.upstreams 只写已知 provider（拼错 = 规则静默不生效）
+_B2 = re.search(r"## 2\. 决策流程.*?```python\n(.*?)\n```", S, re.S).group(1)
+_s6 = _B2.split('# ═══ 6. 统一收尾', 1)
+chk(len(_s6) == 2 and re.search(r"^if not policy_allows\(policy_rule, upstream, model\):[^\n]*\n\s+report_policy_blocked_and_stop", _s6[1], re.M),
+    "§6 收尾缺本地策略兜底 `if not policy_allows(policy_rule, upstream, model): report_policy_blocked_and_stop(...)`")
+chk('policy_rule = match_policy(LOCAL_POLICY, cwd)' in _B2, "§2 没有按 cwd 匹配本地策略（policy_rule = match_policy(LOCAL_POLICY, cwd)）")
+import importlib.util as _ilu
+_lp_spec = _ilu.spec_from_file_location('local_policy', B / 'scripts' / 'local-policy.py')
+_lp = _ilu.module_from_spec(_lp_spec); _lp_spec.loader.exec_module(_lp)
+try:
+    _ex = _lp.load(str(B / 'policy.local.example.json'))
+    chk(_ex is not None, "缺 policy.local.example.json（本地策略格式示例）")
+    _known = set(sk) | {k for k in re.findall(r"^  '([a-z0-9._\-]+)':", re.search(r"^WHITELIST = \{.*?^\}", S, re.S | re.M).group(0), re.M)}
+    for _r in (_ex or {}).get('rules', []):
+        _bad = sorted(set(_r['allow'].get('upstreams', [])) - _known)
+        chk(not _bad, f"policy.local.example.json 规则 {_r['id']} 的 allow.upstreams 有未知 provider {_bad}")
+except _lp.PolicyError as _err:
+    chk(False, f"policy.local.example.json 不是合法策略：{_err}")
+
 print("=== rift-dispatch 一致性校验 ===")
 print(f"仓库: {B}")
 print("✅ 全部通过" if not e else "\n".join("❌ " + x for x in e))

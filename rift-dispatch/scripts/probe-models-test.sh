@@ -82,8 +82,29 @@ cat > "$T/bin/pi" <<'SH'
 # 🔴 假 pi：⛔ 测试里任何一条路径都不许落到真 pi（它会拿真 key 打真服务 —— RED 阶段实测踩过一次）
 echo "FAKE_PI_CALLED $*" >> "$TMPDIR/pi-calls"; echo "FAKE_PI_CALLED"; exit 1
 SH
+cat > "$T/bin/fake-joycode" <<'SH'
+#!/usr/bin/env bash
+# 假 joycode-dispatch：FAKE_JOY=down 桥接不在线（真 CLI 的 exit 2）；models 只列两个型号
+echo "JOY $*" >> "$TMPDIR/joy-calls"
+if [ "${FAKE_JOY:-}" = "down" ]; then echo '{"ok":false,"error":"bridge host pid 1 is not running"}'; exit 2; fi
+case "$1" in
+  status) echo '{"ok":true,"hostPid":42}' ;;
+  models) echo '{"ok":true,"models":[{"label":"JoyAI-Code-1.5"},{"label":"GLM-5.3"}]}' ;;
+  *) echo '{"ok":false,"error":"probe must not send tasks"}'; exit 9 ;;
+esac
+SH
+cat > "$T/bin/fake-trae" <<'SH'
+#!/usr/bin/env bash
+# 假 trae-dispatch：只许 status（⛔ 探活不许 ask / models —— models 会弹开 Trae 的模型菜单）
+echo "TRAE $*" >> "$TMPDIR/trae-calls"
+if [ "${FAKE_TRAE:-}" = "down" ]; then echo '{"ok":false,"error":"CDP endpoint unreachable"}'; exit 2; fi
+[ "$1" = status ] && { echo '{"ok":true,"target":"trae-probe"}'; exit 0; }
+echo '{"ok":false}'; exit 9
+SH
 chmod +x "$T/bin/"*
 export PATH="$T/bin:$PATH"
+# 🔴 GUI 桥接探活走这两个环境变量 ⇒ 整场测试⛔不碰真的 JoyCode / Trae
+export RIFT_JOYCODE_CMD="$T/bin/fake-joycode" RIFT_TRAE_CMD="$T/bin/fake-trae"
 P="$S/probe-models.sh"
 cd_get() { bash "$S/cooldown.sh" get "$1" "$2"; }
 
@@ -284,6 +305,24 @@ sleep 1
 # ⚠️ 按 argv 精确比对（⛔ pgrep -f 会匹配到调用方自己的命令行，见第 14 项注释）
 left=$(ps -axo pid=,args= | awk '$2=="sleep" && ($3=="4242" || $3=="4243") {print $1}')
 if [ -n "$left" ]; then bad "codex 超时后残留子进程 PID: $left"; kill $left 2>/dev/null; else ok; fi
+
+# 24. GUI 桥接 JoyCode：被动探活（models，⛔ 不发任务），型号在清单里 ⇒ ✅
+out=$(bash "$P" --force joycode/joycode/JoyAI-Code-1.5); rc=$?
+{ [ "$rc" -eq 0 ] && echo "$out" | grep -q '✅ joycode' && ! grep -q ' ask' "$T/joy-calls"; } && ok \
+  || bad "JoyCode 在线且型号在清单 ⇒ 应 ✅ 且不发任务（rc=${rc}）：$out"
+# 25. 桥接不在线 ⇒ ❌，⛔ 不写冷却（不是额度问题，App 开了就好）
+out=$(FAKE_JOY=down bash "$P" --force joycode/joycode/JoyAI-Code-1.5); rc=$?
+{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '❌ joycode'; } && ok || bad "JoyCode 不在线应 ❌：$out"
+cd_get joycode joycode/JoyAI-Code-1.5 >/dev/null; [ $? -eq 1 ] && ok || bad "JoyCode 不在线 ⛔ 不该写冷却"
+# 26. 型号不在 JoyCode 清单 ⇒ 模型级失败
+out=$(bash "$P" --force joycode/joycode/Nope-9); rc=$?
+{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '模型级'; } && ok || bad "JoyCode 清单外型号应判模型级失败：$out"
+# 27. TRAE：只跑 status（⛔ 不开模型菜单、⛔ 不发任务）
+out=$(bash "$P" --force trae-cn/trae/GLM-5.3-Flash); rc=$?
+{ [ "$rc" -eq 0 ] && echo "$out" | grep -q '✅ trae-cn' && ! grep -q -E 'TRAE (ask|models|select)' "$T/trae-calls"; } && ok \
+  || bad "Trae 在线应 ✅ 且只调 status（rc=${rc}）：$out"
+out=$(FAKE_TRAE=down bash "$P" --force trae-cn/trae/GLM-5.3-Flash); rc=$?
+{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '❌ trae-cn'; } && ok || bad "Trae 不在线应 ❌：$out"
 
 # 11. 🔴 隔离性：整场测试⛔一次都不许调到 pi（openrouter-free 必须走直连，才拿得到真实状态码）
 [ ! -s "$T/pi-calls" ] && ok || bad "测试调到了 pi：$(cat "$T/pi-calls")"

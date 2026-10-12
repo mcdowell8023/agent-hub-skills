@@ -1,6 +1,6 @@
 {
-  "version": "6.46.0",
-  "lastUpdated": "2026-10-06",
+  "version": "6.48.0",
+  "lastUpdated": "2026-10-10",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
     "codebuddy-code": [
@@ -16,6 +16,36 @@
       "qmodel_38max",
       "qfmodel"
     ],
+    "joycode": [
+      "joycode/JoyAI-Code-1.5",
+      "joycode/GLM-5.3",
+      "joycode/Kimi-K2.6",
+      "joycode/MiniMax-M3",
+      "joycode/Doubao-Seed-2.0-pro"
+    ],
+    "trae-cn": [
+      "trae/Seed-Evolving",
+      "trae/Seed-2.1-Pro-0915",
+      "trae/Seed-2.1-Turbo",
+      "trae/Seed-Code",
+      "trae/MiMo-V2.6-Flash",
+      "trae/MiMo-V2.6-Pro",
+      "trae/Step-5-Preview",
+      "trae/GLM-5.3-FlashX",
+      "trae/GLM-5.3-Flash",
+      "trae/GLM-5.3",
+      "trae/GLM-5.2",
+      "trae/DeepSeek-V4.1-Flash",
+      "trae/DeepSeek-V4-Flash",
+      "trae/DeepSeek-V4-Pro",
+      "trae/Kimi-K3",
+      "trae/Kimi-K2.8-Preview",
+      "trae/MiniMax-M3",
+      "trae/Qwen3.8-Flash",
+      "trae/Qwen3.8-Max",
+      "trae/Qwen3.7-Plus"
+    ],
+    "_guiBridgeNote": "2026-10-10 GUI 桥接通道（SKILL §3.2f）：驱动本机桌面 App 的 CLI，⛔ 不是 Paseo provider ⇒ 收尾强制 channel=cli。型号 id 带命名空间 joycode/… trae/…（两家都有 GLM-5.3 / MiniMax-M3），派发时去前缀。清单以桥接 `models` 命令实时结果为准。",
     "exempt": {
       "_note": "🔴 键是 **split_provider() 拆出的 upstream 名，⛔ 不带 `pi/` 前缀** —— 校验写作 `upstream in EXEMPT`，加前缀会对不上。🔴 ⛔ 顶层 `pi` 不在本表：它是**宿主**不是钱包，豁免它会让 `pi/jdcloud-joyagent/GLM-5.2` 绕过京东白名单。⚠️ `jdcloud-joyagent` 也⛔不在本表——它有自己的白名单（只准两个 DeepSeek）。⚠️ 本表必须与 SKILL.md 的 `EXEMPT_PROVIDERS` 逐项一致。",
       "claude": [
@@ -252,7 +282,7 @@
       "supersededBy": "🔴 walletPriority.discountWindows（2026-09-09）：百炼 22:00-08:00、codebuddy 工作日 09-12/14-18 之外全部时段。⭐ 只在【档位内选落点】介入，⛔ 不参与选档位 ⇒ 与上面的不变量不冲突。"
     },
     "escalation": {
-      "rule": "T0 免费池 FREE_POOL（hy3 → qfmodel，逐条按条目判；📜 原 priority 1 的 stealth/space-bunny-alpha 于 2026-10-06 因模型 404 下线而删除）→ T1 deepseek-v4.1-flash → T2 deepseek-v4-flash → T3 qwen3.8-max → T4 kimi-k3-1 →（仅可用性耗尽）LAST_RESORT claude-sonnet-5",
+      "rule": "T0 免费池 FREE_POOL（hy3 → qfmodel → joycode/JoyAI-Code-1.5，逐条按条目判；📜 原 priority 1 的 stealth/space-bunny-alpha 于 2026-10-06 因模型 404 下线而删除）→ T1 deepseek-v4.1-flash → T2 deepseek-v4-flash → T3 qwen3.8-max → T4 kimi-k3-1 →（仅可用性耗尽）LAST_RESORT claude-sonnet-5",
       "toK3Condition": "⛔ 【质量/成本升档】：要 v4-pro 也做砸才升 K3。⚠️ **可用性换档⛔不受此约束** —— T3 池 + 同档替代全不可用时可升 T4（见 walletPriority.availabilityEscalation）。⛔ 不做预防性升档（2026-08-02 n=1 + 2026-08-06 n=12 两次实测支撑）。K3 是 v4-flash 的 9.5 倍、glm-5.3-flash 的 27 倍。",
       "k3Status": "✅ 2026-08-16 用户恢复启用，作为极致档 / 唯一升档目标。原 P5.4『0723 实测不可靠、定弃用、改派 M3』的结论失效（M3 也已关闭）。⚠️ 0723 观察到的现象保留为已知风险：反复空转、报进度就 idle、git 无产出 —— 派完必须核 git 是否真有 commit",
       "noFallbackForK3": "🔴 K3 撞限额时【白名单内】无替代（唯一 S 级，M3 已关闭）⇒ 2026-09-09 起走 **LAST_RESORT claude/claude-sonnet-5@max**（见 claudeModels.claude-sonnet-5.lastResort），⛔ 不再是「只能报告用户」；连它也拿不到才停止",
@@ -280,7 +310,8 @@
         "evidence": "hy3 盲评 LRU 22 ⇒ 跳免费档。⚠️ 付费起步档【无干净证据】——h2hEval_20260828 的 LRU 一格口径不同（v4-flash 在 agent 上下文按 TDD 真建工程并跑了测试），⛔ 不能引用。📜 原先取并发题（同口径，v4-flash 35 > glm 31）作为『精细实现类』的最近代理；🔴 但该代理 09-10 被同题 4 臂推翻（v41FlashEval_20260910 并发题 v4.1 37.5 > v4-flash 30.5），并发两类已回到 T1。⇒ algorithm 保留 T2 起步仅因「无干净证据、按保守」，🔴 待补测 v4.1 vs v4-flash 的 LRU / perf 头对头（SKILL ENTRY 注释同）。",
         "skipFreeEntries": [
           "hy3",
-          "qfmodel"
+          "qfmodel",
+          "joycode/JoyAI-Code-1.5"
         ]
       },
       "perf": {
@@ -288,14 +319,16 @@
         "evidence": "⚠️ 从来没有 perf 类实测，按 algorithm 同类保守处理",
         "skipFreeEntries": [
           "hy3",
-          "qfmodel"
+          "qfmodel",
+          "joycode/JoyAI-Code-1.5"
         ]
       },
       "architecture": {
         "paidEntry": "deepseek-v4.1-flash",
         "evidence": "🔴 2026-08-28 修正：原为 deepseek-v4-flash。h2hEval_20260828 Kafka glm 36 > v4-flash 31，旧规则的依据（v4-flash 重测 Kafka 34 > v4-pro 31）说的是 v4-flash 与 v4-pro 的关系，⛔ 不涉及 glm。⚠️ n=1、单评委，待同口径复测——与 algorithm 一样标为待补",
         "skipFreeEntries": [
-          "hy3"
+          "hy3",
+          "joycode/JoyAI-Code-1.5"
         ]
       },
       "concurrency_diag": {
@@ -363,6 +396,30 @@
         "verifyVia": "⭐ 首选：`qoderclicn -p -m Qwen3.8-Flash --tools '' -o json 'reply with exactly: PROBE_OK'` 的 `total_credits`（=0 免费；>0 已计费，CLI 直接给的实扣值，agent 自己就能核；probe-models.sh 已自动判）。公告页：Qoder CN 文档站「事件」→「Qwen3.8-Flash 限时免费使用」（URL 不在截图里，⛔ 未核）",
         "evalRef": "qwen38flashEval_20260924 → 🔴 round2_qoderSamples",
         "note": "Qoder 免费版 Qwen3.8-Flash。🔴 2026-10-02 官方公告：原定 09-30 23:59:59 的免费期延长，10-01 起继续免费，「结束时间将提前在本页公告」⇒ 截止未公布，freeUntil=None。⭐ 实测原定 09-30 之后 total_credits 仍为 0。⚠️ 仅 Qoder CN 个人用户（体验 / 专业 / 高级 / 旗舰版 + 会员卡，免费与试用用户均可）；**企业订阅（团队版 / 企业标准版 / 企业专属版）不适用**。官方注明活动期间用量大、高峰可能慢。🔴 免费一结束模型照样答得动、只是开始扣 Credits ⇒ freeUntil=None 必须自带失效条件：probe-models.sh 对它判 total_credits：>0 ⇒ 已计费、读不到（缺失 / 乱码）⇒ 无法确认免费（fail-closed），都冷却 24h。⚠️ 与百炼 qwen3.8-flash ⛔ 不是同一表现：09-24 第二轮 Qoder×2 均分 28.3 / 30.5 vs 百炼版 34.5（11:1 p=0.006），答案短、快 3–5 倍。avoid=algorithm·perf：algorithm 按实测（LRU 19.5 / 23.2，其余臂 30–32）；perf 无实测，推导：付费阶梯对 perf 跳过 T1 起步 T2，比 T1 还弱的免费模型更不该接（2026-10-02 由 agent 自行定下，非待决）；Kafka 34.0 / 35.5 同档 ⇒ ⛔ 不扩到 architecture。没有思考档 ⇒ ⛔ 不传 thinkingOptionId。Paseo 走原生 1.1.62 ACP（mode=yolo）。"
+      },
+      {
+        "upstream": "joycode",
+        "model": "joycode/JoyAI-Code-1.5",
+        "priority": 3,
+        "freeUntil": "2026-11-06T23:59",
+        "thinking": null,
+        "multimodal": false,
+        "avoidTaskTypes": [
+          "algorithm",
+          "architecture",
+          "perf"
+        ],
+        "cautionTaskTypes": [],
+        "retainsData": true,
+        "allowInSensitiveWorkspace": true,
+        "creditRecord": {
+          "credit": 0.0,
+          "verifiedOn": "2026-10-10",
+          "source": "JoyCode 模型菜单 JoyAI-Code-1.5 标 0x；「我的用量」团队版（限免）0 / 10,000、有效期至 2026年11月6日（用户 10-10 截图）。⚠️ 窗口内的读数 ⇒ 过期后不作数（t0_still_free）"
+        },
+        "verifyVia": "JoyCode 界面：模型菜单里 JoyAI-Code-1.5 的倍率（0x = 免费）+ 底栏「用量」面板的已用积分；派一条后对比已用积分是否变化。⚠️ agent 读不到积分面板 ⇒ 过期后需用户给读数或截图",
+        "evalRef": "joycodeBridge_20261010",
+        "note": "JoyCode（京东）桌面版 + drop-in 桥接扩展（~/AgentWorkspace/configs/joycode-bridge）。🔴 个人账号（⛔ 非公司账号）。avoid 照 hy3 先例取三项（⛔ 尚无盲评数据）。retainsData：prompt 进 JoyCode 服务端任务存储。⭐ allowInSensitiveWorkspace=True：用户 2026-10-10 确认 JoyCode 可以接公司目录的任务。"
       }
     ]
   },
@@ -1616,6 +1673,18 @@
       },
       "note": "T0 免费池 priority 3（见 freePool），截止未公布（Qoder CN 2026-10-02 官方公告延期，10-01 起继续免费）。🔴 ⛔ 与百炼 qwen3.8-flash 不是同一表现（09-24 第二轮 p=0.006）⇒ ⛔ 不能互相代测。无思考档。"
     },
+    "joycode/JoyAI-Code-1.5": {
+      "label": "JoyAI-Code-1.5（JoyCode 桌面版，0x）",
+      "provider": "joycode",
+      "credit": 0.0,
+      "providers": {
+        "joycode": {
+          "modelId": "JoyAI-Code-1.5",
+          "credit": 0.0
+        }
+      },
+      "note": "T0 免费池 priority 3（见 freePool），截止 2026-11-06。经 GUI 桥接派发（SKILL §3.2f），⛔ 无思考档。实际模型以 JoyCode.log「模型路由结果」核对。"
+    },
     "space-bunny": {
       "label": "Space-Bunny（CodeBuddy 内置，匿名 Flash 大模型）",
       "provider": "codebuddy-code",
@@ -2604,6 +2673,8 @@
       "codebuddy-code": "cb",
       "github-copilot": "Cop",
       "qoderclicn": "qcn",
+      "joycode": "JD",
+      "trae-cn": "TR",
       "claude": "Cld",
       "codex": "Cdx",
       "opencode": "oc",
@@ -2643,7 +2714,32 @@
       "kimi-k3-1": "k3.1",
       "stealth/space-bunny-alpha": "sbA0923",
       "qfmodel": "qwF3.8",
-      "space-bunny": "sb1002"
+      "space-bunny": "sb1002",
+      "joycode/JoyAI-Code-1.5": "Joy1.5",
+      "joycode/GLM-5.3": "glm5.3",
+      "joycode/Kimi-K2.6": "k2.6",
+      "joycode/MiniMax-M3": "mmM3",
+      "joycode/Doubao-Seed-2.0-pro": "dbS2.0P",
+      "trae/Seed-Evolving": "seedEvo@1010",
+      "trae/Seed-2.1-Pro-0915": "seedP2.1@0915",
+      "trae/Seed-2.1-Turbo": "seedT2.1",
+      "trae/Seed-Code": "seedC1",
+      "trae/MiMo-V2.6-Flash": "mimoF2.6",
+      "trae/MiMo-V2.6-Pro": "mimoP2.6",
+      "trae/Step-5-Preview": "step5",
+      "trae/GLM-5.3-FlashX": "glmFX5.3",
+      "trae/GLM-5.3-Flash": "glmF5.3",
+      "trae/GLM-5.3": "glm5.3",
+      "trae/GLM-5.2": "glm5.2",
+      "trae/DeepSeek-V4.1-Flash": "dspF4.1",
+      "trae/DeepSeek-V4-Flash": "dspF4",
+      "trae/DeepSeek-V4-Pro": "dspP4",
+      "trae/Kimi-K3": "k3",
+      "trae/Kimi-K2.8-Preview": "k2.8",
+      "trae/MiniMax-M3": "mmM3",
+      "trae/Qwen3.8-Flash": "qwF3.8",
+      "trae/Qwen3.8-Max": "qwM3.8",
+      "trae/Qwen3.7-Plus": "qwP3.7"
     },
     "🔴 rules": [
       "⛔ **缩写必须含版本号** —— dspF4 / glmF5.3 / k3.2 / gpt5.5。⛔ 不许写成 dsp / glm / kimi。",
@@ -2656,7 +2752,8 @@
     "🔴 staleVersionAlias": "🔴🔴 **陈旧版本别名比无版本别名更危险** —— `deepseek-v4-flash`(cb) 带着版本号却指向 v4.1 ⇒ 标题写 `cb-dspF4` 而实跑 `dspF4.1`，**标题在说谎**，正好击穿本规范存在的意义。⇒ ⛔ 这类别名必须从白名单**移除**，⛔ 不能只加注释。判据：**假 id 的 400 报错会附服务端权威清单**，不在清单里但请求不报错 = 别名。",
     "🔴 snapshotIdsNeedOwnAbbr": "🔴 **带快照后缀的 id 必须有自己的缩写** —— 2026-09-11 之前 `deepseek-v4-flash-0731` 与 `deepseek-v4-flash` **共用 `dspF4`**，`-0813` 与 `deepseek-v4-pro` 共用 `dspP4`。而实测证明它们**不是同一个被服务的模型** ⇒ 标题 `百炼-dspF4` 会让人以为跟 `火山C-dspF4` 是同一个模型、只是换了钱包 —— **标题说谎**，正是这套规范要防的东西。⇒ 改成 `dspF4@0731` / `dspP4@0813`。",
     "_freePoolAbbrNote": "📜 sbA0923 = Space Bunny Alpha + OpenRouter 上架日期 09-23（该模型 2026-10-06 已下线，缩写保留仅为让历史标题可读）（它没有版本号，⛔ 用日期占版本位）；qfmodel 与百炼 qwen3.8-flash 同缩写 qwF3.8，靠渠道前缀 qcn / 百炼 区分（§3f 只禁同渠道撞名）",
-    "_spaceBunnyCbAbbrNote": "cb 版 space-bunny 缩写 sb1002（1002 = cb 接入日期占版本位——它没有版本号）；⛔ 与 OpenRouter 版 sbA0923 故意不同：两条路由同名但**表现未证实一致**，标题里必须分得出是哪条（📜 OpenRouter 版 2026-10-06 已下线）"
+    "_spaceBunnyCbAbbrNote": "cb 版 space-bunny 缩写 sb1002（1002 = cb 接入日期占版本位——它没有版本号）；⛔ 与 OpenRouter 版 sbA0923 故意不同：两条路由同名但**表现未证实一致**，标题里必须分得出是哪条（📜 OpenRouter 版 2026-10-06 已下线）",
+    "_guiBridgeAbbrNote": "2026-10-10：JD = JoyCode、TR = Trae CN（GUI 桥接，§3.2f）。型号缩写去掉命名空间后沿用同族惯例（例：TR-glmF5.3、JD-Joy1.5）；同一渠道内不撞名。"
   },
   "poolQuotaState": {
     "_note": "⚠️ **运行时状态，⛔ 不是规则** —— 会过期。判据永远是**实际探活**。",
@@ -3467,5 +3564,125 @@
     "evidence": "2026-10-02 实测（数字与缓存命中量见 spaceBunnyCb_20261002.evidenceNumbers.credits）：hy3 = 0；space-bunny 冷 0.13–0.14 / 暖 0.03；glm-5.3-flash 冷 0.29 / 暖 0.08–0.11；本机 2.160.0 与 Paseo 钉的 2.106.1 都有该字段",
     "🔴 supersedes": "推翻 2026-09-11 的「费率 agent 拿不到：rawUsage 只有 token 计数」（🔴 freeTierStatus_20260910.rateNotObtainableByAgent）以及我 09-29 写进 FREE_POOL / SKILL 的「cb 没有费用字段」。",
     "⚠️ caveat": "credit 随缓存命中浮动，只能当「有没有扣费」的证据，⛔ 不当费率；探活脚本目前**没有**读取它 ⇒ cb 条目仍⛔不许写 freeUntil=None（consistency §3o ⑬ 照旧拦）。把它接进探活（hy3 过期后自动核、cb 条目可写 None）是可做的后续，本次未做。"
+  },
+  "joycodeBridge_20261010": {
+    "_what": "JoyCode GUI 桥接接入实测（joycoder-editor 3.8.67 / JoyCode 3.0.11）",
+    "models": [
+      {
+        "label": "JoyAI-Code-1.5",
+        "chatApiModel": "JoyAI-Code-1.5",
+        "features": [
+          "function_call",
+          "agent"
+        ],
+        "multiplier": "0x"
+      },
+      {
+        "label": "GLM-5.3",
+        "chatApiModel": "GLM-5.3-agent",
+        "features": [
+          "function_call",
+          "agent"
+        ],
+        "multiplier": "0.6x"
+      },
+      {
+        "label": "Kimi-K2.6",
+        "chatApiModel": "Kimi-K2.6-agent",
+        "features": [
+          "function_call",
+          "agent",
+          "vision"
+        ],
+        "multiplier": "0.5x"
+      },
+      {
+        "label": "MiniMax-M3",
+        "chatApiModel": "MiniMax-M3-agent",
+        "features": [
+          "function_call",
+          "vision",
+          "agent"
+        ],
+        "multiplier": "0.4x"
+      },
+      {
+        "label": "Doubao-Seed-2.0-pro",
+        "chatApiModel": "Doubao-Seed-2.0-pro-agent",
+        "features": [
+          "function_call",
+          "agent",
+          "vision"
+        ],
+        "multiplier": "0.4x"
+      }
+    ],
+    "modelSwitch": "⛔ 设置项 JoyCode.config.chatModel 不影响 agent（16:15 实测仍路由 JoyAI）。✅ 命令 joycoder.getSidebarProvider 返回 provider ⇒ updateModelConfig({model},{persistLastSelection:true})；e2e：--model GLM-5.3 ⇒ JoyCode.log actualModelLabel=GLM-5.3",
+    "thinking": "⛔ 无档位：agent 请求不带 thinking 参数；features 只有 function_call/agent/vision",
+    "tests": "joycode-bridge：离线 18 + 真机 4 全绿（2026-10-10）"
+  },
+  "traeBridge_20261010": {
+    "_what": "Trae CN GUI 桥接接入实测（Trae CN 3.4.2，CDP 127.0.0.1:39240，argv.json 永久开启）",
+    "thinkingLevels": {
+      "轻/高/极高": [
+        "GLM-5.3-FlashX",
+        "GLM-5.3-Flash",
+        "GLM-5.3",
+        "DeepSeek-V4.1-Flash",
+        "DeepSeek-V4-Flash",
+        "DeepSeek-V4-Pro",
+        "Kimi-K3",
+        "Kimi-K2.8-Preview",
+        "Qwen3.8-Flash",
+        "Qwen3.8-Max"
+      ],
+      "轻/高": [
+        "Seed-2.1-Pro-0915",
+        "Seed-2.1-Turbo",
+        "Seed-Code",
+        "Step-5-Preview"
+      ],
+      "高/极高": [
+        "GLM-5.2"
+      ],
+      "无": [
+        "Seed-Evolving",
+        "MiMo-V2.6-Flash",
+        "MiMo-V2.6-Pro",
+        "MiniMax-M3",
+        "Qwen3.7-Plus"
+      ]
+    },
+    "multipliers_20261010_16h": {
+      "GLM-5.3-Flash": 0.06,
+      "Seed-Code": 0.06,
+      "MiMo-V2.6-Flash": 0.06,
+      "Seed-Evolving": 0.08,
+      "Seed-2.1-Pro-0915": 0.08,
+      "Qwen3.8-Flash": 0.08,
+      "DeepSeek-V4.1-Flash": 0.15,
+      "MiMo-V2.6-Pro": 0.15,
+      "Seed-2.1-Turbo": 0.2,
+      "DeepSeek-V4-Flash": 0.2,
+      "Qwen3.7-Plus": 0.25,
+      "MiniMax-M3": 0.26,
+      "GLM-5.3-FlashX": 0.31,
+      "Step-5-Preview": 0.48,
+      "DeepSeek-V4-Pro": 0.72,
+      "GLM-5.3": 0.78,
+      "GLM-5.2": 0.78,
+      "Kimi-K2.8-Preview": 0.98,
+      "Qwen3.8-Max": 1.5,
+      "Kimi-K3": 1.83
+    },
+    "⚠️ multipliers": "倍率随时段变（DeepSeek-V4.1-Flash 早些时候 0.06x、16 点 0.15x「闲时折扣」）⇒ ⛔ 不写死，派前用 `trae-dispatch.mjs models` 实时读",
+    "credits": "积分余额 1,9xx（10-10）；每日签到 +100，每月上限 3000（付费会员 6000）",
+    "tests": "trae-bridge：离线 30 + 真机 7 全绿（2026-10-10）"
+  },
+  "localPolicy": {
+    "_what": "本地用户策略机制（SKILL §3.2g，2026-10-10）",
+    "file": "~/.config/rift-dispatch/policy.local.json（⛔ 不进仓库）",
+    "example": "policy.local.example.json",
+    "check": "python3 scripts/local-policy.py --cwd <dir>（exit 2 = 文件坏了 ⇒ 停止派发）"
   }
 }
