@@ -163,6 +163,63 @@ def count_same_subject(M, quoted_folder, subject):
         return 0
 
 
+_APPENDUID_RE = re.compile(r"\[APPENDUID\s+\d+\s+(\d+)\]", re.IGNORECASE)
+
+
+def append_uid_from_response(response):
+    """Return the exact UID advertised by RFC 4315 APPENDUID, if present."""
+    for item in response or []:
+        if isinstance(item, bytes):
+            text = item.decode("ascii", "ignore")
+        else:
+            text = str(item)
+        match = _APPENDUID_RE.search(text)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _header_bytes(fetch_data):
+    for item in fetch_data or []:
+        if isinstance(item, tuple) and len(item) >= 2:
+            raw = item[1]
+            if isinstance(raw, (bytes, bytearray)):
+                return bytes(raw)
+    return None
+
+
+def find_unique_uid_by_message_id(M, quoted_folder, message_id):
+    """Read-only fallback for servers that omit APPENDUID."""
+    typ, _ = M.select(quoted_folder, readonly=True)
+    if typ != "OK":
+        raise SystemExit("[draft] APPEND 已成功，但无法只读打开草稿箱定位 UID")
+
+    typ, data = M.uid("SEARCH", None, "ALL")
+    if typ != "OK" or not data:
+        raise SystemExit("[draft] APPEND 已成功，但无法按 Message-ID 扫描草稿 UID")
+
+    matches = []
+    for uid in (data[0] or b"").split():
+        typ, fetched = M.uid(
+            "FETCH", uid, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])"
+        )
+        raw = _header_bytes(fetched)
+        if typ != "OK" or raw is None:
+            continue
+        candidate = (parse_message(raw).get("Message-ID") or "").strip()
+        if candidate == message_id:
+            matches.append(
+                uid.decode("ascii") if isinstance(uid, bytes) else str(uid)
+            )
+
+    if len(matches) != 1:
+        raise SystemExit(
+            "[draft] APPEND 已成功，但本次 Message-ID 在草稿箱匹配到 "
+            f"{len(matches)} 个 UID；拒绝按主题猜测，请人工核查"
+        )
+    return matches[0]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", required=True, help="草稿定义 JSON 文件")
@@ -202,6 +259,12 @@ def main():
         if typ != "OK":
             raise SystemExit(f"[draft] APPEND 失败: {typ} {resp}")
         print(f"[draft] OK -> 草稿箱({folder}): {d['subject']}")
+        draft_uid = append_uid_from_response(resp)
+        if draft_uid is None:
+            message_id = (msg.get("Message-ID") or "").strip()
+            draft_uid = find_unique_uid_by_message_id(M, quoted, message_id)
+        print(f"[draft] uid={draft_uid}")
+        print(f"[draft] next: rift-mail send --uid {draft_uid}")
     finally:
         M.logout()
 

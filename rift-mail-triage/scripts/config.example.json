@@ -10,6 +10,11 @@
 
   "client_id_contact": "you@example.com",
 
+  "send_receipt_root": "~/.local/state/rift-mail-triage/send-receipts",
+  "sent_poll_timeout_seconds": 15,
+  "sent_poll_interval_seconds": 1,
+  "_comment_send": "send receipt 是防止重复投递的本地状态；SMTP 接受后仅只读轮询 Sent，超时也不会重发或向 Sent APPEND。",
+
   "mailbox_default": "",
   "_comment_mailbox": "rift-mail 的默认邮箱地址，留空则每次手动传参或交互填写。",
 

@@ -19,7 +19,7 @@ Personal Agent Hub 的核心 skill 集合。提供跨设备 Agent 交接、浏�
 | [rift-reap](rift-reap/) | 归档自己派出去的子会话（`rift-dispatch` 的反向）<br>⛔ 硬边界：只动 `parent-agent-id == 自己` 的，顶层会话与别人的子会话一律不碰 |
 | [rift-integration-qa](rift-integration-qa/) | QA 统一入口：TDD · 三层一致(DB↔API↔FE) · 契约验证 · 假绿检测 · 真机回归 · 部署后验证 · 视觉验证<br>⚠️ 原 `integration-qa`，2026-08-27 更名 |
 | [rift-egress-relay](rift-egress-relay/) | 本机到某个端点被网络层拦截时，借道另一台联网机器做 egress 中继<br>⭐ 既有工具链**不改代码**，导出 `HTTPS_PROXY` 即恢复；凭据与私钥不离开本机 |
-| [rift-mail-triage](rift-mail-triage/) | IMAP 拉邮件 + 写草稿到草稿箱（支持 HTML 表格），只写草稿绝不发送<br>⛔ 无任何发送路径；凭据存 macOS 钥匙串，不落盘明文 |
+| [rift-mail-triage](rift-mail-triage/) | IMAP 拉邮件 + HTML 草稿 + 按精确 UID 受控发送<br>默认只写草稿；用户明确授权后仅允许 `rift-mail send --uid UID --apply`。发送默认 dry-run，receipt 幂等阻止重复 SMTP，Sent 只读轮询且禁止 `IMAP APPEND`；凭据存 macOS 钥匙串 |
 
 
 ## 安装 —— 🔴 软链到本仓库，不要 cp
@@ -68,7 +68,19 @@ done
 bash hub-handoff/scripts/tests/test-harvest-return.sh   # 11 tests
 bash hub-handoff/scripts/tests/test-push.sh             # 13 tests
 bash db-connect/scripts/tests/test-db.sh                # 23 tests
+python3 -m unittest discover -s rift-mail-triage/scripts/tests -v  # rift-mail 发送安全与草稿 UID
 ```
+
+`rift-mail-triage` 保留 `setup` / `selfcheck` / `fetch` / `draft` / `dedupe`，并提供受控 `send`：
+
+```bash
+rift-mail-triage/scripts/rift-mail send --uid 456          # 默认 dry-run，核对零副作用
+rift-mail-triage/scripts/rift-mail send --uid 456 --apply  # 仅在用户明确授权当前邮件后执行一次
+```
+
+真实发送禁止临时拼 SMTP/IMAP 脚本。SMTP 后不得向 Sent `APPEND`；Sent 暂时不可见时只读等待或报告，
+不补写、不重发。receipt 的 `PREPARED` 表示 SMTP 尚未开始，`UNKNOWN` 表示结果不确定且禁止自动重试，
+`ACCEPTED` 表示全部 envelope recipients 已被 SMTP 接受。
 
 ## 配置
 

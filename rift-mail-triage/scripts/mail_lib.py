@@ -36,6 +36,9 @@ _DEFAULT_CONFIG = {
     "smtp_host": "smtp.qiye.163.com",
     "smtp_port": 465,
     "client_id_contact": "you@example.com",
+    "send_receipt_root": "~/.local/state/rift-mail-triage/send-receipts",
+    "sent_poll_timeout_seconds": 15,
+    "sent_poll_interval_seconds": 1,
 }
 
 
@@ -59,6 +62,9 @@ IMAP_HOST = _CFG["imap_host"]
 IMAP_PORT = int(_CFG["imap_port"])
 SMTP_HOST = _CFG["smtp_host"]
 SMTP_PORT = int(_CFG["smtp_port"])
+SEND_RECEIPT_ROOT = os.path.expanduser(str(_CFG["send_receipt_root"]))
+SENT_POLL_TIMEOUT_SECONDS = max(float(_CFG["sent_poll_timeout_seconds"]), 0.0)
+SENT_POLL_INTERVAL_SECONDS = max(float(_CFG["sent_poll_interval_seconds"]), 0.001)
 
 # 注册 ID 命令：部分服务商(如网易系)反垃圾要求，缺了在这些服务商上必然 Unsafe Login
 imaplib.Commands["ID"] = ("AUTH", "SELECTED")

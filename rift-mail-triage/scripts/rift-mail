@@ -9,6 +9,7 @@
 #   rift-mail selfcheck              连通性自检（不改任何邮件状态）
 #   rift-mail fetch --days 7 --out state/inbox.json
 #   rift-mail draft --json drafts/xxx.json
+#   rift-mail send --uid UID [--apply]  # 默认 dry-run
 #   rift-mail dedupe [--apply]
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -109,6 +110,11 @@ case "${1:-}" in
     _load_creds
     python3 "$SCRIPT_DIR/save_draft.py" "$@"
     ;;
+  send)
+    shift
+    _load_creds
+    python3 "$SCRIPT_DIR/send_draft.py" "$@"
+    ;;
   dedupe)
     shift
     _load_creds
@@ -116,12 +122,13 @@ case "${1:-}" in
     ;;
   *)
     cat <<'USAGE'
-用法: rift-mail <setup|selfcheck|fetch|draft|dedupe> [参数...]
+用法: rift-mail <setup|selfcheck|fetch|draft|send|dedupe> [参数...]
 
   setup [mailbox]   交互式录入邮箱 + 客户端授权码到 macOS 钥匙串（首次必做）
   selfcheck         连通性自检：登录、定位草稿箱、数一下近 7 天邮件量
   fetch --days 7 --out state/inbox.json [--body-limit N] [--max-messages N]
   draft --json drafts/xxx.json
+  send --uid UID [--apply]   精确选择草稿；默认 dry-run，仅显式 --apply 才发送
   dedupe [--apply] [--include-foreign]
 
 详细说明见同目录 SKILL.md。

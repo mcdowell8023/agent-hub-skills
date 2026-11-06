@@ -1,23 +1,35 @@
 ---
 name: rift-mail-triage
-description: "Rift Mail Triage：把邮箱当任务源——IMAP 拉取近 N 天邮件、按主题去重、写回复草稿（支持 HTML 表格）到草稿箱，只写草稿绝不直接发送。macOS 钥匙串存凭据。Triggers: 'rift-mail', 'rift mail', '邮件草稿', '写邮件草稿', '存草稿', '邮箱任务追踪', 'mail triage', 'draft email'."
+description: "Use when reading mailbox tasks, creating or deduplicating email drafts, or sending an exact approved draft safely. Triggers: 'rift-mail', 'rift mail', '邮件草稿', '写邮件草稿', '存草稿', '发送邮件', '安全发送', '邮箱任务追踪', 'mail triage', 'draft email', 'send email'."
 user-invocable: true
-argument-hint: "<setup|selfcheck|fetch|draft|dedupe> [参数...]"
+argument-hint: "<setup|selfcheck|fetch|draft|send|dedupe> [参数...]"
 ---
 
-# Rift Mail Triage — IMAP 邮件拉取 + 草稿箱协作
+# Rift Mail Triage — IMAP 邮件拉取 + 草稿协作 + 受控发送
 
 > 🔗 **rift 家族**：`/rift-dispatch`（派发）· `/rift-reap`（回收）· `/rift-integration-qa`（测试验收）
-> · `/rift-egress-relay`（网络中继）· **`/rift-mail-triage`（邮件草稿协作）**
+> · `/rift-egress-relay`（网络中继）· **`/rift-mail-triage`（邮件协作）**
 
-用邮箱当协作媒介：**读邮件、写草稿，从不代替人按发送键。** 核心解决一个具体问题——
-用浏览器逐字段编辑邮件正文很浪费 token，且容易在复制粘贴间丢失表格结构；
-本 skill 直接用 IMAP/SMTP 协议操作邮箱，结构化 JSON 进、MIME 邮件出。
+用邮箱当协作媒介：默认只读邮件、写草稿；用户对当前邮件明确授权发送后，才允许通过唯一受控入口发送
+精确的草稿 UID。结构化 JSON 进、MIME 邮件出，避免浏览器逐字段编辑时丢失 HTML 表格结构。
 
 ## 0. 能力边界（安全设计，不是限制）
 
-- **只有 `save_draft.py` 会写邮箱，且只用 `\Draft` 标志 APPEND 进草稿箱** —— 全仓没有任何调用
-  `smtplib.send_message` 或等价发送 API 的路径。写完草稿后由人打开邮箱客户端自己看、自己点发送。
+- **默认只写草稿，不发送。** 没有用户对当前邮件的当场明确授权时，只能执行 `draft`，或执行不带
+  `--apply` 的 `send` dry-run；草稿准备好不等于已获发送授权。
+- **真实发送的唯一入口是 `rift-mail send --uid UID --apply`。** 禁止 agent 临时拼接 `smtplib`、SMTP、
+  IMAP 或其他发送脚本，也禁止绕过 receipt 状态机直接调用底层模块。授权只覆盖用户指定的当前邮件，
+  不自动扩展到下一封邮件或失败重试。
+- `draft` 会把邮件以 `\Draft` 标志 APPEND 进草稿箱，并输出服务端确认的精确 IMAP UID；`send` 必须使用
+  这个 UID，不能用主题、时间或会随 `EXPUNGE` 变化的消息序号猜目标。
+- `send` 默认 dry-run，只打印主题、收件人、`Message-ID` 和 MIME SHA-256，零发送副作用；只有显式
+  `--apply` 才尝试一次 SMTP。
+- SMTP 调用前会落盘 receipt。相同 `Message-ID` 或 MIME SHA-256 的 receipt 会跨 UID 阻止重复发送：
+  - `PREPARED`：发送身份已锁定，SMTP 尚未开始；只有完全相同的草稿能继续。
+  - `UNKNOWN`：SMTP 已开始但结果不确定，或发生部分拒收；**禁止自动重试**，保留草稿并人工核查。
+  - `ACCEPTED`：SMTP 已接受全部 envelope recipients；后续清理或 Sent 对账失败也不得再次 SMTP。
+- SMTP 返回后只读轮询 Sent 中的同一 `Message-ID`。**永久禁止向 Sent 执行 `IMAP APPEND`**；Sent 暂时
+  不可见只表示服务商自动归档可能延迟，不得补写 Sent、不得重发、不得把 `--apply` 再跑一次当作确认。
 - `fetch_mail.py` 读邮件一律用 `BODY.PEEK[]`，不会把未读邮件静默标成已读。
 - `dedupe_drafts.py` 只删「同主题里比最新那封更旧」的草稿，且默认 dry-run；删掉的草稿都能从本地
   `drafts/*.json` 用 `rift-mail draft` 重新生成，可逆。
@@ -49,9 +61,15 @@ cp "$REPO/scripts/config.example.json" "$REPO/scripts/config.json"
 scripts/rift-mail selfcheck                              # 连通性自检，不改任何邮件状态
 scripts/rift-mail fetch --days 7 --out state/inbox.json  # 拉近 7 天邮件到 JSON（人工看/喂给会话都行）
 scripts/rift-mail draft --json drafts/reply.json         # 把一份草稿定义写进草稿箱
+scripts/rift-mail send --uid 456                         # dry-run：核对精确草稿，零发送副作用
+scripts/rift-mail send --uid 456 --apply                 # 仅在用户明确授权当前邮件后真实发送
 scripts/rift-mail dedupe                                 # 预演：列出可清理的同主题重复草稿
 scripts/rift-mail dedupe --apply                         # 真正执行清理
 ```
+
+`draft` 成功后会输出 `[draft] uid=456` 和下一条 dry-run 命令。先运行 dry-run，把主题、收件人、
+`Message-ID`、MIME SHA-256 与用户授权内容逐项核对；确认一致后，才可在同一授权范围内增加 `--apply`。
+若 `--apply` 返回非零或 receipt 为 `UNKNOWN`，停止并人工核查，不能重试。
 
 `draft` 的 JSON 结构（字段说明见 `scripts/save_draft.py` 顶部 docstring）：
 
@@ -90,19 +108,25 @@ scripts/rift-mail dedupe --apply                         # 真正执行清理
   且删除前一律先 dry-run（`dedupe_drafts.py` 默认即 dry-run）。
 - **草稿回复必须带 `In-Reply-To`/`References`**，否则草稿发出去会另起一个新会话，收件人看不到
   和原邮件的关联。
+- **SMTP 成功后补写 Sent 是错误模式**：没有受控发送原语时，agent 容易建议“SMTP 2xx 后 IMAP
+  APPEND Sent；立即查不到就重试 APPEND”。服务商可能自行延迟归档，这会制造重复 Sent 记录。
+  `send` 已负责只读轮询；任何 Sent `APPEND`、补写或发送重试都属于绕过安全边界。
+- **Sent 可见性不是投递判据**：receipt 为 `ACCEPTED` 而 `sent_seen_at` 暂为空时，保留现状并报告对账
+  延迟；receipt 为 `UNKNOWN` 时，停止自动化并人工核查。两种情况都不得再次执行真实发送。
 
 ## 4. 与原始版本的差异（macOS 移植说明）
 
 本 skill 由一份 Windows 版工具包移植而来。`mail_lib.py`/`fetch_mail.py`/`save_draft.py`/
-`dedupe_drafts.py`/`selfcheck.py` 是纯 Python（stdlib only），逻辑未改。**唯一实质差异是凭据存储**：
+`dedupe_drafts.py`/`send_draft.py`/`selfcheck.py` 是纯 Python（stdlib only）。凭据存储方面：
 原版用 Windows DPAPI（`ConvertFrom-SecureString`，绑定当前 Windows 用户+本机）经 PowerShell 脚本注入
 环境变量；本版换成 **macOS 钥匙串**（`security` 命令，同样绑定当前系统用户账号），经 `rift-mail`
-这个 bash 入口统一取出后注入环境变量，两者安全属性等价（文件/钥匙串项泄露 ≠ 密码泄露）。
+这个 bash 入口统一取出后注入环境变量，两者安全属性等价（文件/钥匙串项泄露 ≠ 密码泄露）。受控发送
+另使用本地 receipt 记录幂等状态，默认目录为 `~/.local/state/rift-mail-triage/send-receipts/`。
 
 原版另有一层"每日自动巡检"（Windows 计划任务 + headless Claude Code + 团队自定义的
 分类/去重/bug 推进 SOP skill）**未纳入本次移植**——那一层强依赖具体团队的业务规则，
 不是通用工具。如果需要，可以后续单独加一版 `rift-mail-triage-daily`，复用这里的
-`fetch`/`draft`/`dedupe` 三个原语。
+`fetch`/`draft`/`send`/`dedupe` 四个原语。
 
 ## 5. 依赖
 
