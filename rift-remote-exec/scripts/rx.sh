@@ -238,17 +238,36 @@ PROMPT_CLEAN="$(printf '%s' "$PROMPT" | tr -d '[:space:]')"
 # ② 命令
 # ③ 探针：单独一行 → %ERRORLEVEL% 取的是**上一行（命令）**的退出码
 #    （同一行内取不准：cmd 在解析整行时就展开了 %ERRORLEVEL%）
-paseo terminal send-keys --host "$CONN" "$TID" "echo $BEGMARK" Enter >/dev/null 2>&1 || die "send-keys 失败"
+# send-keys 失败通常意味着终端被远端回收了 → 重建后重试一次
+send() {
+  paseo terminal send-keys --host "$CONN" "$TID" "$1" Enter >/dev/null 2>&1 && return 0
+  echo "rx.sh: send-keys 失败（终端可能已被回收），重建后重试" >&2
+  TID=""
+  REUSED=0
+  for attempt in $(seq 1 "$CREATE_RETRIES"); do
+    if TID="$(try_cwd "$CWD")"; then break; fi
+    sleep 5
+  done
+  [ -n "$TID" ] || die "终端已失效且重建失败"
+  # 重建后基线变了 → 重新取基线，否则输出裁剪会错位
+  BASE="$(paseo terminal capture --host "$CONN" "$TID" 2>/dev/null)"
+  PROMPT="$(printf '%s\n' "$BASE" | grep -v '^[[:space:]]*$' | tail -n 1 | sed -e 's/[[:space:]]*$//')"
+  PROMPT_CLEAN="$(printf '%s' "$PROMPT" | tr -d '[:space:]')"
+  paseo terminal send-keys --host "$CONN" "$TID" "$1" Enter >/dev/null 2>&1 \
+    || die "send-keys 失败（重建后仍失败）"
+}
+
+send "echo $BEGMARK"
 sleep 1
 if [ -n "$CD_STEP" ]; then
-  paseo terminal send-keys --host "$CONN" "$TID" "$CD_STEP" Enter >/dev/null 2>&1 || die "send-keys 失败"
+  send "$CD_STEP"
   sleep 1
 fi
-paseo terminal send-keys --host "$CONN" "$TID" "$CMD" Enter >/dev/null 2>&1 || die "send-keys 失败"
+send "$CMD"
 sleep 1
-paseo terminal send-keys --host "$CONN" "$TID" "echo ${RCMARK}%ERRORLEVEL% \$?" Enter >/dev/null 2>&1 || die "send-keys 失败"
+send "echo ${RCMARK}%ERRORLEVEL% \$?"
 sleep 1
-paseo terminal send-keys --host "$CONN" "$TID" "echo $MARK" Enter >/dev/null 2>&1 || die "send-keys 失败"
+send "echo $MARK"
 
 # ---- 轮询等完成 ----
 # 基线行数：用于把「复用终端」的旧 scrollback 裁掉，只输出本次命令的结果
