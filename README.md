@@ -20,7 +20,8 @@ Personal Agent Hub 的核心 skill 集合。提供跨设备 Agent 交接、浏�
 | [rift-integration-qa](rift-integration-qa/) | QA 统一入口：TDD · 三层一致(DB↔API↔FE) · 契约验证 · 假绿检测 · 真机回归 · 部署后验证 · 视觉验证<br>⚠️ 原 `integration-qa`，2026-08-27 更名 |
 | [rift-egress-relay](rift-egress-relay/) | 本机到某个端点被网络层拦截时，借道另一台联网机器做 egress 中继<br>⭐ 既有工具链**不改代码**，导出 `HTTPS_PROXY` 即恢复；凭据与私钥不离开本机 |
 | [rift-mail-triage](rift-mail-triage/) | IMAP 拉邮件 + HTML 草稿 + 按精确 UID 受控发送<br>默认只写草稿；用户明确授权后仅允许 `rift-mail send --uid UID --apply`。发送默认 dry-run，receipt 幂等阻止重复 SMTP，Sent 只读轮询且禁止 `IMAP APPEND`；凭据存 macOS 钥匙串 |
-
+| [rift-remote-exec](rift-remote-exec/) | 在已注册的远端机器上执行命令，**不经 LLM、不消耗额度**<br>⭐ 用 paseo relay 通道直接开远端终端；附 `rx.sh` 封装（**复用已有终端**、四行协议判完成、**退出码判成败**、自动建/杀终端）与 Windows COMODO 文件锁、ego 脚本三大坑 |
+| [skill-loader](skill-loader/) | **没有 `skill` 工具的 agent（MiniMax Code 子 agent）怎么加载 skill 正文**<br>路径规律 `skill 名 → 目录 → SKILL.md` + `skill-path.sh` 跨 5 个 runtime 目录查找 |
 
 ## 安装 —— 🔴 软链到本仓库，不要 cp
 
@@ -31,19 +32,26 @@ Personal Agent Hub 的核心 skill 集合。提供跨设备 Agent 交接、浏�
 git clone https://github.com/mcdowell8023/agent-hub-skills.git \
   ~/AgentWorkspace/projects/skills/agent-hub-skills
 
+# 推荐用脚本（会处理实体副本备份 + 幂等重建）
+bash ~/AgentWorkspace/projects/skills/agent-hub-skills/scripts/install-links.sh
+
+# 等价的内联版本（⚠️ 不要用 rm -rf：本机 rm 被 shim 成 mavis-trash，单次要好几秒）
 REPO=~/AgentWorkspace/projects/skills/agent-hub-skills
 for s in hub-handoff hub-comm browser-preflight db-connect \
-         rift-dispatch rift-reap rift-integration-qa rift-egress-relay rift-mail-triage; do
-  for d in ~/.claude/skills ~/.agents/skills ~/.codex/skills ~/.codebuddy/skills; do
+         rift-dispatch rift-reap rift-integration-qa rift-egress-relay rift-mail-triage \
+         rift-remote-exec skill-loader; do
+  for d in ~/.claude/skills ~/.minimax/skills ~/.agents/skills ~/.codex/skills ~/.codebuddy/skills; do
     [ -d "$d" ] || continue
-    rm -rf "$d/$s"
+    [ -L "$d/$s" ] || { [ -d "$d/$s" ] && mv "$d/$s" "$d/$s.bak.$(date +%s)"; }
     ln -sfn "$REPO/$s" "$d/$s"
   done
 done
 ```
 
-⚠️ 实际入口以本机为准是 `~/.claude/skills` · `~/.agents/skills` · `~/.codex/skills` · `~/.codebuddy/skills`
-四个（`~/.config/opencode/skills` 在部分机器上不存在，此前版本记录有误，已更正）。
+⚠️ 实际入口以本机为准是 `~/.claude/skills` · `~/.minimax/skills` · `~/.agents/skills` ·
+`~/.codex/skills` · `~/.codebuddy/skills` **五个**。
+（2026-11-10 补上 `~/.minimax/skills`——此前循环漏了它，
+漏装的表现就是「该 skill 在 MiniMax Code 的清单里根本不存在」。）
 
 ⛔ **不要用 `cp` 分发。** 2026-08-27 之前就是手工 cp 三份实体，结果本仓库落后本地
 **近两个月**（`hub-comm` / `hub-handoff` 的 SKILL.md 在 git 里连 frontmatter 都没有，
@@ -52,15 +60,35 @@ done
 ### 一致性自查
 
 ```bash
-REPO=~/AgentWorkspace/projects/skills/agent-hub-skills
-for d in ~/.claude/skills ~/.agents/skills ~/.codex/skills ~/.codebuddy/skills; do
-  for s in $(ls -1 $REPO | grep -vE '^(README|\.)'); do
-    [ -e "$d/$s" ] || continue
-    [ -L "$d/$s" ] || echo "🔴 实体副本（应为软链）: $d/$s"
-  done
-done
+bash ~/AgentWorkspace/projects/skills/agent-hub-skills/scripts/install-links.sh --check
 ```
-输出为空 ⇒ 全部走软链。有输出 ⇒ 那份是游离副本，改了不会同步。
+
+输出为空 ⇒ 全部走软链。有输出 ⇒ 那份是游离副本（或没装），改了不会同步。
+
+## 子 agent 没有 `skill` 工具时怎么加载 skill（2026-11-10）
+
+**现象**：MiniMax Code 的**子 agent**（`explore` / `worker` / `verifier`）工具列表里
+**没有**名为 `skill` 的工具，但上下文里**有** `<available_skills>` 清单
+（只含 name + description，**没有路径**）——于是看得见 skill，却读不到正文。
+
+⛔ 不要反复试 `skill(...)` 调用，那不是 skill 坏了，是**运行时没给这个工具**。
+
+**解法**：按固定路径规律用 `read` / `bash` 直接打开正文：
+
+```
+<skill 名> → ~/.claude/skills/<skill 名>/SKILL.md
+```
+
+其它 runtime 目录同样规律：`~/.minimax/skills` · `~/.agents/skills` ·
+`~/.codex/skills` · `~/.codebuddy/skills`。
+不确定在哪个目录时用查找脚本：
+
+```bash
+bash ~/.claude/skills/skill-loader/scripts/skill-path.sh <skill 名>       # 打印正文路径
+bash ~/.claude/skills/skill-loader/scripts/skill-path.sh <skill 名> --cat # 直接打印正文
+```
+
+细节与边界见 [skill-loader/SKILL.md](skill-loader/SKILL.md)。
 
 ## 测试
 
