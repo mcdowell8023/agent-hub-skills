@@ -274,13 +274,13 @@ fi
 # 用「起始标记 __RX_BEGIN__」定位本次输出区间：
 #   标记行(回显) → 标记行(输出) → 命令行(回显) → 命令输出 → 探针行(回显) → 探针输出
 # 取最后一个 __RX_BEGIN__ 之后、探针之前的内容，去掉回显行与提示符行。
-PARSED="$(printf '%s\n' "$OUT" | python3 -c '
-import re, sys
+PARSED="$(printf '%s\n' "$OUT" | RX_CMD_NS="$CMD_NS" python3 -c '
+import os, re, sys
 txt = sys.stdin.read()
 BEG  = "'"$BEGMARK"'"
 RC   = "'"$RCMARK"'"
 MARK = "'"$MARK"'"
-CMDNS = "'"$CMD_NS"'"
+CMDNS = os.environ.get("RX_CMD_NS", "")
 
 # ---- 定位输出区间 ----
 # 终端实际结构（cmd）：
