@@ -13,12 +13,16 @@
 #   rx.sh --host-label wb-hub --cwd 'C:\Users\LienwaiverWB\wb' -- whoami
 #   rx.sh --host-label wb-hub --cwd 'C:\Users\LienwaiverWB\wb' --timeout 120 -- 'dir /b C:\Users'
 #
-# 协议（两行，避免终端折行把哨兵拆开导致计数歧义）:
-#   第 1 行: <命令>
-#   第 2 行: echo __RX_OK__ && echo __RX_RC__%ERRORLEVEL% $?
+# 协议（5 行；每行单独发送，避免终端折行把哨兵拆开导致计数歧义）:
+#   第 1 行: echo __RX_BEGIN_<唯一后缀>__   ← 锚点：定位本次输出区间
+#   第 2 行: cd /d "<目标目录>"              ← 切目录独立成行（拼接会折行 → 回显污染）
+#   第 3 行: <命令>                          ← 真正要执行的命令
+#   第 4 行: echo __RX_RC__%ERRORLEVEL% $?  ← 退出码探针（必须紧跟命令）
+#   第 5 行: echo __RX_OK__                  ← 完成哨兵
 #     · __RX_OK__  = 完成哨兵（回显 1 次 + 输出 1 次 = 2 次）
-#     · __RX_RC__ = 上一行的退出码（cmd 读 %ERRORLEVEL%，sh 读 $?）
-#   第 2 行里哨兵用 && 连接：cmd 与 sh 都按顺序执行，不会乱序。
+#     · __RX_RC__ = 上一行（命令）的退出码：cmd 取 %ERRORLEVEL%，sh 取 $?
+#   ⚠️ 探针必须**单独一行且紧跟命令**：cmd 在解析整行时就展开 %ERRORLEVEL%，
+#     同行取到的是行首状态（恒为 0），只有跨行才拿得到命令的真实退出码。
 #
 # 判定:
 #   完成 = 哨兵出现 ≥ 2 次（只回显没输出 → 不算完成）

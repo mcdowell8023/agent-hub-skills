@@ -73,15 +73,19 @@ paseo terminal kill    --host "$CONN" <id>
 ### 2.3 用封装脚本（推荐，省掉一堆样板）
 
 ```bash
-REPO=~/AgentWorkspace/projects/skills/agent-hub-skills
-scripts/rx.sh --hosts
-scripts/rx.sh --host-label wb-hub --cwd 'C:\Users\LienwaiverWB\wb' -- whoami
-scripts/rx.sh --host-label wb-hub --cwd 'C:\Users\LienwaiverWB\wb' --timeout 120 -- 'dir /b C:\Users\LienwaiverWB\wb'
+# 路径要对：rx.sh 在 skill 目录下，不在仓库根的 scripts/ 下
+SKILL_DIR=~/AgentWorkspace/projects/skills/agent-hub-skills/rift-remote-exec
+bash "$SKILL_DIR/scripts/rx.sh" --hosts
+bash "$SKILL_DIR/scripts/rx.sh" --host-label wb-hub --cwd 'C:\Users\LienwaiverWB\wb' -- whoami
+bash "$SKILL_DIR/scripts/rx.sh" --host-label wb-hub --cwd 'C:\Users\LienwaiverWB\wb' --timeout 120 -- 'dir /b C:\Users\LienwaiverWB\wb'
 ```
 
-`rx.sh` 做的事：取连接串 → **取终端** → 敲 4 行 → 轮询 capture → 打印干净输出。
+（也可以直接用软链路径：`bash ~/.claude/skills/rift-remote-exec/scripts/rx.sh …`，
+各 runtime 的 skills 目录都有。）
 
-### 2.4 `rx.sh` 的四行协议（照抄即可）
+`rx.sh` 做的事：取连接串 → **取终端** → 敲 5 行 → 轮询 capture → 打印干净输出。
+
+### 2.4 `rx.sh` 的五行协议（照抄即可）
 
 ```
 ① echo __RX_BEGIN_<唯一后缀>__   ← 锚点：定位本次输出区间
