@@ -29,7 +29,10 @@ set -uo pipefail
 HOSTS_JSON="${PASEO_HOSTS_JSON:-$HOME/.paseo/hosts.json}"
 MARK='__RX_OK__'
 RCMARK='__RX_RC__'
-BEGMARK='__RX_BEGIN__'
+# 起始标记带唯一后缀：复用终端时 capture 里可能有历史运行的同名标记，
+# rfind 会命中错误的位置 → 每次运行必须用唯一标记。
+RUN_ID="$$_$(date +%s)"
+BEGMARK="__RX_BEGIN_${RUN_ID}__"
 TIMEOUT=60
 CWD=""
 WORKSPACE=""
@@ -40,6 +43,8 @@ MODE="run"
 CREATE_RETRIES=3
 MARK_JOIN="&"
 REUSE=1
+LOCK_WAIT=120
+NO_LOCK=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -50,6 +55,8 @@ while [ $# -gt 0 ]; do
     --workspace) WORKSPACE="$2"; shift 2 ;;
     --timeout) TIMEOUT="$2"; shift 2 ;;
     --retries) CREATE_RETRIES="$2"; shift 2 ;;
+    --lock-wait) LOCK_WAIT="$2"; shift 2 ;;
+    --no-lock) NO_LOCK=1; shift ;;
     --no-reuse) REUSE=0; shift ;;
     --) shift; CMD="$*"; CMD_RAW="$*"; break ;;
     -h|--help) sed -n '2,35p' "$0"; exit 0 ;;
@@ -114,6 +121,75 @@ fi
 # 取命令最后 ~24 字符，并额外存一份「去空白」版本（终端可能插入/折断空白）。
 CMD_NS="$(printf '%s' "$CMD" | tr -d '[:space:]')"
 CONN="$(conn_for "$LABEL")" || die "取连接串失败"
+
+# ---- 并发互斥 ----
+# ⛔ 同一台机器上并发跑多个 rx.sh 会互相踩：两条命令交错进同一个终端，
+#    输出与退出码全串台（实测踩到）。必须串行化。
+# 锁里存 PID：进程被杀（SIGKILL）时锁会残留 → 用 PID 存活检查识别陈旧锁。
+LOCK_DIR="${TMPDIR:-/tmp}/rx-lock-$(printf '%s' "$LABEL" | tr -c 'A-Za-z0-9._-' '_')"
+mkdir -p "$LOCK_DIR"
+LOCK="$LOCK_DIR/lock"
+LOCKED=0
+release_lock() {
+  [ "$LOCKED" = 1 ] || return 0
+  # 锁目录里有 pid 文件 → 先删文件再 rmdir。
+  # 用 unlink 而不是 rm：本机 rm 被 shim 成 mavis-trash，单次要好几秒。
+  unlink "$LOCK/pid" 2>/dev/null || true
+  rmdir "$LOCK" 2>/dev/null || true
+  LOCKED=0
+}
+lock_holder_alive() {
+  local pid
+  pid="$(cat "$LOCK/pid" 2>/dev/null)"
+  [ -n "$pid" ] || return 1
+  kill -0 "$pid" 2>/dev/null
+}
+clear_stale_lock() {
+  # 锁目录里有 pid 文件 → 先 unlink 再 rmdir（unlink 不走 mavis-trash shim）
+  unlink "$LOCK/pid" 2>/dev/null || true
+  rmdir "$LOCK" 2>/dev/null || true
+  [ ! -d "$LOCK" ]
+}
+acquire_lock() {
+  mkdir "$LOCK" 2>/dev/null || return 1
+  echo $$ > "$LOCK/pid" 2>/dev/null || true
+  LOCKED=1
+  return 0
+}
+if [ "$NO_LOCK" != 1 ]; then
+if acquire_lock; then
+  :
+else
+  # 陈旧锁（持锁进程已死）→ 清掉重试
+  if ! lock_holder_alive; then
+    echo "rx.sh: 发现陈旧锁（持锁进程已退出），清理后重试" >&2
+    clear_stale_lock && acquire_lock || true
+  fi
+fi
+if [ "$LOCKED" != 1 ]; then
+  echo "rx.sh: 另一个 rx.sh 正在用这台机器（锁 ${LOCK}），等待最多 ${LOCK_WAIT}s…" >&2
+  got=0
+  stale_tries=0
+  for _ in $(seq 1 "$LOCK_WAIT"); do
+    sleep 1
+    if acquire_lock; then got=1; break; fi
+    # 陈旧锁清理：最多试 3 次，失败就放弃等待（避免死循环）
+    if [ "$stale_tries" -lt 3 ] && ! lock_holder_alive; then
+      stale_tries=$((stale_tries + 1))
+      echo "rx.sh: 陈旧锁，清理后重试（第 ${stale_tries} 次）" >&2
+      if clear_stale_lock; then
+        acquire_lock && { got=1; break; }
+      else
+        echo "rx.sh: 陈旧锁清理失败（可能仍被占用），继续等待" >&2
+        stale_tries=3
+      fi
+    fi
+  done
+  [ "$got" = 1 ] || die "等待并发锁超时（${LOCK_WAIT}s），另一个 rx.sh 还没结束"
+fi
+# 立刻挂上解锁 trap：此后任何退出路径（含 die）都会释放锁
+trap 'release_lock' EXIT INT TERM
+fi
 
 # ---- 取终端 ----
 # 关键经验（实测）：hub 端 terminal-worker 在多 agent 并发时**新建终端会超时**
@@ -214,7 +290,8 @@ cleanup() {
   [ "$REUSED" = "1" ] && return 0
   paseo terminal kill --host "$CONN" "$TID" >/dev/null 2>&1 || true
 }
-trap cleanup EXIT INT TERM
+# ⛔ 这里原本会覆盖锁的 trap —— 必须把解锁动作一起带上，否则锁泄漏（下次永远等）
+trap 'cleanup; release_lock' EXIT INT TERM
 
 # ---- 终端可能已被远端回收（复用终端会莫名消失）→ 重建一次 ----
 if ! paseo terminal capture --host "$CONN" "$TID" >/dev/null 2>&1; then
@@ -289,7 +366,9 @@ while [ "$(date +%s)" -lt "$DEADLINE" ]; do
 done
 
 # 本次输出 = 全量 capture 去掉基线部分
-OUT="$(printf '%s\n' "$TEXT" | tail -n "+$((BASE_LINES + 1))")"
+# 不用行数裁剪：终端滚动会让 capture 的行数与基线对不上（复用终端时尤其明显）。
+# 锚点裁剪在下面的 Python 里做（rfind(__RX_BEGIN__) 之后就是本次内容）。
+OUT="$TEXT"
 
 if [ "$DONE" != 1 ]; then
   printf '%s\n' "$OUT" | grep -v '^[[:space:]]*$' | tail -n 60
