@@ -1,149 +1,112 @@
 ---
 name: hub-comm
-description: "Agent Hub 双向通信参考：Mac ↔ Hub 的所有操作方式、推荐优先级、踩坑记录。 Triggers: '连接 Hub', '操作 Hub', 'Hub 通信', 'Hub 反向', 'Hub 回传', '交回 Mac', 'hub-comm'."
+description: Use when Mac or Agent Hub needs bidirectional Paseo communication, cross-machine agent creation or follow-up, list_hosts is empty, a reverse route is missing, or a Hub agent reports that it cannot reach or delegate work to Mac.
 ---
 
-# hub-comm
+# Hub communication
 
-Agent Hub 双向通信参考。提供 Mac ↔ Hub 的所有操作方式、推荐优先级、踩坑记录。
+## Overview
 
-## 触发词
+Use Paseo's registered-host fleet tools for Mac ↔ Hub agent work. A reachable daemon is not automatically a registered route.
 
-- "连接 Hub" / "操作 Hub" / "Hub 通信"
-- "Hub 反向" / "Hub 回传" / "交回 Mac"
-- 被 hub-handoff 等其他 skill 引用时自动加载
+**Registry is directional（有方向性）:** Mac 已注册 Hub ≠ Hub 已注册 Mac。`list_hosts` 只描述当前 calling daemon 的 `self` 和它已注册的 destinations；不能用 Mac 上的结果推断 Hub 上的 registry。
 
-## 配置
+## When to use
 
-通信依赖设备间网络互通（LAN 直连、VPN、Tailscale 等均可），Paseo daemon 默认端口 6767。
+- Mac 需要在 Hub 上创建 agent 或继续会话。
+- Hub agent 需要在 Mac 上创建 child agent 或发送 follow-up。
+- `list_hosts` 为空、对端不在列表中、reverse route 缺失，或跨机器创建失败。
+- 需要确认 `{serverId, agentId}` 所属主机，避免把任务派到本机。
 
-**启用双向通信**：确保两端 Paseo daemon 监听 `0.0.0.0:6767`（`~/.paseo/config.json` → `daemon.listen`），对端可达即可。
+## Preferred fleet workflow
 
-**当前端点**（按实际网络环境替换 IP）：
+Paseo MCP fleet tools are the default path. Registered destinations are first-class targets; cross-machine `create_agent` and `send_agent_prompt` both support `serverId`.
 
-| 设备 | Paseo | SSH | 其他服务 |
-|---|---|---|---|
-| Hub | `<Hub-IP>:6767` | `ssh hub` | RDP `:3389`，Dufs `:8899` |
-| Mac | `<Mac-IP>:6767` | — | — |
+1. Call `list_hosts` on the affected daemon and select the destination by its verified `serverId`, `status=online`, and expected endpoint. Labels are display names, not identity.
+2. Keep `{serverId, agentId}` together for the entire conversation. Never reuse an `agentId` without its host route.
+3. Call `list_workspaces({serverId})`; choose the returned `workspaceId` whose path/cwd matches the requested remote workspace. Do not guess an ID or reuse a local workspace ID.
+4. Call `create_agent({serverId, workspaceId, ...})`. Verify the created child is reported on the same remote `serverId` and workspace.
+5. For follow-ups, call `send_agent_prompt({serverId, agentId, prompt, ...})`. Completion notifications work across registered hosts.
 
-## 通信方式（按推荐优先级）
+Minimal shape:
 
-### 方式 1：Paseo CLI `--host` 直连（推荐）
-
-v0.1.89+ 已验证，支持 ls / send / run 三种操作直连 Hub daemon。
-
-```bash
-# 列出 Hub agents
-paseo agent ls --host 100.65.188.103:6767
-
-# 给已有 agent 发消息（继续会话）
-paseo send --host 100.65.188.103:6767 <agent-id> "继续工作"
-# 或从文件读 prompt
-paseo send --host 100.65.188.103:6767 <agent-id> --prompt-file /tmp/prompt.txt
-
-# 创建新 agent
-paseo run --host 100.65.188.103:6767 --detach \
-  --provider claude/opus --mode auto \
-  --title "任务标题" --cwd /home/mcdowell/wb "prompt"
-
-# 查 agent 状态
-paseo agent ls --host 100.65.188.103:6767
+```json
+{
+  "serverId": "<destination-server-id>",
+  "workspaceId": "<workspace-id-returned-by-that-host>"
+}
 ```
 
-**适用**：日常 agent 管理（创建/查询/发消息）。
-**注意**：Mac Paseo Desktop（Electron）会输出 GPU helper 错误日志，不影响功能，过滤即可。
+For an existing agent:
 
-### 方式 2：SSH + Hub 本地 Paseo CLI（中文 prompt / 查日志）
-
-复杂/中文 prompt 或查 agent 日志时用 SSH 更稳。
-
-```bash
-# 复杂 prompt：scp 文件 + SSH
-echo "你的任务描述..." > /tmp/prompt.txt
-scp /tmp/prompt.txt hub:/tmp/prompt.txt
-ssh hub 'paseo run --detach --provider claude/opus --mode auto --title "任务标题" --cwd /home/mcdowell/AgentWorkspace "$(cat /tmp/prompt.txt)"'
-
-# 简单英文 prompt 可内联
-ssh hub 'paseo run --detach --provider claude/opus --cwd /home/mcdowell/wb --title "task" "report status"'
-
-# 查 agent 日志（--host 可能无输出，SSH 更可靠）
-ssh hub 'paseo agent logs <agent-id>'
-
-# 后续交互
-ssh hub 'paseo send <agent-id> "后续指令"'
+```json
+{
+  "serverId": "<destination-server-id>",
+  "agentId": "<agent-id-returned-by-that-host>",
+  "prompt": "Continue the assigned task"
+}
 ```
 
-**适用**：中文内容、特殊字符 prompt、查看 agent 执行日志。
+## Fail-closed route repair
 
-### 方式 3：SSH 直接执行（无 Paseo）
+Run this on the daemon whose `list_hosts` is missing the destination. For Hub → Mac, the affected daemon is Hub.
 
-不经过 Paseo，直接调 agent CLI。
+1. **Resolve the current endpoint.** On the affected machine, use live Tailscale peer status to select the known Mac device and read its current address; on Mac itself, `tailscale ip -4` is also valid. Do not copy an address from this skill, guess one, scan a subnet, or probe unrelated ports.
+2. **Check the local daemon.** Run `paseo daemon status --json` on the affected machine and record its `serverId`.
+3. **Check one endpoint only.** Test TCP port 6767 at `<mac-tailscale-ip>` and then run:
 
-```bash
-# Claude Code 非交互
-ssh hub 'claude -p "任务描述"'
+   ```bash
+   paseo --host <mac-tailscale-ip>:6767 daemon status --json
+   ```
 
-# OpenCode 非交互
-ssh hub 'opencode run -m github-copilot/claude-sonnet-4.6 "任务"'
+   The remote daemon must return the expected Mac `serverId`. Network reachability without a matching daemon identity is not enough.
+4. **Inspect the affected registry.** Run:
 
-# 交互式终端
-ssh -t hub 'cd ~/wb && claude'
-```
+   ```bash
+   paseo host ls --json
+   paseo host inspect <registration-id> --json
+   ```
 
-**适用**：一次性命令、不需要 Paseo 管理的快速操作。
+   If the expected `serverId` already maps to the same endpoint and is enabled, do not add a duplicate.
+5. **Register only when absent.** If no record covers that verified `serverId` and endpoint, run on the affected daemon:
 
-### 方式 4：MCP 工具（仅查询）
+   ```bash
+   paseo host add <mac-tailscale-ip>:6767 --label macbook-pro
+   ```
 
-```bash
-mcp__paseo__list_agents       # 只能查本地 daemon
-mcp__paseo__get_agent_status  # 只能查本地 daemon
-```
+6. **Conflict means STOP.** If a label points to another `serverId`, the same `serverId` points to another endpoint, or CLI and remote daemon identity disagree, STOP. Do not delete, overwrite, disable, or automatically replace identity. Report the conflicting registration IDs and non-sensitive metadata for human resolution.
+7. **Verify twice.** Re-run `paseo host inspect <registration-id> --json`, then `list_hosts`. Require the expected `serverId`, endpoint, `enabled=true`, `status=online`, and no error before creating an agent.
 
-> ⚠️ **限制**：`mcp__paseo__create_agent` 等 MCP 工具只能操作**本地 Paseo daemon**，没有 host 参数。跨机器操作必须走 CLI `--host` 或 SSH。
+Never print or copy a registry connection key, authentication token, or credential field. Redact sensitive fields even when a CLI response includes them.
 
-## 反向通信：Hub → Mac（已验证）
+## No manual-prompt fallback
 
-Hub agent 遇到解决不了的问题时，可以把上下文交回 Mac 让用户接手。
+**禁止人工转发:** a missing route must not be downgraded to syncing files, asking the user to copy a prompt, or claiming that cross-machine delegation is unsupported. First repair the registry/route when the checks above prove the repair is safe and automatic. If identity conflicts or the exact endpoint cannot be verified, STOP with the specific blocker; do not invent a route.
 
-```bash
-# Hub 上执行：列出 Mac agents
-paseo agent ls --host 100.101.57.43:6767
+## CLI and terminal alternatives
 
-# Hub 上执行：给 Mac agent 发消息（交回问题）
-paseo send --host 100.101.57.43:6767 <mac-agent-id> "Hub 端遇到问题：<描述>，需要 Mac 端处理"
+- Paseo CLI `--host` may be used for a targeted daemon status check or when the fleet MCP surface is unavailable. It is not required once the destination is registered and visible to fleet tools.
+- `rift-remote-exec` is a fallback for Mac to run commands on a registered remote machine without an LLM. It is **not** a source of credentials for a Hub agent to open a reverse terminal on Mac.
+- SSH is an operational fallback only when separately configured and authorized. Do not infer SSH access from Paseo registration.
 
-# Hub 上执行：在 Mac 上创建新 agent 处理
-paseo run --host 100.101.57.43:6767 --detach --provider claude/opus --title "Hub 回传任务" --cwd /Users/mcdowell/wb "问题描述"
-```
+## File transfer
 
-**前提**：Mac Paseo daemon 监听 `0.0.0.0:6767`（`~/.paseo/config.json` 中 `daemon.listen`）。
-
-**适用场景**：
-- Hub agent 需要 Mac 本地工具（Xcode、浏览器调试等）
-- Hub agent 需要用户交互确认
-- Hub agent 遇到权限/网络等本地限制
-
-## 踩坑记录（⚠️ 必读）
-
-| # | 坑 | 正确做法 |
-|---|---|---|
-| 1 | `$HOME` 在 SSH 命令中被 Mac 端展开 | 硬写 `/home/mcdowell/...` 或用单引号 |
-| 2 | 中文 prompt 的引号/感叹号/括号在 SSH 里炸 | scp 文件到 Hub 再 `$(cat ...)` |
-| 3 | MCP create_agent 无 host 参数 | 用 CLI `--host` 或 SSH |
-| 4 | `paseo agent logs --host` 可能无输出 | 查日志走 SSH |
-| 5 | Electron 桌面版 GPU 错误日志刷屏 | 不影响功能，`grep -v` 过滤 |
-
-## Dufs 文件传输
-
-设备间传文件（APK、文档、截图等）：
+Agent routing and file transfer are separate. If an existing Dufs service is explicitly in scope, use placeholders or environment variables only:
 
 ```bash
-# 上传
-curl -u admin:hub2026 -T local-file.apk http://100.65.188.103:8899/
-
-# 下载
-curl -u admin:hub2026 -O http://100.65.188.103:8899/file.apk
-
-# 浏览器
-open http://100.65.188.103:8899
+curl --user "$DUFS_USER:$DUFS_PASSWORD" -T local-file http://<host>:<port>/
+curl --user "$DUFS_USER:$DUFS_PASSWORD" -O http://<host>:<port>/remote-file
 ```
+
+Do not place real endpoints or credentials in this skill, prompts, logs, or Paseo messages.
+
+## Common mistakes
+
+| Mistake | Correct response |
+|---|---|
+| Mac can see Hub, so Hub must see Mac | Registries are directional; inspect Hub's `list_hosts` separately. |
+| TCP succeeds, therefore the route exists | Verify remote daemon `serverId`, then inspect/add the host record on the affected daemon. |
+| A familiar label proves identity | Compare `serverId` and endpoint; any conflict is STOP. |
+| A remote workspace path can be guessed | Use `list_workspaces(serverId)` and pass the returned `workspaceId`. |
+| An `agentId` is globally unique context | Preserve and use `{serverId, agentId}` together. |
+| Missing route means the user must copy the task | Repair a safe missing registration first; never fall back to manual prompt forwarding. |
