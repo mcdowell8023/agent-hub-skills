@@ -18,6 +18,7 @@
 ```
 T0  免费档   按 FREE_POOL 的 priority 取第一个可用的（⭐ 登记表驱动，新增 / 下线免费模型⛔不改逻辑，只改数据，2026-09-29）
      ① cb/hy4flash-free @max                0.00x   🔴 2026-11-19 起 cb 唯一免费档（用户 /model 面板；hy3 已被服务端移出清单——此前探活成功=对旧 id 静默别名路由的假绿）；avoid 算法 / 性能 / 架构（承 hy3 先例）；⛔ 尚无独立盲评
+                                                 ⚠️ x0.00 ≠ 无限（有限额）：429 / 请求无响应 ⇒ rsw 切号恢复（`rsw status` → `rsw use codebuddy <槽>`，工具 github.com/mcdowell8023/agent-switch），别急着升档
      ② jd/joycode/JoyAI-Code-1.6 @none      **0x**    JoyCode v3 直连 shim（SKILL §3.2f，走 cli）；**2026-11-16 已实证 0x**（配额耗尽 remain=-20 时仍出 token、Δ=0）；avoid 算法 / 性能 / 架构；无思考档
      📜 ~~qcn/qfmodel~~                     0.10x   🔴 2026-11-19 移出免费池（qcn 无免费档，原 deepseek flash 0.10x）——付费按钱包规则仍可派
         ⚠️ 2026-10-26 实测 App `models` 清单只剩 `JoyAI-Code-1.6`（1.5 已不在菜单）；⭐ **2026-11-16 已复核 1.6 = 0x**（配额耗尽 remain=-20 时仍出 token、积分 Δ=0）⇒ 可当免费池用

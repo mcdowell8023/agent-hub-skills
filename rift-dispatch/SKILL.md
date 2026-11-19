@@ -108,7 +108,7 @@ n=1 时「全部失败」就是「这一个失败」，⛔ 推不出通道有问
 | 型号 | 免费期 | 当前状态 |
 |---|---|---|
 | ~~`stealth/space-bunny-alpha`~~ | OpenRouter 09-23 上架的隐身预览模型，截止从未公布 | 🔴 **2026-10-06 已下线**：探活 `HTTP 404 No endpoints found for stealth/space-bunny-alpha`，且 OpenRouter 公开 `/api/v1/models`（464 个模型）里已无任何含 `bunny` / `stealth` 的 id ⇒ 条目已从 FREE_POOL / WHITELIST / catalog 删除（用户 m07513 要求） |
-| `hy4flash-free` | 🔴 **2026-11-19 起接替 hy3 成唯一 cb 免费档**（用户 /model 面板 m11140：x0.00；`hy3` 已被服务端移出清单——探活假绿=静默别名路由） | ⭐ T0 priority **1**；⛔ 无公布截止 ⇒ 每次派发核 `rawUsage.credit`；盲评数据 ⛔ 无（承 hy3 先例 avoid 三项） |
+| `hy4flash-free` | 🔴 **2026-11-19 起接替 hy3 成唯一 cb 免费档**（用户 /model 面板 m11140：x0.00；`hy3` 已被服务端移出清单——探活假绿=静默别名路由）。⚠️ **x0.00 ≠ 无限**：有限额（429 / 请求无响应基本=限额），先用 rsw 切号恢复（`rsw status` → `rsw use codebuddy <槽>`；工具 https://github.com/mcdowell8023/agent-switch），别急着升档 | ⭐ T0 priority **1**；⛔ 无公布截止 ⇒ 每次派发核 `rawUsage.credit`；盲评数据 ⛔ 无（承 hy3 先例 avoid 三项） |
 | ~~`qfmodel`~~ | 🔴 **2026-11-19 移出免费池**（用户 m11140：qcn 无免费档，原 deepseek flash 0.10x） | catalog 保留条目标 paid；付费派发按钱包规则仍可用 |
 | ~~`hy4-preview`~~ | `08-28 ~ 09-10` 已过期 | 🔴 **2026-09-15 用户弃用：不稳定** ⇒ ⛔ 已移出 T0，不再考虑 |
 | ~~`hy3-x`~~ | ⛔ 本来就不是免费档（**0.05x**）。⚠️ 09-24 起它比 cb 上的 T1 落点 glm-5.3-flash(0.06x) 还便宜一点，但⛔**不同档**（同轮 08-21 盲评 hy3 84 < glm 91，差距远大于位置偏好 2.5）⇒ 先选档位再挑便宜，轮不到它 | 🔴 **无派发角色** ⇒ ⛔ 不考虑 |
@@ -116,7 +116,7 @@ n=1 时「全部失败」就是「这一个失败」，⛔ 推不出通道有问
 ⚠️ **cb 的 hy 系**是**每日赠额**⛔非连续免费期 —— **不回复 = 当日赠额已用完**，须主动换。
 📜 旧规则（Space Bunny 还活着时）：「迟迟不回⛔ 不能当成耗尽，先看有没有 429 / 探活」——
 它的额度耗尽是明确 429（OpenRouter 20 次/分 · 50 次/天）、且本来就慢（实测 150–400s/题）。
-🔴 免费池（11-19 起）= **cb 的 hy4flash-free** + **joycode/JoyAI-Code-1.6**；qcn 无免费档。
+🔴 免费池（11-19 起）= **cb 的 hy4flash-free** + **joycode/JoyAI-Code-1.6**；qcn 无免费档。⚠️ 免费档都**有限额**：cb 免费撞限额（429 / 无响应）时用 rsw 切号恢复（前提多账号已配），JoyAI 0x 不占积分不存在限额问题。
 🔴 **判据永远是探活 + `promo_active`，⛔ 不是面板上的 `x0.00`** —— 那是价格；
 赠额耗尽后价格仍显示 0，表现是**排队 / 不回复**而⛔不是报错。
 ⭐ **T0 是一张登记表（`FREE_POOL`，2026-09-29 起）**—— 新增 / 下线免费模型**⛔ 不改挑选逻辑**，改的都是数据：
@@ -460,6 +460,11 @@ FREE_POOL = [
    # 🔴 2026-11-19 起 cb 免费档换成 hy4flash-free（hy3 被服务端移出清单，别名路由假绿）；thinking 承 hy3 先例取 `max`。
    #    freeUntil=None（🔴 用户 /model 面板 m11140：x0.00 且无公布截止；📜 hy3 时代的 10-31 窗口已随该 id 下线作废）
    #    ⇒ 窗口之外还有 creditRecord 新鲜度闸门（⛔ 2027-06 用例已证：不给新鲜复核记录照样落 T1）。
+   #    🔴 **x0.00 ≠ 无限**（用户 m11725 定性）：cb 免费档**有限额**，限额特征 = 429 限流 / 请求发出无响应（发出去没反应基本就是限额）。
+   #       命中限额不要急着升档 —— 先用 **rsw 切号**恢复（前提：本机已装 rsw 且配好多账号槽）：
+   #       `rsw status` → `rsw use codebuddy <另一个槽>` → 重探 `probe-models.sh codebuddy-code/hy4flash-free`。
+   #       工具/多账号配置：https://github.com/mcdowell8023/agent-switch（本机 `~/.local/bin/rsw`，v1 支持 codebuddy/qoder-cn）。
+   #       切号后原账号进冷却；⛔ 切号是恢复手段，不是免冷却借口 —— 当轮派发记录仍要写明「限额 → 切号 <槽>」。
    # 📜 2026-10-01 CodeBuddy&混元官方公告（原 hy3 的 10-31 窗口）随 hy3 下线一并作废。
    # ⚠️ **`max` 只验证了「被接受」，⛔ 没验证「想得更多」** —— 同一道推理题实测
    #    `minimal` 1384 / `high` 1130 / `max` **653** reasoning_tokens，非单调（与 `-0731` 六档空转同形）。
