@@ -22,7 +22,7 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 | # | 规则 | 落点 |
 |---|---|---|
 | 0 | 🔴🔴 **本地用户策略压过一切**（2026-10-10，§3.2g） | 优先级 **本地策略 > 内置决策树（§2）> 模型自主**。派发前先跑 `python3 scripts/local-policy.py --cwd <工作目录>`：命中规则 ⇒ **只许**规则 `allow` 里的落点（例：公司目录只用 Claude + 此刻确实免费的免费池），免费池拿不到 ⇒ 跳过付费阶梯直接走规则的 `fallback`；⛔ 连探活都不碰付费落点（探活 = 花钱）。规则文件在仓库外（`~/.config/rift-dispatch/policy.local.json`），⛔ 不进仓库；没有文件 ⇒ 下面 1–4 照常 |
-| 1 | **便宜优先，逐级升档** | 免费池（**`FREE_POOL` 登记表**：hy3@max → qfmodel → joycode/JoyAI-Code-1.5（GUI 桥接，至 11-06，10-10 起），逐条按条目判，09-29 起；📜 原 priority 1 的 Space Bunny 2026-10-06 已下线删除）先试 → 付费从 **`deepseek-v4.1-flash`**（火山两套餐 + 百炼；🔴 **cb 上改用同档 `glm-5.3-flash` 0.06x** —— 09-24 cb 的 v4.1 涨到 0.11x）起步 → `deepseek-v4-flash`（0.17x）→ `qwen3.8-max` → `kimi-k3-1`（1.62x）。⛔ **每一级【质量/成本升档】的唯一入口是「上一档已在本任务做砸过一轮」**，理由里要写明哪一轮、砸在哪。写不出来不许升。⚠️ 这条⛔**不管【可用性换档】**——模型在所有 provider 都拿不到时允许向上换档（必须报告），见 §2 第 5 段。⚠️ 例外：`algorithm` / `perf` 两类从 `deepseek-v4-flash` 起步（⚠️ 依据比的是 v4-flash **对 glm**，⛔ 没比过现在的 T1 ⇒ **待补测**）。🔴 并发两类已改回 T1 起步 —— 4 臂拉丁方并发题 v4.1-flash 37.5 > v4-flash 30.5 |
+| 1 | **便宜优先，逐级升档** | 免费池（**`FREE_POOL` 登记表**：hy3@max → qfmodel → joycode/JoyAI-Code-1.6（**2026-11-15 起走 JoyCode.app 本地代理 + shim**；⭐ **2026-11-16 已实证 0x** —— 配额耗尽 remain=-20 时仍连跑 3 次出 token、Δ=0，同 provider 其余四个全部 insufficient_quota ⇒ 可当免费档用），逐条按条目判，09-29 起；📜 原 priority 1 的 Space Bunny 2026-10-06 已下线删除）先试 → 付费从 **`deepseek-v4.1-flash`**（火山两套餐 + 百炼；🔴 **cb 上改用同档 `glm-5.3-flash` 0.06x** —— 09-24 cb 的 v4.1 涨到 0.11x）起步 → `deepseek-v4-flash`（0.17x）→ `qwen3.8-max` → `kimi-k3-1`（1.62x）。⛔ **每一级【质量/成本升档】的唯一入口是「上一档已在本任务做砸过一轮」**，理由里要写明哪一轮、砸在哪。写不出来不许升。⚠️ 这条⛔**不管【可用性换档】**——模型在所有 provider 都拿不到时允许向上换档（必须报告），见 §2 第 5 段。⚠️ 例外：`algorithm` / `perf` 两类从 `deepseek-v4-flash` 起步（⚠️ 依据比的是 v4-flash **对 glm**，⛔ 没比过现在的 T1 ⇒ **待补测**）。🔴 并发两类已改回 T1 起步 —— 4 臂拉丁方并发题 v4.1-flash 37.5 > v4-flash 30.5 |
 | 2 | 🔴 **按「要不要看得见」分通道，不是按工具分** | 🔴 **开发实施类 + 大审查 → Paseo；短任务 / 短审查 → `pi -p`；⭐ 审查（大/短审查）2026-10-06 起统一走 CLI `codex exec`（见 #4 与 §3.2c）**。⭐ **例外（2026-10-10）：GUI 桥接渠道（`joycode` / `trae-cn`）一律走桥接 CLI**（§3.2f）—— 它们没有 Paseo provider，可见性来自桌面 App 界面本身。判据是**规模**不是任务类型——Paseo 能看进度、中途干预、拿结构化状态；`pi -p` 跑完即退不堆 serve。⛔ **开发任务和大审查都不要走 `pi -p`**：它不进 Paseo agent 列表，你看不见也打不断（实测大审查走 `pi -p` 跑满 35 分钟零输出 ⚠️ 09-24 起**疑似 stdin 挂死**而非规模问题，见 §3.2b —— 当时未查 stdin，未复测） |
 | 3 | 🔴 **先判失败形态，再决定换什么** | **有产出但不合格** = `bad_output` ⇒ 走【质量/成本升档】（可换模型族）。**没产出**（静默停 / 唤不醒 / 探活不过）= `no_response` ⇒ 走【可用性】：**留在同 provider 降到下一档**，⛔ 不算做砸、⛔ 不跨钱包。⚠️ hy4 经常「碰墙」——允许你用但派发后静默停，**Paseo 抓不到明确错误** ⇒ ⛔ 别把它当成模型能力问题 |
 | 4 | 🔴 **审查的硬约束是「异构」** | ⛔ **评审模型族 ≠ 实施模型族**（全局红线 #8），是**不变量**，不是针对某个模型的禁令。🔴 **含主会话：主会话就是 Claude，我自己写的东西不得派 `claude/*` 去审**。族对照表见 routing §5。⭐ **未显式指定时**默认 **`codex`**（⭐ 2026-10-06 起；模型取 `~/.codex/config.toml` 的 `model`，实测 `gpt-5.6-sol`，可用 `RIFT_REVIEW_MODEL` 覆盖；⛔ 不是「不可覆盖」，显式换 provider 会报冲突）。⚠️ **通道统一走 CLI** `codex exec`（大/短审查同通道——Paseo 的 codex provider `out of credits`，⛔ copilot 全族 2026-10-06 已死）。🔴 codex 撞额度 ⇒ 按 §3.2c 降级阶梯换异族，**显式记录并告知用户** |
@@ -211,9 +211,17 @@ WHITELIST = {                                   # P0，routing §1
   # ⭐ 2026-10-10 GUI 桥接通道（§3.2f）：型号 id 一律带命名空间 `joycode/…` `trae/…`
   #    —— 两边都有 GLM-5.3 / MiniMax-M3，裸名会让 S:948 合成池同时命中两家（计划审查 #4）。
   #    派发时 bridge_command() 去掉前缀再交给桥接 CLI。清单以桥接 `models` 命令实时结果为准。
-  'joycode':          ['joycode/JoyAI-Code-1.5',   # 0x 免费（T0 priority 3，见 FREE_POOL）
-                       'joycode/GLM-5.3', 'joycode/Kimi-K2.6', 'joycode/MiniMax-M3',
-                       'joycode/Doubao-Seed-2.0-pro'],   # 后四个扣 JoyCode 月积分；⛔ 只能显式派
+  # 🔴 2026-11-15 起 JoyCode 通道换底座：IDE 版已卸载，改走 JoyCode.app（CLI 版）的本地代理 +
+  #    `~/AgentWorkspace/configs/joycode-shim/joycode-dispatch.mjs`（OpenAI 兼容 shim，常驻 LaunchAgent）。
+  #    1.5 已从模型目录消失（2026-11-15 `models` 实测只剩 5 个），本条已删。
+  # 🔴 2026-11-16 实测（配额耗尽判别法，见 catalog freePool creditRecord）：
+  #    JoyAI-Code-1.6 = 唯一 0x（积分耗尽仍可用）⇒ 进 FREE_POOL；
+  #    GLM-5.3 / Kimi-K2.6 / MiniMax-M3 / Doubao-Seed-2.0-pro 四个都吃积分，账号积分已于 11-16 耗尽
+  #    （remain=-20，套餐有效期至 2026-12-14）⇒ 当前派发一律 insufficient_quota，⛔ 只能显式派且预期失败。
+  #    GLM-5.3 另已在 shim 层硬禁用（JOYCODE_SHIM_DISABLED_MODELS 默认值，请求返 400 model_disabled），故从白名单移除。
+  'joycode':          ['joycode/JoyAI-Code-1.6',   # ⭐ 0x 已实证（2026-11-16），T0 免费池 priority 3
+                       'joycode/Kimi-K2.6', 'joycode/MiniMax-M3',
+                       'joycode/Doubao-Seed-2.0-pro'],   # 这三个扣 JoyCode 月积分（现已耗尽）；⛔ 只能显式派
   'trae-cn':          ['trae/Seed-Evolving', 'trae/Seed-2.1-Pro-0915', 'trae/Seed-2.1-Turbo', 'trae/Seed-Code',
                        'trae/MiMo-V2.6-Flash', 'trae/MiMo-V2.6-Pro', 'trae/Step-5-Preview',
                        'trae/GLM-5.3-FlashX', 'trae/GLM-5.3-Flash', 'trae/GLM-5.3', 'trae/GLM-5.2',
@@ -223,8 +231,9 @@ WHITELIST = {                                   # P0，routing §1
                       # ⬆ 全部扣 Trae 月积分（倍率随时段变）；⛔ 只能显式派。⚠️ 写成字面列表：CC 按字面解析白名单
 }
 # 🔴 GUI 桥接通道（2026-10-10，§3.2f）：驱动本机桌面 App 的 CLI，⛔ 不是 Paseo provider ⇒ 收尾强制 channel='cli'
+#    2026-11-15：joycode 改走 JoyCode.app（CLI 版）本地代理 + OpenAI 兼容 shim（IDE 已卸载）。
 GUI_BRIDGE_UPSTREAMS = {'joycode', 'trae-cn'}
-GUI_BRIDGE_CLI = {'joycode': 'node ~/AgentWorkspace/configs/joycode-bridge/joycode-dispatch.mjs',
+GUI_BRIDGE_CLI = {'joycode': 'node ~/AgentWorkspace/configs/joycode-shim/joycode-dispatch.mjs',
                   'trae-cn': 'node ~/AgentWorkspace/configs/trae-bridge/trae-dispatch.mjs'}
 # TRAE 每个型号支持的思考档（rift id：轻=low 高=high 极高=xhigh）—— 2026-10-10 `trae-dispatch.mjs models` 实测（Trae 3.4.2）。
 # ⛔ 不在表里 = 无思考档（自动进 NO_THINKING_MODELS）。Trae 升级后先跑 models 核对。
@@ -471,10 +480,14 @@ FREE_POOL = [
    # avoid perf：⭐ 2026-10-02 agent 自行定下（⛔ 非待决，改回只需删这一项）—— perf 无任何模型的实测；推导：付费阶梯对 perf 跳过 T1、
    #    从 T2 起步（见 ENTRY），比 T1 还弱的免费模型更不该接（审查 r2 也指出只挡 algorithm 会让 perf 落到它）；
    #    架构题（Kafka 34.0 / 35.5）与其余臂同档 ⇒ ⛔ 不扩大到 architecture
-  {'upstream': 'joycode', 'model': 'joycode/JoyAI-Code-1.5', 'priority': 3,
+  {'upstream': 'joycode', 'model': 'joycode/JoyAI-Code-1.6', 'priority': 3,
    'freeUntil': '2026-11-06T23:59', 'thinking': None, 'multimodal': False,
    # ⭐ 2026-10-10 接入（GUI 桥接，§3.2f）：JoyCode 模型菜单标 0x；用户账号「团队版（限免）有效期至 2026年11月6日」（用户截图）。
    #    🔴 给了明确截止 ⇒ 不走 ⑬ 的计费探测；过期后由 t0_still_free 把关（窗口之后 7 天内核到 credit=0 才续用，否则自动退出）。
+   #    🔴 2026-11-16：1.5 已从模型目录消失，条目 id 改为 1.6；`freeUntil` 名义上仍是过去的日期，但 creditRecord 已于
+   #       2026-11-16 用「配额耗尽仍可用」判别法复核 credit=0.0（remain=-20 时 1.6 连跑 3 次全部出 token、Δ=0，
+   #       Kimi/MiniMax/Doubao/GLM-5.3 四个全部 insufficient_quota）⇒ t0_still_free 通过，1.6 可当免费档用。
+   #       ⛔ 别只看 Paseo 的 `CostUsd $0.00` —— 那是 Paseo 对自定义 provider 的恒零记账，不是 JoyCode 积分证据。
    'avoidTaskTypes': {'algorithm', 'perf', 'architecture'}, 'cautionTaskTypes': set(),
    # avoid 三项照 hy3 先例：⛔ 还没有盲评数据，先保守。caution 不写 review：review 在 §3 就分流走了，到不了 T0。
    'retainsData': True, 'allowInSensitiveWorkspace': True},
@@ -1208,6 +1221,7 @@ print_summary()                                      # §7
 | **大审查**（多文件 / 读大量源 / 预计 20+ 工具调用） | ⭐ **`codex exec` CLI（后台跑 + 输出落文件）** | 🔴 2026-10-06 起审查**全走 CLI**：Paseo 的 codex provider `out of credits`（实测）、copilot 全族已死 ⇒ 没有可用的 Paseo 审查 provider。可见性用后台 + 日志文件补偿 |
 | **短任务**（单文件、明确问题、只读分析、短审查） | `pi -p` CLI（实施侧）/ `codex exec`（审查侧） | 跑完看结论就行，省机器不堆 serve |
 | **兜底** | `opencode` 🔻 | 无常规用途，仅前面都不可用时 |
+| **JoyCode 通道的客户端分工**（🔴 2026-11-19 用户定案） | **扣积分/套餐型模型 → pi**（`pi -p --model joycode/Kimi-K2.6|MiniMax-M3|Doubao-Seed-2.0-pro`，shim 127.0.0.1:18888/v1）；**纯免费模型 → opencode**（`opencode run --model joycode/JoyAI-Code-1.6`） | 用户规则：pi agent 配购买套餐/消耗积分的消耗型模型，opencode 只跑免费模型。opencode 侧 joycode provider 已只留 JoyAI-Code-1.6（Kimi/MiniMax/Doubao 三条已从 opencode 配置与 Paseo profile 移到 pi，2026-11-19 实测两端全通）。 |
 | **GUI 桥接渠道**（upstream ∈ `GUI_BRIDGE_UPSTREAMS` = `joycode` / `trae-cn`，2026-10-10） | ⭐ **桥接 CLI**（§3.2f，执行 §2 收尾算出的 `bridge_argv`；后台跑 + 输出落文件） | 驱动本机桌面 App，⛔ 没有 Paseo provider（规模判成 paseo 会报 unknown provider）；可见性来自 App 界面本身（JoyCode / Trae 窗口里实时看得到任务） |
 
 ⚠️ **本表 2026-09-08 修正**：原先把「审查类」整类钉给 `pi -p`，理由写的是「审查不需要盯」。
@@ -1233,9 +1247,9 @@ copilot 凭据被删、Paseo codex provider 撞额度后，Paseo 侧没有可用
 
 | 输入 | 期望结果 |
 |---|---|
-| `core` 任务，hy3 / qfmodel 都冷却 | ⭐ 落 T0 第 3 位 `joycode/joycode/JoyAI-Code-1.5`，channel=`cli`，thinking=None，`bridge_argv` 带 `--model JoyAI-Code-1.5` |
+| `core` 任务，hy3 / qfmodel 都冷却 | ⭐ 落 T0 第 3 位 `joycode/JoyAI-Code-1.6`（0x 已于 2026-11-16 实证），channel=`cli`，thinking=None，`bridge_argv` 带 `--model JoyAI-Code-1.6` |
 | `algorithm` 任务，hy3 / qfmodel 都冷却 | ⛔ 不落 joycode（avoid 同 hy3）|
-| JoyCode 免费期（11-06）之后、无窗口后复核 | ⛔ 不落 joycode（过期自动退出免费池）；窗口后 7 天内核到 credit=0 ⇒ 仍可落 |
+| JoyCode 免费期（11-06）之后、无窗口后复核 | ✅ 落 joycode（2026-11-16 已核 credit=0.0，见 catalog creditRecord）；复核过期后按 `t0_still_free` 自动退出 |
 | `--provider joycode --model joycode/GLM-5.3` | channel=`cli`，⛔ 不传思考档，argv `--model GLM-5.3` |
 | `--provider joycode --model GLM-5.3`（裸名） | ⛔ 白名单冲突 —— 必须带命名空间 |
 | `--provider trae-cn --model trae/GLM-5.3-Flash` | channel=`cli`，默认 xhigh ⇒ argv `--thinking xhigh`（=极高） |
@@ -1583,8 +1597,8 @@ codebuddy -p --output-format json --model <m> --tools "" "<prompt>" > out.json
 | `pi/volcengine-*/kimi-k2.7-code` | ⚠️ `thinkingOptions` 为 `null` | ⛔ 不要传 |
 | ~~`openrouter-free/stealth/space-bunny-alpha`~~（📜 2026-10-06 下线） | ⚠️ 无映射表（pi 按默认处理，⛔ 未验证 pi 实际往请求里塞了什么）。服务端支持参数含 `reasoning` / `reasoning_effort`（OpenRouter 公开 models API） | ⚠️ 09-29 bench 是**直连 API** `reasoning.effort=high`，⛔ 不是经 pi |
 | `qoderclicn/qfmodel` | ⛔ **无思考档**（`NO_THINKING_MODELS`）⇒ 一个档位字段都不传 | ✅ 09-24 bench |
-| `joycode/*`（5 个型号，§3.2f） | ⛔ **无思考档**（JoyCode agent 请求不带 thinking 参数）⇒ 自动进 `NO_THINKING_MODELS`，桥接 `--thinking` 只认 `default` | ✅ 2026-10-10 读源码 + e2e |
-| `trae/*`（20 个型号，§3.2f） | 🔴 **按型号不同**，见 §2 `TRAE_THINKING`（rift id `low`=轻 `high`=高 `xhigh`=极高）：三档 10 个 · 轻/高 4 个 · 高/极高 1 个（GLM-5.2）· 无档 5 个（自动进 NO_THINKING）。收尾由 `clamp_bridge_thinking()` **只降不升**再折一次，无可降 ⇒ 停 | ✅ 2026-10-10 `trae-dispatch.mjs models` 实测（Trae 3.4.2） |
+| `joycode/*`（**4 个型号，2026-11-16 实测清单 = `JoyAI-Code-1.6` / Kimi-K2.6 / MiniMax-M3 / Doubao-Seed-2.0-pro**；GLM-5.3 已被用户要求禁用并在 shim 层移除，§3.2f） | ⛔ **无思考档**（JoyCode agent 请求不带 thinking 参数）⇒ 自动进 `NO_THINKING_MODELS`，桥接 `--thinking` 只认 `default`（传 `max` 实测 exit 5：`JoyCode has no thinking levels (got max)`） | ✅ 2026-10-10 读源码 + e2e；2026-10-26 复核清单 |
+| `trae/*`（**2026-10-26 实测菜单 23 项**，§3.2f） | 🔴 **按型号不同**，见 §2 `TRAE_THINKING`（rift id `low`=轻 `high`=高 `xhigh`=极高）：三档 10 个 · 轻/高 4 个 · 高/极高 1 个（GLM-5.2）· 无档 **7** 个（`Auto Mode` / Seed-Evolving / Kimi-K3.1-Pro / MiMo-V2.6-Flash / MiMo-V2.6-Pro / MiniMax-M3 / Qwen3.7-Plus，自动进 NO_THINKING）。收尾由 `clamp_bridge_thinking()` **只降不升**再折一次，无可降 ⇒ 停 | ✅ 2026-10-10 `trae-dispatch.mjs models`（Trae 3.4.2）；2026-10-26 复核：菜单新增 `Kimi-K3.1-Pro` / `MiniMax-M3.1-Flash`，⛔ `TRAE_THINKING` 表与 `trae-cn` 白名单当时尚未收录这两个 |
 | ~~claude 系~~ | ⛔ 已从 pi 的 Copilot 通道移除（§3.2c）；Paseo 派 `claude/*` 时是 `low`/`medium`/`high`/`max` | — |
 
 🔴 **读法**：`thinkingLevelMap` 里 **value 为 `null` 就是不支持该档**，⛔ 不要只看 key。
@@ -1629,9 +1643,14 @@ agent-plan = **0 / 165**。⛔ 那条结论的主语是**客户端**不是 provi
 
 ### 3.2f GUI 桥接通道（JoyCode / TRAE）—— 2026-10-10
 
-用途：**叠加额度**。用户的 JoyCode、Trae CN 桌面版有每月积分（JoyCode 的 `JoyAI-Code-1.5` 还不扣积分），
+用途：**叠加额度**。用户的 JoyCode、Trae CN 桌面版有每月积分（JoyCode 早年 `JoyAI-Code-1.5` 还不扣积分；⚠️ 2026-10-26 起菜单只剩 `JoyAI-Code-1.6`，**1.6 计费状态未复核** ⇒ 派前按 §A 的 `models` 看倍率），
 但两家都**没有**给个人账号的 API / CLI / ACP（TRAE CLI 仅企业旗舰版；JoyCode「积分仅限 JoyCode 使用」）。
 ⇒ 用本机桥接 CLI **驱动官方桌面 App**（⛔ 不碰登录凭据、⛔ 不是 2api 代理）。
+
+🔴 **2026-11-15 底座变更（重要）**：`JoyCode IDE.app` 已卸载，旧的 drop-in 扩展桥接（`configs/joycode-bridge/`）**整体废弃**。
+现在 joycode 通道 = `JoyCode.app`（CLI 版）自带的本地 responses 代理 + `scripts/joycode/joycode-openai-shim.mjs`
+（OpenAI 兼容，常驻 LaunchAgent `com.mcdowell.joycode-shim`，监听 `0.0.0.0:18888`）+ `configs/joycode-shim/joycode-dispatch.mjs`（argv 契约不变）。
+⇒ 仍然**没有**官方 CLI/API，仍属「驱动官方桌面 App」，仍不是 Paseo provider。
 
 🔴 **它们不是 Paseo provider** ⇒ §2 收尾 `channel='cli'`，执行体是 `bridge_argv = bridge_command(upstream, model, thinking)`。
 🔴 **型号 id 带命名空间**：`joycode/<label>`、`trae/<名称>`（两家都有 GLM-5.3 / MiniMax-M3）。调用方 `--model` **必须传全限定名**，
@@ -1644,6 +1663,24 @@ agent-plan = **0 / 165**。⛔ 那条结论的主语是**客户端**不是 provi
   🔴 Trae 的审批只拦终端命令 —— 实测跳过 `rm` 后它改用内置删除工具照删。
 - 用户协议（两家 §5.2）字面禁止「自动化程序接入」⇒ **低频、真实开发任务、⛔ 不整夜循环**。
 - prompt 会进两家服务端（`retainsData`）。
+
+#### A. 30 秒自检（⛔ 每一步派发前先跑，别跳过）
+
+两个桥的**失败永远只出现在桌面 App 侧**，桥接脚本本身从不崩 —— 它一律返回结构化 JSON（`ok:false` + `error`）+ 上表退出码。
+⇒ **排障第一步永远是 `status`，⛔ 不是读脚本、不是重装扩展。**
+
+```bash
+node ~/AgentWorkspace/configs/joycode-shim/joycode-dispatch.mjs status
+node ~/AgentWorkspace/configs/trae-bridge/trae-dispatch.mjs    status
+```
+
+| 桥 | `ok:true` 成功形态（2026-10-26 实测原文） | 失败形态 → 去做什么 |
+|---|---|---|
+| JoyCode | `{"ok":true,"mode":"cli-proxy","proxy":"http://127.0.0.1:55735","proxyListening":true,"autostart":true,"models":["JoyAI-Code-1.6","GLM-5.3-agent","Kimi-K2.6-agent","MiniMax-M3-agent","Doubao-Seed-2.0-pro-agent"],"error":null}`（2026-11-16 实测原文） | `{"ok":false,…,"proxyListening":false}` ⇒ JoyCode.app 没在跑（端口无人监听）⇒ **不用手动拉起**，下一次 `ask` 会懒启动它（见 B-2）。`ok:false` 且 `error` 含 `joycode log not found` ⇒ `~/.joycode/logs/joycode-app.log` 不存在，JoyCode.app 从未启动过 ⇒ 手工 `open -g -a /Applications/JoyCode.app` 一次。 |
+| Trae CN | `{"ok":true,"target":"trae-probe","composer":true,"approval":null,"turnCount":0,"lastStatus":"","lastFinished":null}` | `{"ok":false,"error":"CDP endpoint unreachable: http://127.0.0.1:39240 (ECONNREFUSED)"}` ⇒ **App 没在跑**（端口无监听）⇒ 走 B-1。`…"no Trae IDE window open (open a workspace folder in IDE mode)"` ⇒ App 开着但没有 IDE 窗口带工作区。`…"several Trae IDE windows open; pass --target"` ⇒ 开了多个窗口，JSON 的 `windows` 给你名字清单 ⇒ 加 `--target <名字>`。 |
+
+🔴 **`status` 里的 `target` 是窗口标题**（不是路径）；多窗口时必须把这个值原样传给 `--target`。
+🔴 JoyCode 的 `status.json` 里 `targetCommandVisible: false` **不代表不可用** —— 实测该字段为 false 时 `ask` 仍然成功 ⇒ ⛔ 别拿它当闸门。
 
 **执行步骤**
 1. 把 §4 的派发 prompt 写进文件 `F`（例：`~/AgentWorkspace/sessions/<id>/dispatch-prompt.md`）。
@@ -1660,18 +1697,18 @@ agent-plan = **0 / 165**。⛔ 那条结论的主语是**客户端**不是 provi
 | 5 | 型号 / 思考档 / Max 不可用（**在新建任务之前就预检出来，App 界面不动**），或实际型号 ≠ 请求 / 指定了型号却无法从日志证实（JoyCode） | 跑 `models` 看实时清单，重选；⛔ 别静默换型号 |
 | 64 | 用法错误 | 修参数 |
 
-#### `joycode`（JoyCode 桌面版，京东）
+#### `joycode`（JoyCode CLI 版 `JoyCode.app`，京东）
 
-- **前置**：JoyCode 开着 + drop-in 扩展已装（`bash ~/AgentWorkspace/configs/joycode-bridge/install.sh --install` 后重启 JoyCode）+ 窗口打开了工作区。
-  自检：`node ~/AgentWorkspace/configs/joycode-bridge/joycode-dispatch.mjs status`
-- **调用**：`node ~/AgentWorkspace/configs/joycode-bridge/joycode-dispatch.mjs ask --prompt-file F --timeout 1800 --model <label>`
-- **查型号**：`node ~/AgentWorkspace/configs/joycode-bridge/joycode-dispatch.mjs models`（走扩展 API，⛔ 不发任务、不花积分）
-- **切模型**：`--model <label>`（例 `JoyAI-Code-1.5`、`GLM-5.3`）。只切不发：`… select --model <label>`。
-  选择会**保留**（下次不带 `--model` 沿用）。输出 `model.verified`：`match` = JoyCode.log「模型路由结果」（派发 → 完成的时间窗内）证实实际就是它；`mismatch` / `unverified` ⇒ exit 5（指定了型号就必须证实）。
-  ⛔ 改设置项 `JoyCode.config.chatModel` **无效**（实测），桥接用的是 `joycoder.getSidebarProvider` → `updateModelConfig`。
+- **前置**：`JoyCode.app`（`CFBundleIdentifier com.joycode.cli`，v0.7.0+）已安装；`~/Library/LaunchAgents/com.mcdowell.joycode-app.plist` 负责开机自启；`com.mcdowell.joycode-shim` 常驻 `0.0.0.0:18888`。
+  自检：`node ~/AgentWorkspace/configs/joycode-shim/joycode-dispatch.mjs status`
+- **调用**：`node ~/AgentWorkspace/configs/joycode-shim/joycode-dispatch.mjs ask --prompt-file F --timeout 1800 --model <label>`
+- **查型号**：`node ~/AgentWorkspace/configs/joycode-shim/joycode-dispatch.mjs models`（读 shim 的 `/v1/models`，⛔ 不发任务、不花积分）
+- **切模型**：`--model <label>`（例 `JoyAI-Code-1.6`、`GLM-5.3`；⚠️ label 取 §A `models` 的实时清单）。只切不发：`… select --model <label>`。
+  输出 `model.verified`：`match` = 上游回包的 `model` 与请求一致；`mismatch` / `unverified` ⇒ exit 5。
+  ⛔ 不要直连 JoyCode 官方网关（`api-ai.jd.com` / `joycode-api-inner.jd.com`）—— 本账号一律 `AI_GRAY_ACCESS_DENIED`；也不要用 CLI 版本地代理的 `stream:false` 或 `/v1/chat/completions` 裸调（前者被拒、后者 401，必须带 `ptKey` 头）。shim 已经把这些差异封在里面。
 - **切思考**：⛔ **JoyCode 没有思考档**。`--thinking` 只认 `default`，其他值 exit 5；rift 收尾 thinking=None（NO_THINKING）⇒ argv 不带 `--thinking`。
-- **型号与费用**：`joycode/JoyAI-Code-1.5` **0x**（T0 priority 3，至 2026-11-06）· `GLM-5.3` 0.6x · `Kimi-K2.6` 0.5x · `MiniMax-M3` 0.4x · `Doubao-Seed-2.0-pro` 0.4x（扣月积分 1 万）。后四个⛔只能显式派。
-- 详细：`~/AgentWorkspace/configs/joycode-bridge/README.md`
+- **型号与费用**（2026-11-16 实证）：`joycode/JoyAI-Code-1.6` = **唯一 0x**（积分耗尽仍可用；判别法见 catalog `creditRecord`）· `Kimi-K2.6` 0.5x · `MiniMax-M3` 0.4x · `Doubao-Seed-2.0-pro` 0.4x —— 这三个都吃月积分，且账号 1 万积分**已于 2026-11-16 耗尽**（remain=-20，套餐有效期至 2026-12-14）⇒ 当前派发一律 `insufficient_quota`，⛔ 别派。`GLM-5.3`（0.6x）用户 2026-11-16 明确要求禁用，且已在 shim 层硬禁用（`JOYCODE_SHIM_DISABLED_MODELS`，请求返 400 `model_disabled`）⇒ 从白名单移除。
+- 详细：`~/AgentWorkspace/scripts/joycode/README.md`；跨机部署（wb-hub 等）：`https://github.com/mcdowell8023/joycode-openai-bridge`
 
 #### `trae-cn`（Trae CN 桌面版，字节）
 
@@ -1683,11 +1720,155 @@ agent-plan = **0 / 165**。⛔ 那条结论的主语是**客户端**不是 provi
 - **切模型**：`--model <名称>`（例 `GLM-5.3-Flash`、`DeepSeek-V4.1-Flash`、`Kimi-K3`）；只切不发：`… select --model <名称>`。输出 `model` 是从界面读回的实际值。
 - **切思考**：`--thinking` 收 rift id `low` / `high` / `xhigh`（= 轻 / 高 / 极高；也收中文）。
   rift 收尾先按 §2 `TRAE_THINKING`（实测表）`clamp_bridge_thinking()` **只降不升**：`max`⇒`xhigh`、`medium`⇒`low`，没有 ≤ 请求值的档 ⇒ 停；
-  无档位型号（MiMo / MiniMax-M3 / Seed-Evolving / Qwen3.7-Plus）⇒ 不传。档位是**跟型号保存**的，Trae 会记住。
+  无档位型号（2026-10-26 实测 7 个：`Auto Mode` / Seed-Evolving / Kimi-K3.1-Pro / MiMo-V2.6-Flash / MiMo-V2.6-Pro / MiniMax-M3 / Qwen3.7-Plus，权威表见 §2 `TRAE_THINKING`）⇒ 不传。档位是**跟型号保存**的，Trae 会记住。
   `--max-context on` = 1M 上下文（更耗积分），只在确有长任务时开。
 - **审批**：默认 `--approve none` ⇒ 遇审批 exit 3；`--approve terminal` 只点「是否允许运行这个命令」面板的「运行」，其他面板一律停。
 - **费用**：全部扣 Trae 月积分（10-10 余额 1,9xx；每日签到 +100）。⛔ 不进任何自动池，只能显式派。
+- **多窗口**：`status` / `ask` / `models` 都收 `--target <窗口标题>`（值 = `status` 输出里的 `target`）。开着一个以上 IDE 窗口时不传 ⇒ exit 2 并列 `windows` 清单。
 - 详细：`~/AgentWorkspace/configs/trae-bridge/README.md`
+
+#### B. 恢复手册（App 侧坏了，桥本身没坏）
+
+🔴 **先记住一条**：两条桥的恢复**都只需要 App 侧动作**，⛔ 不要动扩展目录、⛔ 不要重装、⛔ 不要改脚本。
+下面的命令都是 2026-10-26 在本机**真跑验证过**的（含失败形态原文）。
+
+**B-1 Trae CN 恢复（三步，缺一不可）**
+
+```bash
+# ① 确认 App 真的没在跑（CDP 端口无监听 = 铁证）
+lsof -iTCP:39240 -sTCP:LISTEN          # 无输出 ⇒ 没起；有 Electron 行 ⇒ 已起，跳到 ③
+
+# ② 打开 App 并【同时指定工作区目录】—— 这一步同时解决「没起」与「没工作区」两个坑
+open -a "/Applications/Trae CN.app" /Users/mcdowell/AgentWorkspace/tmp/<你的专用目录>
+
+# ③ 自检（约 10~15 s 后端口才起来；太早跑会看到 ECONNREFUSED）
+node ~/AgentWorkspace/configs/trae-bridge/trae-dispatch.mjs status
+```
+
+🔴 **两个实测坑**：
+- **「只 `open -a` 不带目录」不一定会报错**。2026-10-26 实测：Trae 会恢复上次会话，`status` 直接 `ok:true`（`target:"更新日志"`）。
+  但那个窗口打开的是**别的工作区** ⇒ 任务会跑错目录。⇒ **永远显式带目录**，然后用 `target` 核对是否为目标窗口。
+  只有在「App 起了但一个 IDE 窗口都没有」时才出现 `no Trae IDE window open (open a workspace folder in IDE mode)`。
+- **端口不是 App 起来就立刻监听**：`open` 之后立刻 `lsof` 会扑空（实测等了 ~15 s）。⇒ `status` 报 `ECONNREFUSED` 时先 `sleep 15` 再试一次，⛔ 别马上判定「App 没起」。
+
+**B-2 JoyCode 恢复（⛔ 已不需要手动重启 App —— 2026-11-15 起 shim 懒启动）**
+
+JoyCode.app 自行退出后，shim 在**下一个请求**发现端口不通时会自己 `open -g -a /Applications/JoyCode.app` 拉起并重试该请求（不轮询、无后台探测；`JOYCODE_SHIM_AUTOSTART=0` 可关闭）。
+
+```bash
+# ① 自检（看到 proxyListening:false 就说明 App 没在跑，但这不影响下一次 ask）
+node ~/AgentWorkspace/configs/joycode-shim/joycode-dispatch.mjs status
+
+# ② 直接派一次最小任务，让 shim 自己把 App 拉起来（约 3 s 完成懒启动）
+node ~/AgentWorkspace/configs/joycode-shim/joycode-dispatch.mjs ask "只回复两个字：可用" --model JoyAI-Code-1.6 --timeout 120
+```
+
+🔴 **实测坑与判据**：
+- **端口每次启动都变**（`listen(0)` 内核分配）：历史序列 `54797 → 55052 → 58870 → 64385 → 55735`。shim 从 `~/.joycode/logs/joycode-app.log` 的 `pro responses proxy ready: http://127.0.0.1:<port>` 取最后一条 ⇒ ⛔ 不要硬编码端口。
+- **代理只绑 `127.0.0.1`** ⇒ 跨机（wb-hub）必须经 shim 的 `0.0.0.0:18888` 中转。
+- **`--thinking` 非 `default` 直接 exit 5**（JoyCode 无思考档）。
+- 旧 IDE 桥接（`~/AgentWorkspace/configs/joycode-bridge/`、扩展 `~/.joycode-editor/extensions/dsh-joycode-bridge-0.1.0`）**已于 2026-11-15 随 `JoyCode IDE.app` 卸载而废弃** ⇒ ⛔ 不要再跑它的 `status`/`install.sh`，那条通道必返 `ok:false`。
+
+#### C. 最小可用调用示例（照抄即可跑通）
+
+以下两套都是「写 prompt → 后台跑 → 读单行 JSON」的完整可复制序列，2026-10-26 实测通过。
+把 `PROMPT` 换成真实任务 prompt（内容按 §4 的派发模板写）。
+
+**C-1 JoyCode**
+
+```bash
+J=~/AgentWorkspace/configs/joycode-shim/joycode-dispatch.mjs
+mkdir -p ~/AgentWorkspace/tmp/gui-bridge-probe
+printf '只回复两个字：可用' > ~/AgentWorkspace/tmp/gui-bridge-probe/prompt.txt
+
+# 先看可用型号（不发任务、不花积分）
+node $J models
+
+# 派发（后台跑；stdout 落文件；--timeout 单位秒）
+node $J ask --prompt-file ~/AgentWorkspace/tmp/gui-bridge-probe/prompt.txt \
+            --model GLM-5.3 --timeout 1800 \
+            > ~/AgentWorkspace/tmp/gui-bridge-probe/joy.out 2>&1 &
+echo "pid=$!"
+```
+
+`models` 的真实输出（2026-11-16 实测原文，5 项）：
+```json
+{"ok":true,"models":[
+ {"label":"JoyAI-Code-1.6","chatApiModel":"JoyAI-Code-1.6","features":["function_call","agent"],"contextWindow":200000},
+ {"label":"GLM-5.3","chatApiModel":"GLM-5.3-agent","features":["function_call","agent"],"contextWindow":200000},
+ {"label":"Kimi-K2.6","chatApiModel":"Kimi-K2.6-agent","features":["function_call","agent","vision"],"contextWindow":200000},
+ {"label":"MiniMax-M3","chatApiModel":"MiniMax-M3-agent","features":["function_call","agent","vision"],"contextWindow":200000},
+ {"label":"Doubao-Seed-2.0-pro","chatApiModel":"Doubao-Seed-2.0-pro-agent","features":["function_call","agent","vision"],"contextWindow":200000}]}
+```
+字段含义：`label` = **`--model` 要传的名字**（唯一合法取值，⛔ 别用 `chatApiModel`）；`chatApiModel` = 上游 `responses` 端点认的原始 slug（⛔ 不要拿它当 `--model`，但直连 shim 时必须用它）；`features` 里 `vision` = 能吃图，`agent` = 能自己多轮干活，`function_call` = 能调工具。
+
+`ask` 的成功形态（单行 JSON，2026-11-16 实测原文）：
+```json
+{"ok":true,"text":"可用","chars":2,"model":{"requested":"GLM-5.3","actual":["GLM-5.3"],"verified":"match"},"finishReason":"stop","elapsedMs":2206}
+```
+- `text` = 最终答案；`chars` = 字符数（**先看这个**：0 或异常小 ⇒ 看 `reasoning` 与上游是否空流）。
+- `model.verified`：`match` = 上游回包 `model` 与请求一致；`mismatch`/`unverified` ⇒ **exit 5**，⛔ 别把结果当成你要的型号产出的。
+- 旧 IDE 桥接特有的 `taskId` 字段**已不存在**（新通道是纯 HTTP，没有 App 任务 id）。
+
+**C-2 Trae CN**
+
+```bash
+T=~/AgentWorkspace/configs/trae-bridge/trae-dispatch.mjs
+mkdir -p ~/AgentWorkspace/tmp/gui-bridge-probe
+printf '只回复两个字：可用' > ~/AgentWorkspace/tmp/gui-bridge-probe/prompt.txt
+
+node $T models                       # 实时倍率/思考档，约 8 秒；⛔ 倍率别写死
+
+node $T ask --prompt-file ~/AgentWorkspace/tmp/gui-bridge-probe/prompt.txt \
+            --target <status 里的 target 值> \
+            --model GLM-5.3-Flash --thinking high --timeout 1800 \
+            > ~/AgentWorkspace/tmp/gui-bridge-probe/trae.out 2>&1 &
+echo "pid=$!"
+```
+
+`models` 的真实输出（截取单个型号，2026-10-26）：
+```json
+{"target":"trae-probe","ok":true,"current":"GLM-5.3-Flash","models":[
+ {"name":"GLM-5.3-Flash","multiplier":0.08,"badge":null,"selected":true,
+  "thinking":["轻","高","极高"],"thinkingSelected":"极高",
+  "features":["图片理解","推理模型"],"maxContext":true,"maxContextOn":false}]}
+```
+字段含义：`name` = **`--model` 要传的名字**（必须完全相等）；`multiplier` = 扣积分倍率（**随时段变**，有 `badge:"闲时折扣"` 时更便宜）；`thinking` = 该型号**支持的档位**（空数组 = 无档位，⛔ 不要传 `--thinking`）；`selected` = 当前界面选中的；`maxContext`/`maxContextOn` = 是否支持/是否已开 1M 上下文。
+
+`ask` 的成功形态（2026-10-26 复跑，命令带 `--thinking high`）：
+```json
+{"target":"trae-probe","ok":true,"text":"可用","chars":2,"model":"GLM-5.3-Flash","thinking":"高","approvals":[],"elapsedMs":9229}
+```
+- `model` 是**从界面读回**的实际型号；`thinking` 是核对过的 Trae 档位名（中文档位名，如 `"高"`；**没传 `--thinking` 时为 `null`**）。
+- ⛔ 别拿 `thinking: null` 当失败信号 —— 那只是没指定档位。
+- `approvals` 非空 ⇒ 期间点过审批；空数组 = 没遇到审批。
+
+**读结果（两套通用）**
+
+```bash
+cat ~/AgentWorkspace/tmp/gui-bridge-probe/joy.out     # 最后一行就是完整 JSON
+python3 -c "import json;d=json.load(open('.../joy.out'));print(d.get('ok'),d.get('text'),d.get('error'))"
+```
+⛔ **不要用 `| head` 接 JSON 再来判退出码** —— 管道会把退出码换成 `head` 的（实测两者都是 0，等于白判）。要判退出码就**直接重定向**再 `echo "RC=$?"`（实测：非法型号两边都是 **5**）。
+
+#### D. 与 Paseo 的分界（⛔ 别把 GUI 桥当 Paseo 用）
+
+| 能力 | GUI 桥（joycode / trae-cn） | Paseo |
+|---|---|---|
+| 进度可见 | ✅ 桌面 App 窗口里**用眼睛看** | ✅ agent 列表 + 结构化状态 |
+| 中途打断 | ⚠️ 只能在 App 里手点，桥不提供接口 | ✅ 可编程中断 |
+| 并发 | ⛔ **不可能**：每个桥一把锁（`$TMPDIR/*-bridge.lock`），且瓶颈是**单个 App 窗口** | ✅ 多 agent 并行 |
+| 整夜批量 | ⛔ 协议（两家 §5.2）禁止自动化接入 | ✅ |
+| 结构化结果 | ✅ 单行 JSON（`text` / `model` / `elapsedMs` / 退出码） | ✅ 更细 |
+| 订阅不额外计费 | ✅ 走桌面版月积分 | — |
+
+**什么时候改用 Paseo**（命中任一条就别用桥）：
+1. 需要**同时跑多个**任务 ⇒ 桥会串行排队，Paseo 才并行。
+2. 需要**程序化中断 / 重试 / 拿中间状态** ⇒ 桥只有「等它跑完」和「在 App 里手点」。
+3. 任务要**跑几小时以上**且你没有空盯 App 窗口 ⇒ 桥的可见性全靠人看，Paseo 能轮询。
+4. 需要**多机**（Hub）派发 ⇒ 桥只在本机。
+
+**什么时候该用桥**：额度叠加 —— 桌面版月积分不额外花钱，而 Paseo 上的 codex provider `out of credits`。适合**单条、低频、人能在旁边看着**的真实开发任务。
 
 ### 3.2g 本地用户策略（最高优先级，⛔ 不进仓库）—— 2026-10-10
 
@@ -1812,12 +1993,21 @@ ssh hub "paseo run --detach \
 
 ## 约束
 - 遵守项目 CLAUDE.md / AGENTS.md 规则
+- **开工前先取本任务相关的记忆上下文**（M2 接线，2026-10-16）：
+  `python3 ~/AgentWorkspace/scripts/agent/memory-context.py --task "<任务一句话>" --cwd <工作目录>`
+  —— Mode A 词法检索、**零网络零 API key**；它按 `configs/agent/orgs.json` 判归属，个人 cwd 下命中公司标记的
+  记录**整条丢弃**（只回 `sha256:<12>`），rc=1 = 无可用上下文、rc=3 = 无法判定（不得当成通过）。
 - 严格 TDD：先写失败测试 → **跑测试看到失败** → 最小实现 → 转绿
 - 全量测试无回归，报告实际通过数（当前基线：{N} suites / {M} tests）
 - 完成后 `git add -A && git commit`，中文 commit message
 - **删除 TASK.md 和所有调试脚手架再提交**
 - 遇到不确定的设计决策 → 停下来描述选项，⛔ 不自行决定
 - ⛔ 不做任务范围外的修改，不放宽既有测试断言
+- 🔴 **授权边界 = ask-before-act（G3 画像条款，2026-10-16 接入）**：本任务只授权「任务描述里点名的动作」。
+  若你识别出**相邻的未授权动作**（例如顺手清残留、顺手改别的仓、顺手删/移文件、顺手重置状态），
+  输出必须是**请示**并等待确认（「等你确认后我再…」），⛔ **不得**写成「我会照做，顺便提示风险」；
+  **风险提示不能替代请示**。批准 A ≠ 可以顺手做 B。无法向用户请示时（本会话拿不到交互）
+  ⇒ 在报告里**单列「未授权相邻动作（未执行）」**并停在那里，⛔ 不要执行。
 
 ## ⛔ 交付协议（这一条被丢过两次）
 - **不许在 commit + 报告写完之前结束这一轮。**
@@ -1854,6 +2044,7 @@ ssh hub "paseo run --detach \
 | worktree 是否已建、有无 `node_modules` | 缺依赖时 `npx jest` **零输出**，agent 会把空跑当全绿 |
 | 是否给了当前测试基线数字 | 没有基线，"全绿"无法证伪 |
 | 是否写明已排除的错误方向 | 否则 agent 会顺着前任的错误假设做下去 |
+| 🔴 **授权边界是否点名**（G3 画像条款） | 只说「做完 X」时，子代理很容易顺手做相邻动作（清残留/改别的仓/删文件）。派发前在任务描述里写明**授权范围**与**明确禁止外溢的相邻动作**；模板「约束」已带 ask-before-act 条款，但**任务描述里的范围句仍是必须的** |
 | 改返回结构？→ 是否要求消费方自查 | 高频事故：后端改了前端没跟上 |
 | 是否要求真实浏览器验证 | happy-dom 里 `getBoundingClientRect()` 恒 0×0，TDesign 浮层会被 `isHidden` guard 立刻关闭，导致"点不动"假阴性 |
 | **permission_mode 传了吗** | 漏传导致整批任务卡在权限询问上不执行 |

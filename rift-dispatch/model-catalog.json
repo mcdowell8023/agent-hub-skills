@@ -1,5 +1,5 @@
 {
-  "version": "6.49.0",
+  "version": "6.52.0",
   "lastUpdated": "2026-10-11",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
@@ -17,8 +17,7 @@
       "qfmodel"
     ],
     "joycode": [
-      "joycode/JoyAI-Code-1.5",
-      "joycode/GLM-5.3",
+      "joycode/JoyAI-Code-1.6",
       "joycode/Kimi-K2.6",
       "joycode/MiniMax-M3",
       "joycode/Doubao-Seed-2.0-pro"
@@ -283,7 +282,7 @@
       "supersededBy": "🔴 walletPriority.discountWindows（2026-09-09）：百炼 22:00-08:00、codebuddy 工作日 09-12/14-18 之外全部时段。⭐ 只在【档位内选落点】介入，⛔ 不参与选档位 ⇒ 与上面的不变量不冲突。"
     },
     "escalation": {
-      "rule": "T0 免费池 FREE_POOL（hy3 → qfmodel → joycode/JoyAI-Code-1.5，逐条按条目判；📜 原 priority 1 的 stealth/space-bunny-alpha 于 2026-10-06 因模型 404 下线而删除）→ T1 deepseek-v4.1-flash → T2 deepseek-v4-flash → T3 qwen3.8-max → T4 kimi-k3-1 →（仅可用性耗尽）LAST_RESORT claude-sonnet-5",
+      "rule": "T0 免费池 FREE_POOL（hy3 → qfmodel → joycode/JoyAI-Code-1.6，逐条按条目判；📜 原 priority 1 的 stealth/space-bunny-alpha 于 2026-10-06 因模型 404 下线而删除）→ T1 deepseek-v4.1-flash → T2 deepseek-v4-flash → T3 qwen3.8-max → T4 kimi-k3-1 →（仅可用性耗尽）LAST_RESORT claude-sonnet-5",
       "toK3Condition": "⛔ 【质量/成本升档】：要 v4-pro 也做砸才升 K3。⚠️ **可用性换档⛔不受此约束** —— T3 池 + 同档替代全不可用时可升 T4（见 walletPriority.availabilityEscalation）。⛔ 不做预防性升档（2026-08-02 n=1 + 2026-08-06 n=12 两次实测支撑）。K3 是 v4-flash 的 9.5 倍、glm-5.3-flash 的 27 倍。",
       "k3Status": "✅ 2026-08-16 用户恢复启用，作为极致档 / 唯一升档目标。原 P5.4『0723 实测不可靠、定弃用、改派 M3』的结论失效（M3 也已关闭）。⚠️ 0723 观察到的现象保留为已知风险：反复空转、报进度就 idle、git 无产出 —— 派完必须核 git 是否真有 commit",
       "noFallbackForK3": "🔴 K3 撞限额时【白名单内】无替代（唯一 S 级，M3 已关闭）⇒ 2026-09-09 起走 **LAST_RESORT claude/claude-sonnet-5@max**（见 claudeModels.claude-sonnet-5.lastResort），⛔ 不再是「只能报告用户」；连它也拿不到才停止",
@@ -312,7 +311,7 @@
         "skipFreeEntries": [
           "hy3",
           "qfmodel",
-          "joycode/JoyAI-Code-1.5"
+          "joycode/JoyAI-Code-1.6"
         ]
       },
       "perf": {
@@ -321,7 +320,7 @@
         "skipFreeEntries": [
           "hy3",
           "qfmodel",
-          "joycode/JoyAI-Code-1.5"
+          "joycode/JoyAI-Code-1.6"
         ]
       },
       "architecture": {
@@ -329,7 +328,7 @@
         "evidence": "🔴 2026-08-28 修正：原为 deepseek-v4-flash。h2hEval_20260828 Kafka glm 36 > v4-flash 31，旧规则的依据（v4-flash 重测 Kafka 34 > v4-pro 31）说的是 v4-flash 与 v4-pro 的关系，⛔ 不涉及 glm。⚠️ n=1、单评委，待同口径复测——与 algorithm 一样标为待补",
         "skipFreeEntries": [
           "hy3",
-          "joycode/JoyAI-Code-1.5"
+          "joycode/JoyAI-Code-1.6"
         ]
       },
       "concurrency_diag": {
@@ -368,8 +367,8 @@
         "allowInSensitiveWorkspace": true,
         "creditRecord": {
           "credit": 0.0,
-          "verifiedOn": "2026-09-24",
-          "source": "cb /model 面板截图 0.00x（⚠️ 在免费窗口内核的 ⇒ 不算过期后的复核）"
+          "verifiedOn": "2026-11-19",
+          "source": "2026-11-19 实测 cb rawUsage.credit=0（免费窗口 10-31 过后仍 0x，t0_still_free 通过可续用）"
         },
         "verifyVia": "⭐ 首选：`codebuddy -p --model hy3 --output-format json --tools '' 'reply with exactly: OK'`，读返回里 providerData.rawUsage.credit（=0 免费；agent 自己就能核，2026-10-02 实测 hy3=0，见 🔴 cbRawUsageCredit_20261002）；其次 cb `/model` 面板读数。⛔ 模型自述无效（实测答「不知道」）",
         "evalRef": "sameRoundEval_20260816 · hy4Eval_20260821",
@@ -400,7 +399,7 @@
       },
       {
         "upstream": "joycode",
-        "model": "joycode/JoyAI-Code-1.5",
+        "model": "joycode/JoyAI-Code-1.6",
         "priority": 3,
         "freeUntil": "2026-11-06T23:59",
         "thinking": null,
@@ -415,12 +414,12 @@
         "allowInSensitiveWorkspace": true,
         "creditRecord": {
           "credit": 0.0,
-          "verifiedOn": "2026-10-10",
-          "source": "JoyCode 模型菜单 JoyAI-Code-1.5 标 0x；「我的用量」团队版（限免）0 / 10,000、有效期至 2026年11月6日（用户 10-10 截图）。⚠️ 窗口内的读数 ⇒ 过期后不作数（t0_still_free）"
+          "verifiedOn": "2026-11-16",
+          "source": "2026-11-16 配额耗尽判别法（决定性）：get_newpoint_ide 实测 used=10020 / total=10000 / remain=-20（usedPercent=100，套餐有效期至 2026-12-14）后逐个模型经 shim 派发 —— JoyAI-Code-1.6 连跑 3 次全部正常出 token（tokens 102/94/109），20s 后复查 remain 仍 -20、Δ=0；Kimi-K2.6 / MiniMax-M3 / Doubao-Seed-2.0-pro / GLM-5.3 全部 insufficient_quota「积分余额不足」。⇒ 1.6 不扣套餐积分，其余四个吃积分。"
         },
-        "verifyVia": "JoyCode 界面：模型菜单里 JoyAI-Code-1.5 的倍率（0x = 免费）+ 底栏「用量」面板的已用积分；派一条后对比已用积分是否变化。⚠️ agent 读不到积分面板 ⇒ 过期后需用户给读数或截图",
+        "verifyVia": "配额耗尽判别法（⛔ 不要用「请求前后读计数器」，有异步结算延迟、差值不可信）：①直连签名接口 `functionId=get_newpoint_ide` 读 used/remain（HMAC key `0691a3f0b37b4a85aeb63ad0fc7db3ed`、appid `joycode_ide`、头 ptKey/loginType/tenant）；②remain<=0 时经 shim 派一条最小 prompt，能出 token ⇒ 不扣积分，返 insufficient_quota ⇒ 吃积分。",
         "evalRef": "joycodeBridge_20261010",
-        "note": "JoyCode（京东）桌面版 + drop-in 桥接扩展（~/AgentWorkspace/configs/joycode-bridge）。🔴 个人账号（⛔ 非公司账号）。avoid 照 hy3 先例取三项（⛔ 尚无盲评数据）。retainsData：prompt 进 JoyCode 服务端任务存储。⭐ allowInSensitiveWorkspace=True：用户 2026-10-10 确认 JoyCode 可以接公司目录的任务。"
+        "note": "JoyCode（京东）CLI 版 JoyCode.app + 本地 responses 代理 + OpenAI 兼容 shim（~/AgentWorkspace/scripts/joycode/joycode-openai-shim.mjs，常驻 18888）。🔴 2026-11-15 底座变更：IDE 版已卸载，旧 drop-in 扩展桥接（configs/joycode-bridge）废弃。🔴 2026-11-16 实证：1.6 是唯一 0x（配额耗尽仍可用），GLM-5.3 / Kimi-K2.6 / MiniMax-M3 / Doubao-Seed-2.0-pro 四个吃积分，且账号积分已于 2026-11-16 耗尽（remain=-20）⇒ 这四个当前一律 insufficient_quota，⛔ 不要派。GLM-5.3 另已在 shim 层硬禁用（JOYCODE_SHIM_DISABLED_MODELS 默认值，请求返 400 model_disabled）。🔴 个人账号（⛔ 非公司账号）。avoid 照 hy3 先例取三项（⛔ 尚无盲评数据）。retainsData：prompt 进 JoyCode 服务端任务存储。⭐ allowInSensitiveWorkspace=True：用户 2026-10-10 确认 JoyCode 可以接公司目录的任务。"
       }
     ]
   },
@@ -1674,18 +1673,6 @@
       },
       "note": "T0 免费池 priority 3（见 freePool），截止未公布（Qoder CN 2026-10-02 官方公告延期，10-01 起继续免费）。🔴 ⛔ 与百炼 qwen3.8-flash 不是同一表现（09-24 第二轮 p=0.006）⇒ ⛔ 不能互相代测。无思考档。"
     },
-    "joycode/JoyAI-Code-1.5": {
-      "label": "JoyAI-Code-1.5（JoyCode 桌面版，0x）",
-      "provider": "joycode",
-      "credit": 0.0,
-      "providers": {
-        "joycode": {
-          "modelId": "JoyAI-Code-1.5",
-          "credit": 0.0
-        }
-      },
-      "note": "T0 免费池 priority 3（见 freePool），截止 2026-11-06。经 GUI 桥接派发（SKILL §3.2f），⛔ 无思考档。实际模型以 JoyCode.log「模型路由结果」核对。"
-    },
     "space-bunny": {
       "label": "Space-Bunny（CodeBuddy 内置，匿名 Flash 大模型）",
       "provider": "codebuddy-code",
@@ -1718,6 +1705,18 @@
       "multimodalNote": "官方公告与 OpenRouter 元数据都写原生支持图像 / 视频输入；⚠️ 未在 cb 路由上实测。若将来要给多模态任务配付费落点，这是候选，⛔ 先评测",
       "retainsData": null,
       "retainsDataNote": "未知（匿名模型）。⚠️ cb 的 `-p` 每次请求都会注入全局规则 + memory：实测 3 块共约 5.5 万字符 ≈ 2.35 万 token，来自 9 个文件（~/.claude/CLAUDE.md · RTK.md · rules/global/ 下 6 个 · ~/.codebuddy/CODEBUDDY.md）⇒ 这些内容会随请求发给模型方。只用布尔值核了 Dufs 口令串与 OpenRouter key 前缀两项，都不在注入内容里（⛔ 不代表穷尽）"
+    },
+    "joycode/JoyAI-Code-1.6": {
+      "label": "JoyAI-Code-1.6（JoyCode CLI 版本地代理，0x 已实证）",
+      "provider": "joycode",
+      "credit": 0.0,
+      "providers": {
+        "joycode": {
+          "modelId": "JoyAI-Code-1.6",
+          "credit": 0.0
+        }
+      },
+      "note": "T0 免费池 priority 3（见 freePool），freeUntil 名义上停在 2026-11-06，但 2026-11-16 已用「配额耗尽仍可用」判别法复核 credit=0.0（见 creditRecord）⇒ t0_still_free 通过。经 JoyCode.app 本地 responses 代理 + OpenAI 兼容 shim 派发（SKILL §3.2f），⛔ 无思考档。⚠️ 同 provider 的 GLM-5.3 已硬禁用，Kimi-K2.6 / MiniMax-M3 / Doubao-Seed-2.0-pro 吃积分且账号积分已耗尽 ⇒ 当前只有 1.6 可用。"
     }
   },
   "claudeModels": {
@@ -2716,8 +2715,7 @@
       "stealth/space-bunny-alpha": "sbA0923",
       "qfmodel": "qwF3.8",
       "space-bunny": "sb1002",
-      "joycode/JoyAI-Code-1.5": "Joy1.5",
-      "joycode/GLM-5.3": "glm5.3",
+      "joycode/JoyAI-Code-1.6": "Joy1.6",
       "joycode/Kimi-K2.6": "k2.6",
       "joycode/MiniMax-M3": "mmM3",
       "joycode/Doubao-Seed-2.0-pro": "dbS2.0P",
@@ -3620,7 +3618,8 @@
     ],
     "modelSwitch": "⛔ 设置项 JoyCode.config.chatModel 不影响 agent（16:15 实测仍路由 JoyAI）。✅ 命令 joycoder.getSidebarProvider 返回 provider ⇒ updateModelConfig({model},{persistLastSelection:true})；e2e：--model GLM-5.3 ⇒ JoyCode.log actualModelLabel=GLM-5.3",
     "thinking": "⛔ 无档位：agent 请求不带 thinking 参数；features 只有 function_call/agent/vision",
-    "tests": "joycode-bridge：离线 18 + 真机 4 全绿（2026-10-10）"
+    "tests": "joycode-bridge：离线 18 + 真机 4 全绿（2026-10-10）",
+    "⚠️ superseded_20261115": "本块记录的是 2026-10-10 的 IDE 桥接实测，模型清单里的 JoyAI-Code-1.5 已于 2026-10-26 从菜单消失；通道本身已于 2026-11-15 随 JoyCode IDE.app 卸载而废弃，改走 JoyCode.app 本地代理 + shim。⛔ 本块仅作历史证据，不要据此派发。"
   },
   "traeBridge_20261010": {
     "_what": "Trae CN GUI 桥接接入实测（Trae CN 3.4.2，CDP 127.0.0.1:39240，argv.json 永久开启）",
