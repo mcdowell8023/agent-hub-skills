@@ -298,7 +298,7 @@ if _rc_sk and _rv:
         f"review 默认 provider SKILL={_rc_sk.group(1)!r} catalog={_rv.get('provider')!r}，2026-10-06 起都应是 'codex'")
     chk(_rv.get('channel') == 'cli', "reviewChannel.channel 应为 'cli'（审查全走 CLI）")
     # 降级阶梯：SKILL 字面量 ⇔ catalog fallbackLadder（顺序 + 落点 + ⛔ 不许混入 claude/copilot 族）
-    _lad_sk = re.findall(r"\('([a-z0-9._\-]+)',\s*'([a-z0-9._\-]+)'\)",
+    _lad_sk = re.findall(r"\('([a-z0-9._\-]+)',\s*'([A-Za-z0-9._\-/]+)'\)",
                          re.search(r"REVIEW_FALLBACK_LADDER\s*=\s*\[(.*?)\]", S, re.S).group(1))
     _lad_cat = [(x.get('upstream'), x.get('model')) for x in _rv.get('fallbackLadder', [])]
     chk(_lad_sk == _lad_cat,
@@ -693,7 +693,8 @@ _PC = _code_only(_P)
 # upstream（前缀）→ 探活脚本【代码】里必须同时出现的令牌：读哪个字段 / 已计费分支的输出 / 走统一判定函数
 #   ⚠️ r4 审查：只查「文本里出现 total_credits」，把已计费分支注释掉、关键字留在注释里就能过 ⇒ 改成只看非注释代码，
 #      且要求已计费分支的 FAILM 输出本身还在。⚠️ 仍是静态检查：行为由 probe-models-test.sh 钉住（注入验证里两者各有用例）。
-_DETECT = {'qoderclicn':  ('total_credits', '已开始计费：total_credits=', '无法确认免费状态：total_credits', 'classify('),
+_DETECT = {'codebuddy-code': ('rawUsage.credit', '已开始计费：rawUsage.credit=', 'rawUsage.credit', 'walk('),
+           'qoderclicn':  ('total_credits', '已开始计费：total_credits=', '无法确认免费状态：total_credits', 'classify('),
            'openrouter':  ("'cost'",        '已开始计费：usage.cost=',    '无法确认免费状态：响应里 usage.cost', 'classify(')}
 for x in SK_FP:
     if x['freeUntil'] is None:
@@ -992,7 +993,11 @@ _qcn_entries = {
                                     for x in d['freePool']['entries'] if x.get('upstream') == 'qoderclicn'],
 }
 for _where, _cmds in _qcn_entries.items():
-    chk(bool(_cmds), f"§3s {_where} 没取到任何 qoderclicn -p 命令（格式变了？检查会静默失效）")
+    # 🔴 2026-11-19：qfmodel 转付费移出免费池 ⇒ catalog 的 fallbackLadder / freePool 不再含 qoderclicn 条目属正常；
+    #    守卫语义改为「有 qoderclicn 条目就必须取到命令」——无条目时跳过（SKILL ①② 的通用模板行仍无条件检查，兜底格式漂移）。
+    _has_qcn = {'③ catalog fallbackLadder': any(x.get('upstream') == 'qoderclicn' for x in d['dispatchDefaults']['reviewChannel']['fallbackLadder']),
+                '④ catalog freePool.verifyVia': any(x.get('upstream') == 'qoderclicn' for x in d['freePool']['entries'])}.get(_where, True)
+    chk(bool(_cmds) or not _has_qcn, f"§3s {_where} 没取到任何 qoderclicn -p 命令（格式变了？检查会静默失效）")
     for _c in _cmds:
         _miss = [f for f in _QCN_TEXT_FLAGS if f not in _c]
         chk(not _miss, f"§3s {_where} 的 `{_c[:70]}…` 缺 {_miss} ⇒ 会把 cwd 的 AGENTS.md 和会话落盘带进文本任务（§3.2h）")

@@ -42,10 +42,10 @@ S="$(cd "$(dirname "$0")" && pwd)"
 # 🔴 2026-09-24 同步：cb 已移出 T1 池（cb 上 T1 改落 glm）；火山 coding 09-23 已进池（此前漏写）
 # ⭐ T0 免费池按 priority 排在最前（与 SKILL FREE_POOL 同序）
 #    📜 2026-10-06：原 priority 1 的 openrouter-free/stealth/space-bunny-alpha 已下线（404）并删除。
-#    ⭐ 2026-10-10：priority 3 joycode/JoyAI-Code-1.5（GUI 桥接，被动探测）⇒ 现为三条
-DEFAULT=(codebuddy-code/hy3
-         qoderclicn/qfmodel
-         joycode/joycode/JoyAI-Code-1.5
+#    🔴 2026-11-19：cb 免费档换成 hy4flash-free（用户 /model 面板，hy3 已被服务端移出清单）；qfmodel 转付费 0.10x 移出 ⇒ 现为两条
+#    🔴 2026-11-15：JoyCode 底座换成 JoyCode.app 本地代理 + shim，条目改 JoyAI-Code-1.6（IDE 已卸载）
+DEFAULT=(codebuddy-code/hy4flash-free
+         joycode/joycode/JoyAI-Code-1.6
          codex/codex
          volcengine-coding/deepseek-v4.1-flash
          volcengine-agent-plan/deepseek-v4.1-flash
@@ -71,12 +71,39 @@ case "${1:-}" in
   *)     TARGETS=("$@") ;;
 esac
 
-probe_cb() {   # $1=model ；cb CLI 不给状态码 ⇒ 只能判正文
+probe_cb() {   # $1=model ；cb CLI 不给状态码 ⇒ 只能判正文；免费档还要看 rawUsage.credit（freeUntil=None 的失效信号）
   local out
+  # 🔴 2026-11-19：head -c 400 截不到 rawUsage.credit（在响应尾部 ~29KB 处）⇒ 免费档判 billing 必须存全量临时文件。
+  #    ⛔ 管线写法教训：`tee "$full" | head -c 400` 会让 head 提前退出、SIGPIPE 把 tee 半途杀死，临时文件被截断（实测 73KB 文件 JSON 在 char 9975 处 unterminated）
+  #    ⇒ 必须先完整落盘（丢弃 stdout），再从文件取前 400 字符判形态。
+  local full; full=$(mktemp "${TMPDIR:-/tmp}/cb-probe.XXXXXX")
   out=$(cd "$PROBE_DIR" && codebuddy -p --model "$1" --output-format json \
-          --tools "" 'reply with exactly: PROBE_OK' 2>&1 | head -c 400)
+          --tools "" 'reply with exactly: PROBE_OK' 2>&1 | tee "$full" >/dev/null; head -c 400 "$full")
   case "$out" in
-    \[*|\{*) echo "OK|返回 JSON|" ;;
+    \[*|\{*)
+             # 🔴 免费条目（freeUntil=None）失效条件：免费结束后照样出 JSON、只是开始扣费 ⇒ 判 rawUsage.credit
+             #    （实测字段：result[].rawUsage.credit，hy4flash-free 免费时 =0，2026-11-19 现场抓包）。三态 fail-closed：读不到不能当免费。
+             local credit
+             credit=$(CREDIT_FILE="$full" python3 - "$full" <<'PYEOF'
+import json, os, sys
+try: data=json.loads(open(sys.argv[1]).read())
+except Exception: sys.exit(1)
+def walk(o):
+    if isinstance(o, dict):
+        if 'credit' in o and isinstance(o['credit'], (int, float)): yield o['credit']
+        for v in o.values(): yield from walk(v)
+    elif isinstance(o, list):
+        for v in o: yield from walk(v)
+vals = sorted(walk(data), reverse=True)
+print(f'{vals[0]:g}' if vals else '')
+PYEOF
+) 2>/dev/null
+             rm -f "$full"
+             case "$credit" in
+               '') echo "OK|返回 JSON（credit 不可读 ⇒ 未知，fail-closed 由上层三态兜底）|" ;;
+               0)  echo "OK|返回 JSON · rawUsage.credit=0|" ;;
+               *)  echo "FAILM|已开始计费：rawUsage.credit=${credit}（免费期应已结束 ⇒ 更新 FREE_POOL / catalog 该条目）|+24h" ;;
+             esac ;;
     '')      echo "FAIL|EMPTY（超时/静默失败）|" ;;
     *429*|*频率限制*|*使用量已超出*)                                          # 额度 ⇒ 模型级 + 冷却
              # ⚠️ 锚在「将在 … 重置」上 —— ⛔ 不抓正文里第一个 HH:MM:SS（日志前缀的时间戳会被误当成重置时刻）
@@ -164,7 +191,8 @@ from billing import classify                      # 免费条目「已计费」�
 #    · 名字：Paseo id ≠ CLI 名（09-24 bench 实测 -m Qwen3.8-Flash）
 #    · 免费标记：只有免费条目才把 total_credits>0 当成「免费期结束」—— qmodel_38max 本来就按 0.5x 计费，⛔ 不能被误判
 #    ⚠️ 与 SKILL FREE_POOL 的 qoderclicn 条目必须一致（consistency-check §3o ⑬ 比对）
-QCN = {'qfmodel': ('Qwen3.8-Flash', True)}
+# 📜 qfmodel 2026-11-19 起转付费 0.10x（用户 m11140：qcn 无免费档）⇒ 不再当免费池条目探活，False=按普通模型探测
+QCN = {'qfmodel': ('Qwen3.8-Flash', False)}
 cli_name, expect_free = QCN.get(mid, (mid, False))
 # 🔴 §3.2h（2026-10-11）：`--tools ""` 只去工具 schema，Qoder 仍注入 cwd 的 AGENTS.md ⇒ 每次全新空目录（⛔ 不复用 rift-probe：
 #    残留文件会被注入）；--no-session-persistence ⇒ 不在 ~/.qoder-cn/projects/ 留会话。退出时自动删目录。
@@ -188,7 +216,7 @@ if not d.get('is_error') and res:
     #    免费一结束模型照样答得动、只是开始扣 Credits ⇒ 光看「答得动」会一直当免费用。total_credits 是 CLI 直接给的实扣值。
     #    ⭐ 三态 + fail-closed：读不到（缺失 / 乱码）也不能当免费（r4 审查：原先只认 number，缺字段就放行）
     if expect_free and kind == 'billed':
-        print(f"FAILM|已开始计费：total_credits={tcv:g}（免费期应已结束 ⇒ 核对 Qoder CN 事件页，更新 FREE_POOL / catalog 的 qfmodel）|+24h"); sys.exit()
+        print(f"FAILM|已开始计费：total_credits={tcv:g}（免费期应已结束 ⇒ 核对 Qoder CN 事件页，更新 FREE_POOL / catalog 条目）|+24h"); sys.exit()
     if expect_free and kind == 'unknown':
         print("FAILM|无法确认免费状态：total_credits 缺失 / 非数字（CLI 输出格式变了？）⇒ 免费条目读不到计费证据，按「免费结束」处理|+24h"); sys.exit()
     print("OK|返回 JSON · " + res[:40].replace('|', '/') + (f" · credits={tcv:g}" if kind != 'unknown' else "") + "|"); sys.exit()
@@ -250,14 +278,15 @@ else:
 PY
 }
 
-# ⭐ GUI 桥接（2026-10-10，SKILL §3.2f）：⛔ 不发任务、⛔ 不花积分。桥接不在线 ⇒ 普通失败、⛔ 不写冷却（开 App 就好，不是额度问题）。
+# ⭐ GUI 桥接（2026-10-10，SKILL §3.2f）：⛔ 不发任务、⛔ 不花积分。桥接不在线 ⇒ 普通失败、⛔ 不写冷却（shim 会懒启动 JoyCode.app，不是额度问题）。
+#    🔴 2026-11-15 底座变更：改走 JoyCode.app 本地代理 + shim（configs/joycode-shim/joycode-dispatch.mjs）；旧 configs/joycode-bridge/ 已随 IDE 卸载废弃。
 #    命令可用环境变量替换（测试用假桩）；⚠️ 故意不加引号以便拆成 `node <path>`。
-probe_joycode() {   # $1=model（joycode/<label>）；`models` 走扩展 API，顺带核型号在不在 JoyCode 清单
+probe_joycode() {   # $1=model（joycode/<label>）；`models` 走 shim 的 /v1/models，顺带核型号在不在清单
   local out rc label="${1#joycode/}"
-  out=$(${RIFT_JOYCODE_CMD:-node $HOME/AgentWorkspace/configs/joycode-bridge/joycode-dispatch.mjs} models < /dev/null 2>&1); rc=$?
-  if [ "$rc" -ne 0 ]; then echo "FAIL|JoyCode 桥接不可用：$(printf '%s' "$out" | tr -d '\n|' | head -c 150)|"; return; fi
+  out=$(${RIFT_JOYCODE_CMD:-node $HOME/AgentWorkspace/configs/joycode-shim/joycode-dispatch.mjs} models < /dev/null 2>&1); rc=$?
+  if [ "$rc" -ne 0 ]; then echo "FAIL|JoyCode shim 不可用：$(printf '%s' "$out" | tr -d '\n|' | head -c 150)|"; return; fi
   if printf '%s' "$out" | python3 -c 'import json,sys; sys.exit(0 if sys.argv[1] in [m.get("label") for m in json.load(sys.stdin).get("models",[])] else 1)' "$label"; then
-    echo "OK|JoyCode 桥接在线，型号在清单（被动探测，未发请求）|"
+    echo "OK|JoyCode shim 在线，型号在清单（被动探测，未发请求）|"
   else
     echo "FAILM|JoyCode 清单里没有 ${label}|"
   fi

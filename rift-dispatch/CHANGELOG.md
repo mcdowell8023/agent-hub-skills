@@ -1,5 +1,87 @@
 # Rift Dispatch — 变更记录
 
+## v11.19 (2026-11-19) — 免费池换代：hy4flash-free 接替 hy3；qfmodel 移出（qcn 无免费档）
+
+**起因**：用户 m11140 提供 2026-11-19 的 /model 权威价目 —— 「目前免费的只有 hy4flash-free」+ 16 模型全价目；「qoderclicn 已经没有免费档位了，原来的 deepseek flash 目前 0.10x Credit」。
+
+### 查清的事实
+
+- **hy3 已从 cb 清单消失**：此前 `probe-models.sh` 探活「成功且 rawUsage.credit=0」是**服务端对旧 id 静默别名路由**的假绿 —— 探活通过不能证明 id 仍在清单。⇒ 复核规则升级为**双判据**：①成本=0 ②**id 仍存在于权威 /model 清单**。
+- **qfmodel 转付费**（0.10x）⇒ 移出免费池；qcn 侧免费档位清零。
+- 新免费池 = `codebuddy-code/hy4flash-free`（x0.00，无公布截止，avoid 三项承 hy3 先例）+ `joycode/JoyAI-Code-1.6`（0x 实证不变，priority 3→2）。
+
+### 改动
+
+- **catalog 6.53.0**：`freePool.entries` 换代（hy4flash-free priority1 / JoyAI priority2，qfmodel 删除）；`whitelist.codebuddy-code` 删 hy3/hy3-x、hy4flash-free 置顶；`cbCreditRates_20261002` 补 `hy4flash-free: 0.0` 与 16 模型全价目 `_source_20261119`，hy3/hy3-x 标 `superseded_20261119`；新增 `qoderclicn` 费率快照（qfmodel 0.10）；`models.hy3`/`models.qfmodel` 加 status 墓碑（正文保留作历史证据）；`dispatchDefaults.{escalation,reviewChannel.fallbackLadder,entryTier.*.skipFreeEntries}` 与 `walletPriority` 全部换成新 FREE_POOL 串；`agentTitleConvention.modelAbbr` hy3→`hy4flash-free:'hy4ff'`。
+- **SKILL.md**：入口规则 #1、「认 id 不认 label」行（加权威清单判据）、thinking 映射（hy4flash-free→max）、WHITELIST（cb 6 条、qcn 保留 qfmodel 供显式付费派发）、FREE_POOL python（qfmodel 块删除留墓碑行、joycode priority 2、hy4flash-free freeUntil=None）、REVIEW_FALLBACK_LADDER（`joycode` rung 改带命名空间 `joycode/JoyAI-Code-1.6` —— 裸名会被白名单拦成 conflict）、§3.2c 阶梯、免费表/小结/探活示例全部换代。
+- **model-routing.md**：T0 阶梯、freeUntil 标注、小结、T0 表（priority 换位）、avoid 表、评审阶梯、九处散点同步；残留 hy3 38 处均为历史/先例语境（有意保留）。
+- **scripts/probe-models.sh**：DEFAULT 数组换 `codebuddy-code/hy4flash-free`；`probe_cb()` 补「已计费」探测 —— 修掉 SIGPIPE 截断（`tee | head -c 400` 会把 tee 半途杀死导致全量 JSON 不完整），改为先 `tee "$full"` 落盘再取头部；credit 提取走 heredoc argv；三态（0=OK / >0=FAILM+24h / 读不到=fail-closed）。
+- **scripts/consistency-check.py**：降级阶梯正则放宽 model 段支持带命名空间 id（`joycode/JoyAI-Code-1.6` 此前被截断成 `joycode` 造成假红）；`_DETECT` 补 codebuddy-code 计费探测条目；§3s ③④ 的 qcn 命令守卫改条件化（免费池已无 qoderclicn 条目属正常）。
+- **scripts/pipeline-test.py**：过期复核组用例换载体 —— hy4flash-free `freeUntil=None`（promo_active 恒真）无法承载窗口过期分支，改用 JoyAI 真实窗口（freeUntil=2026-11-06，已过）承载「窗口内核不算复核 / 已计费关闸 / 记录过期 / 无 verifiedOn」四条；「无 affinity」用例改语义为「免费池整体冷却」；company 策略冷却用例改冷却两条免费档；新增两条 codex 阶梯用例（cb 死族跳到 JoyAI 覆盖 §2:720 continue；本地策略 freePool=False 拦阶梯）。**probe-models-test.sh**：qfmodel 三态判别组（失去载体）替换为墓碑 + qmodel_38max 非免费守卫。
+
+### 口径（重要）
+
+- 免费池现役两条：**hy4flash-free**（每次派发核 `rawUsage.credit`，⛔ 无公布截止不等于永久免费）与 **joycode/JoyAI-Code-1.6**（0x 已实证）。
+- 🔴 **探活「成功且 credit=0」不能证明 id 还在** —— 必须**对照权威 /model 清单**（cb 对旧 id 静默别名路由，hy3 实锤）。
+- **freeUntil=None 的条目永远走 creditRecord 新鲜度闸门**（≤7 天），窗口闸门旁路 —— 需要测窗口过期分支时用带真实 freeUntil 的条目（如 JoyAI 2026-11-06）。
+- 门禁：consistency ✅（2 条既有 WARN）/ pipeline **182 条** ✅ / coverage **333 行 100%**（豁免 1 行 unreachable-by-config）/ local-policy ✅ / probe-models-test **58 通过 0 失败**。
+
+## v11.18 (2026-11-16) — JoyAI-Code-1.6 的 0x 已实证；GLM-5.3 全面禁用
+
+**起因**：用户 m05673「JoyAI-Code-1.6 的 0x 免费 -- 这个确认」+ m05725「给我禁用 glm 5.3 太贵了，不用这个模型」。
+
+### 查清的事实
+
+- **异步结算让「请求前后读计数器」不可信**：JoyCode 积分计数器有延迟，请求刚返回时读不到增量、几秒后才跳变，且会跨到下一次测量（实测 1.6 出现 Δ176 / Δ3105 的假增量）。
+- **改用「配额耗尽后仍能出 token」判别法（不受延迟干扰）**：直连签名接口 `functionId=get_newpoint_ide` 读到 `used=10020 / total=10000 / remain=-20 / usedPercent=100`（团队版 1 万积分已耗尽，套餐有效期至 2026-12-14）后逐个模型经 shim 实测 ——
+  - `JoyAI-Code-1.6`：连跑 3 次全部正常出 token（tokens 102 / 94 / 109），20s 后复查 `remain` 仍 -20、**Δ=0** ⇒ **不扣积分**。
+  - `Kimi-K2.6` / `MiniMax-M3` / `Doubao-Seed-2.0-pro` / `GLM-5.3`：全部 `{"code":"insufficient_quota","message":"积分余额不足"}` ⇒ **都吃积分**。
+- 与旧口径一致：0.6x / 0.5x / 0.4x / 0.4x 的倍率本来就意味着有成本，只有 1.6 是真 0x。此前「Paseo `CostUsd $0.00`」确实不能当证据，但结论方向是对的。
+
+### 改动
+
+- **catalog 6.51.0**：`freePool.entries` 的 joycode 条目 `creditRecord` 改为 `{credit: 0.0, verifiedOn: "2026-11-16"}` 并写明判别法与实测数字；`verifyVia` 换成「配额耗尽判别法」；`models['joycode/JoyAI-Code-1.6']` 的 label / credit / note 同步（0x 已实证）；`whitelist.joycode` 移除 `joycode/GLM-5.3`；`agentTitleConvention.modelAbbr` 删该键。
+- **SKILL.md**：开工前三条硬默认（:25）、WHITELIST 注释与条目、FREE_POOL 注释、路由表两行（`core` 落点与「免费期之后」判据）、§3.2f 型号清单（5 → 4）、`joycode` 子节费用行、C-1 示例（`--model GLM-5.3` → `JoyAI-Code-1.6`）全部同步；`0x 免费未复核` 字样清零。
+- **model-routing.md**：T0 阶梯行倍率 `?x` → **0x**；provider 表两行重写（1.6 已实证 0x；GLM-5.3 移出、其余三个因积分耗尽当前 `insufficient_quota`）。
+- **scripts/pipeline-test.py**：「JoyCode 显式付费型号」夹具由 `joycode/GLM-5.3` 改为仍在白名单的 `joycode/Kimi-K2.6`（argv 同步）；「裸名撞名」用例的说明文字更新（joycode 侧 GLM-5.3 已移出白名单）。
+- **shim 层硬禁用**（`scripts/joycode/joycode-openai-shim.mjs`，442 行）：新增 `JOYCODE_SHIM_DISABLED_MODELS`（默认 `GLM-5.3`），`fetchModels()` 过滤 + `handleChat()` 在 `resolveSlug` 之前显式拒绝（返 `400 model_disabled`）—— 否则 `resolveSlug` 会把未知模型静默回退成 `models[0]`，禁用形同虚设。实测 `/v1/models` 只剩 4 个、`GLM-5.3` 与 `GLM-5.3-agent` 均 400。
+
+### 口径（重要）
+
+- ⭐ **`JoyAI-Code-1.6` = 唯一 0x**，可当 T0 免费档用（`t0_still_free` 通过：verifiedOn 2026-11-16 晚于 freeUntil 2026-11-06、距今 0 天、credit=0.0）。
+- 🔴 **账号积分已于 2026-11-16 耗尽**（remain=-20）⇒ 同 provider 另外三个付费模型当前一律 `insufficient_quota`，⛔ 别派。
+- 🔴 **`GLM-5.3` 禁用**（用户 2026-11-16 明确要求，理由是太贵）：shim 层硬禁用 + 移出白名单 + 删标题缩写 + 移出 Mac/wb-hub 的 opencode 配置与 Paseo agentProfiles。
+- 门禁：consistency ✅ / pipeline 183 条 ✅ / coverage 338 行 100% / local-policy ✅ / probe-models 65 项 ✅。
+
+## v11.17 (2026-11-16) — JoyCode 通道换底座：IDE 桥接 → JoyCode.app 本地代理 + shim（§3.2f）
+
+**起因**：JoyCode IDE 已卸载（用户 2026-11-15 决定只用 CLI 版 `JoyCode.app`）。旧 §3.2f 的 JoyCode 通道依赖 IDE 扩展宿主 `~/.joycode-editor/extensions/dsh-joycode-bridge-0.1.0`，IDE 一卸载即 `status` 恒返 `{"ok":false,"error":"bridge host pid … is not running"}`，通道整体失效。
+
+### 查清的事实
+
+- **JoyCode 没有 headless CLI**：`/Applications/JoyCode.app` 是 Electron GUI（`main.js` 里 `process.argv.slice` 0 处、无子命令解析），`/usr/local/bin/joycode` 是悬空软链。⛔ 不存在 `joycode -p "…"`。
+- **可用通道**：JoyCode.app 启动时在随机端口起一个本地 responses 代理（`[daemon] pro responses proxy ready: http://127.0.0.1:<port>/api/saas/openai/v1`），该代理**能出 token**，且支持 function calling；官方网关（`api-ai.jd.com` / `joycode-api-inner.jd.com`）对本账号一律 `AI_GRAY_ACCESS_DENIED`。
+- **端口不可硬编码**：`main.js` 是 `listen(0,"127.0.0.1")`，无任何 `JOYCODE_*PORT*` 环境变量 ⇒ 只能从日志发现；实测端口序列 `54797 → 55052 → 58870 → 64385 → 55735`。
+- **鉴权头是非标准 `ptKey`**：`/v1/chat/completions` 只认 `ptKey: <access_token>`（值 = `~/.joycode/auth.json` 的 `tokens.access_token`）；`Authorization: Bearer` 返 401「账号未登录」。`/v1/responses` 不校验头但要 `stream:true`（`stream:false` 被 GRAY 拒）。
+- **模型名必须用原始 slug**（`GLM-5.3-agent`），裸 display 名解析失败；`MiniMax-M3-agent` 输出自带 `<think>` 前缀。
+- **App 会自行退出**，退出后代理消失 ⇒ 需要懒启动（请求到达时探活失败再拉起，约 3s，不轮询）。
+
+### 改动
+
+- **新增 shim**：`scripts/joycode/joycode-openai-shim.mjs`（零依赖，常驻 LaunchAgent `com.mcdowell.joycode-shim` 监听 `0.0.0.0:18888`），负责端口发现、`ptKey` 翻译、流式透传、懒启动；已开源到 `github.com/mcdowell8023/joycode-openai-bridge`。
+- **新增 dispatch CLI**：`configs/joycode-shim/joycode-dispatch.mjs`，保持旧 CLI 的 argv 契约（`status` / `models` / `select` / `ask`），退出码语义不变；`models` 输出 `label` 为去掉 `-agent` 的 display 名，与白名单对齐。
+- **SKILL.md 7 处改写**：`GUI_BRIDGE_CLI` 指向新 CLI；§3.2f 加「🔴 2026-11-15 底座变更」整段；§A 自检命令与成功/失败形态换成 shim 语义；`joycode` 子节整节重写；B-2 恢复手册改为「不需要手动重启 App，懒启动」；C-1 示例块换成实测输出（`taskId` 字段已不存在）；FREE_POOL 与路由表条目 id 改 1.6。
+- **catalog 6.50.0**：`whitelist.joycode` 删 `1.5`；`skipFreeEntries` 三处 1.5→1.6；`freePool.entries` 第三条改 1.6 且 `credit: null`（0x 未复核）；`models` 键改名并重写 note；历史证据块 `joycodeBridge_20261010` 加 `⚠️ superseded_20261115`。
+- **model-routing.md**：三处 1.5→1.6，倍率改 `?x（待复核）`，provider 表行改写为 shim 链路。
+- **scripts/probe-models.sh**：`DEFAULT` 第三项 `joycode/joycode/JoyAI-Code-1.5` → `JoyAI-Code-1.6`（否则 consistency-check 的「DEFAULT 前 3 项 = FREE_POOL 按 priority」判据会红）；`probe_joycode()` 的默认命令由 `configs/joycode-bridge/joycode-dispatch.mjs` 改为 `configs/joycode-shim/joycode-dispatch.mjs`，失败文案改「JoyCode shim 不可用」。
+- **测试夹具同步**：`scripts/pipeline-test.py`（`JOY` 常量、`COOL_ALL_FREE`、`JOY_ARGV` 路径、两处用例 model/argv）与 `scripts/probe-models-test.sh`（假桩 `models` 输出、`cd_get` 参数）里的 1.5 全部改 1.6。
+
+### 口径（重要）
+
+- 🔴 **`JoyAI-Code-1.6` 的 0x 免费状态未复核**。旧证据（2026-10-10 截图，1.5 标 0x、免费至 11-06）只对 1.5 成立；1.6 是否免费需看 JoyCode.app 用量面板。⛔ Paseo 的 `CostUsd $0.00` 是自定义 provider 的恒零记账，**不能**当积分证据。
+- 通道仍属「驱动官方桌面 App」，⛔ 不是 Paseo provider；跨机（wb-hub）必须经 shim 中转，因为代理只绑 `127.0.0.1`。
+- ⛔ 旧 `configs/joycode-bridge/`（IDE drop-in 扩展）整体废弃，不要再跑它的 `status`/`install.sh`。
+
 ## v11.16 (2026-10-11) — qoderclicn `-p` 不是纯文本通道（§3.2h）
 
 **起因**：一次 200+ 张卡的批量会话蒸馏改走 `qoderclicn -p -m Qwen3.8-Flash --tools "" -o json`（免费池 qfmodel），约两成答案不可用，执行方把原因归结为「`--tools ""` 下仍走 agent 循环」。用户要求查清原因，并把结论补进 rift-dispatch。

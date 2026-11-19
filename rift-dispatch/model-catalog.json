@@ -1,12 +1,11 @@
 {
-  "version": "6.52.0",
+  "version": "6.53.0",
   "lastUpdated": "2026-10-11",
   "whitelist": {
     "_note": "⛔ 2026-08-16 用户决策（model-routing.md 硬性约束 6），优先级最高。对【白名单 provider】(codebuddy-code / qoderclicn)：不在本表的 model id 一律禁止派发，包括本文件 models 里仍有完整条目的。⚠️ 豁免 provider（whitelist.exempt）走另一套校验，⛔ 不受本表约束——LAST_RESORT 的 claude/claude-sonnet-5 走豁免集，⛔ 不是违例。",
     "codebuddy-code": [
+      "hy4flash-free",
       "hy4-preview",
-      "hy3",
-      "hy3-x",
       "glm-5.3-flash",
       "deepseek-v4.1-flash",
       "kimi-k3-1",
@@ -195,20 +194,13 @@
       "kimi-k2.6": 0.52,
       "deepseek-v4-pro": 0.51,
       "deepseek-v4-flash": 0.17,
-      "kimi-k3-1": 1.62
+      "kimi-k3-1": 1.62,
+      "hy4flash-free": 0.0,
+      "_source_20261119": "用户 /model 面板 m11140：hy4std x0.29 / hy4flash-free x0.00 / hy4flash x0.03 / deepseek-v4.1-flash x0.11 / glm-5.3 x0.69 / glm-5.3-flash x0.08 / glm-5.2 x0.79 / space-bunny x0.08 / minimax-m3.1-flash x0.08 / minimax-m2.7 x0.19 / kimi-k3.1-pro x0.97 / kimi-k3-1 x1.62 / kimi-k2.8-preview x0.77 / deepseek-v4-pro x0.51 / step-5-preview x0.33 / mimo-v2.6-pro x0.13"
     },
     "qoderclicn": {
-      "qmodel_38max": 0.5,
-      "qmodel_latest": 0.5,
-      "qmodel": 0.1,
-      "q36fmodel": 0.1,
-      "dmodel": 0.5,
-      "dfmodel": 0.1,
-      "gmodel": 0.6,
-      "gm51model": 0.6,
-      "kmodel": 0.3,
-      "mmodel": 0.2,
-      "auto": 0.5
+      "qfmodel": 0.1,
+      "_source_20261119": "用户情报 m11140：qcn 无免费档，原 deepseek flash 0.10x"
     },
     "findings": [
       "🔴 涨价：deepseek-v4-flash 0.05x→0.17x（3.4 倍）、deepseek-v4-pro 0.13x→0.51x（3.9 倍）。默认落点『性价比 1780 全场最高』的立论被动摇。⛔ 不要用跨轮分数重算性价比去排序，同口径结论见 h2hEval_20260828",
@@ -235,22 +227,21 @@
       "fallbackLadder": [
         {
           "order": 1,
-          "upstream": "qoderclicn",
-          "model": "qfmodel",
-          "family": "Qwen",
-          "cost": "免费（截止未公布）",
-          "command": "qoderclicn -p -w \"$(mktemp -d)\" --no-session-persistence -m Qwen3.8-Flash --tools \"\" -o json \"<prompt>\" < /dev/null",
-          "verified": "✅ 2026-10-06 14:35 旧命令（无 -w / --no-session-persistence）真实评审演练通过（30.3s，VERDICT 合规，total_credits=0）· ✅ 2026-10-11 新参数局部验证（headless 可用、不写会话文件 —— ⛔ prompt 仍进运行日志；请求被额度拒，未见正文）· ⚠️ 新命令的真实评审未复测",
-          "outputGate": "SKILL §3.2h：正文含 <tool_call> / <function= 、没有 VERDICT: 行、或声称没收到内容 ⇒ 通道失败、换下一档，⛔ 不当审查结论"
+          "upstream": "codebuddy-code",
+          "model": "hy4flash-free",
+          "family": "Hy(混元)",
+          "cost": "免费（🔴 2026-11-19 起 cb 唯一免费档，截止未公布 ⇒ 每次派发核 rawUsage.credit）",
+          "command": "codebuddy -p --output-format json --model hy4flash-free --tools \"\" \"<prompt>\" < /dev/null",
+          "verified": "⛔ 无独立盲评（承 hy3 先例 avoid 三项）；探活走 probe-models.sh cb 分支"
         },
         {
           "order": 2,
-          "upstream": "codebuddy-code",
-          "model": "hy3",
-          "family": "Hy(混元)",
-          "cost": "免费（至 2026-10-31）",
-          "command": "codebuddy -p --output-format json --model hy3 --tools \"\" \"<prompt>\" < /dev/null",
-          "verified": "✅ 2026-10-06 14:38 探活通过（~12s，PROBE_OK）"
+          "upstream": "joycode",
+          "model": "joycode/JoyAI-Code-1.6",
+          "family": "JoyAI",
+          "cost": "免费（0x 已实证 2026-11-16，配额耗尽判别法）",
+          "command": "node ~/AgentWorkspace/configs/joycode-shim/joycode-dispatch.mjs ask --prompt-file <prompt-file> --model JoyAI-Code-1.6 --timeout 900",
+          "verified": "✅ 2026-11-16 实测（remain=-20 仍出 token、Δ=0）"
         },
         {
           "order": 3,
@@ -282,7 +273,7 @@
       "supersededBy": "🔴 walletPriority.discountWindows（2026-09-09）：百炼 22:00-08:00、codebuddy 工作日 09-12/14-18 之外全部时段。⭐ 只在【档位内选落点】介入，⛔ 不参与选档位 ⇒ 与上面的不变量不冲突。"
     },
     "escalation": {
-      "rule": "T0 免费池 FREE_POOL（hy3 → qfmodel → joycode/JoyAI-Code-1.6，逐条按条目判；📜 原 priority 1 的 stealth/space-bunny-alpha 于 2026-10-06 因模型 404 下线而删除）→ T1 deepseek-v4.1-flash → T2 deepseek-v4-flash → T3 qwen3.8-max → T4 kimi-k3-1 →（仅可用性耗尽）LAST_RESORT claude-sonnet-5",
+      "rule": "T0 免费池 FREE_POOL（hy4flash-free → joycode/JoyAI-Code-1.6，逐条按条目判；📜 原 priority 1 的 stealth/space-bunny-alpha 于 2026-10-06 下线、hy3/qfmodel 于 2026-11-19 按用户面板下线）→ T1 deepseek-v4.1-flash → T2 deepseek-v4-flash → T3 qwen3.8-max → T4 kimi-k3-1 →（仅可用性耗尽）LAST_RESORT claude-sonnet-5",
       "toK3Condition": "⛔ 【质量/成本升档】：要 v4-pro 也做砸才升 K3。⚠️ **可用性换档⛔不受此约束** —— T3 池 + 同档替代全不可用时可升 T4（见 walletPriority.availabilityEscalation）。⛔ 不做预防性升档（2026-08-02 n=1 + 2026-08-06 n=12 两次实测支撑）。K3 是 v4-flash 的 9.5 倍、glm-5.3-flash 的 27 倍。",
       "k3Status": "✅ 2026-08-16 用户恢复启用，作为极致档 / 唯一升档目标。原 P5.4『0723 实测不可靠、定弃用、改派 M3』的结论失效（M3 也已关闭）。⚠️ 0723 观察到的现象保留为已知风险：反复空转、报进度就 idle、git 无产出 —— 派完必须核 git 是否真有 commit",
       "noFallbackForK3": "🔴 K3 撞限额时【白名单内】无替代（唯一 S 级，M3 已关闭）⇒ 2026-09-09 起走 **LAST_RESORT claude/claude-sonnet-5@max**（见 claudeModels.claude-sonnet-5.lastResort），⛔ 不再是「只能报告用户」；连它也拿不到才停止",
@@ -309,8 +300,7 @@
         "paidEntry": "deepseek-v4-flash",
         "evidence": "hy3 盲评 LRU 22 ⇒ 跳免费档。⚠️ 付费起步档【无干净证据】——h2hEval_20260828 的 LRU 一格口径不同（v4-flash 在 agent 上下文按 TDD 真建工程并跑了测试），⛔ 不能引用。📜 原先取并发题（同口径，v4-flash 35 > glm 31）作为『精细实现类』的最近代理；🔴 但该代理 09-10 被同题 4 臂推翻（v41FlashEval_20260910 并发题 v4.1 37.5 > v4-flash 30.5），并发两类已回到 T1。⇒ algorithm 保留 T2 起步仅因「无干净证据、按保守」，🔴 待补测 v4.1 vs v4-flash 的 LRU / perf 头对头（SKILL ENTRY 注释同）。",
         "skipFreeEntries": [
-          "hy3",
-          "qfmodel",
+          "hy4flash-free",
           "joycode/JoyAI-Code-1.6"
         ]
       },
@@ -318,8 +308,7 @@
         "paidEntry": "deepseek-v4-flash",
         "evidence": "⚠️ 从来没有 perf 类实测，按 algorithm 同类保守处理",
         "skipFreeEntries": [
-          "hy3",
-          "qfmodel",
+          "hy4flash-free",
           "joycode/JoyAI-Code-1.6"
         ]
       },
@@ -327,7 +316,7 @@
         "paidEntry": "deepseek-v4.1-flash",
         "evidence": "🔴 2026-08-28 修正：原为 deepseek-v4-flash。h2hEval_20260828 Kafka glm 36 > v4-flash 31，旧规则的依据（v4-flash 重测 Kafka 34 > v4-pro 31）说的是 v4-flash 与 v4-pro 的关系，⛔ 不涉及 glm。⚠️ n=1、单评委，待同口径复测——与 algorithm 一样标为待补",
         "skipFreeEntries": [
-          "hy3",
+          "hy4flash-free",
           "joycode/JoyAI-Code-1.6"
         ]
       },
@@ -347,14 +336,14 @@
     "codebuddyDefaultModelNote": "📜 2026-08-28 曾从 deepseek-v4-flash 改为 glm-5.3-flash（T1）；🔴 2026-09-10 起 T1 主落点换成 deepseek-v4.1-flash，cb 上因 v4.1 涨价（0.11x > glm 0.06x）改用同档 glm-5.3-flash。⛔ 这只是【默认起步档】——只有 algorithm / perf 两类从 T2 的 deepseek-v4-flash 起步（并发两类 09-10 起已回到 T1），见 entryTier。"
   },
   "freePool": {
-    "_note": "⭐ T0 免费档登记表（用户 2026-09-29：新增 / 下线免费模型⛔不改挑选逻辑，只改数据：本表 + SKILL FREE_POOL；白名单型 provider（cb / qcn）还要加 WHITELIST（⛔ 故意不让登记表绕过 P0），再补标题缩写 —— 漏哪项 consistency §3o 都会报）。按 priority 从小到大取第一个当前可用的。🔴 选择字段（upstream/model/priority/freeUntil/thinking/multimodal/avoidTaskTypes/cautionTaskTypes/retainsData/allowInSensitiveWorkspace）与 SKILL.md §2 的 FREE_POOL 逐项一致（consistency §3o）；creditRecord / verifyVia / quota / evalRef / note **只在这里**（用户或 agent 核完写进来，⛔ 不双写）。时间一律本地 Asia/Shanghai、不带时区。",
-    "⚠️ recheckRule": "freeUntil 过后，只有 creditRecord.verifiedOn **晚于 freeUntil 当天**、距今 ≤7 天、且 credit==0 才继续当免费档用；窗口内核的记录只证明促销价是 0（2026-09-29 起）。",
+    "_note": "🔴 2026-11-19 用户情报（m11140，/model 面板）：cb 免费仅剩 hy4flash-free；hy3 已不在清单（此前探活成功=服务端对旧 id 的静默别名路由，⛔ 不可信）；qcn 无免费档（qfmodel 0.10x）⇒ qfmodel 移出免费池。现役免费池 = codebuddy-code/hy4flash-free → joycode/JoyAI-Code-1.6。",
+    "⚠️ recheckRule": "🔴 免费档维持条件（2026-11-19 起双判据）：①成本=0 —— hy4flash-free 每次派发读 rawUsage.credit=0；joycode/JoyAI-Code-1.6 用配额耗尽判别法（11-16 实证）；②id 仍存在 —— 探活「成功且 credit=0」不能证明 id 在清单里：cb 对旧 id 静默别名路由（hy3 实锤，2026-11-19 用户面板），必须对照权威 /model 清单（或用户面板读数）确认。",
     "entries": [
       {
         "upstream": "codebuddy-code",
-        "model": "hy3",
+        "model": "hy4flash-free",
         "priority": 1,
-        "freeUntil": "2026-10-31T23:59",
+        "freeUntil": null,
         "thinking": "max",
         "multimodal": false,
         "avoidTaskTypes": [
@@ -368,39 +357,16 @@
         "creditRecord": {
           "credit": 0.0,
           "verifiedOn": "2026-11-19",
-          "source": "2026-11-19 实测 cb rawUsage.credit=0（免费窗口 10-31 过后仍 0x，t0_still_free 通过可续用）"
+          "source": "用户 /model 面板读数 m11140（hy4flash-free x0.00）+ 11-19 实测 rawUsage.credit=0（当时经别名路由）"
         },
-        "verifyVia": "⭐ 首选：`codebuddy -p --model hy3 --output-format json --tools '' 'reply with exactly: OK'`，读返回里 providerData.rawUsage.credit（=0 免费；agent 自己就能核，2026-10-02 实测 hy3=0，见 🔴 cbRawUsageCredit_20261002）；其次 cb `/model` 面板读数。⛔ 模型自述无效（实测答「不知道」）",
+        "verifyVia": "⭐ 权威=用户 /model 面板（2026-11-19 读数 hy4flash-free x0.00）；每次派发读 providerData.rawUsage.credit=0 复核；⛔ 探活「成功且 credit=0」不能证明 id 存在（cb 对旧 id 静默别名路由，hy3 即先例）",
         "evalRef": "sameRoundEval_20260816 · hy4Eval_20260821",
-        "note": "免费期二次延长至 2026-10-31 23:59（CodeBuddy&混元官方 2026-09-30 公告，用户 10-01 转发；此前是 09-30 止）；每日赠额，耗尽表现为排队 / 不回复（cb 429 正文带重置时间）。avoid 三项就是旧的全局排除清单 —— 那张清单本来就是给 hy3 定的。多模态会被 cb 切到付费模型。"
-      },
-      {
-        "upstream": "qoderclicn",
-        "model": "qfmodel",
-        "priority": 2,
-        "freeUntil": null,
-        "thinking": null,
-        "multimodal": false,
-        "avoidTaskTypes": [
-          "algorithm",
-          "perf"
-        ],
-        "cautionTaskTypes": [],
-        "retainsData": null,
-        "allowInSensitiveWorkspace": true,
-        "creditRecord": {
-          "credit": 0.0,
-          "verifiedOn": "2026-10-02",
-          "source": "`qoderclicn -p -m Qwen3.8-Flash -o json` 实测 total_credits=0（⭐ 原定截止 09-30 之后；2.6s）；另有 Qoder CN 官方公告「活动延期：10-01 起继续免费，结束时间将提前在本页公告」（用户 10-02 转发截图）"
-        },
-        "verifyVia": "⭐ 首选：`qoderclicn -p -w \"$(mktemp -d)\" --no-session-persistence -m Qwen3.8-Flash --tools '' -o json 'reply with exactly: PROBE_OK'` 的 `total_credits`（=0 免费；>0 已计费，CLI 直接给的实扣值，agent 自己就能核；probe-models.sh 已自动判）。公告页：Qoder CN 文档站「事件」→「Qwen3.8-Flash 限时免费使用」（URL 不在截图里，⛔ 未核）",
-        "evalRef": "qwen38flashEval_20260924 → 🔴 round2_qoderSamples",
-        "note": "Qoder 免费版 Qwen3.8-Flash。🔴 2026-10-02 官方公告：原定 09-30 23:59:59 的免费期延长，10-01 起继续免费，「结束时间将提前在本页公告」⇒ 截止未公布，freeUntil=None。⭐ 实测原定 09-30 之后 total_credits 仍为 0。⚠️ 仅 Qoder CN 个人用户（体验 / 专业 / 高级 / 旗舰版 + 会员卡，免费与试用用户均可）；**企业订阅（团队版 / 企业标准版 / 企业专属版）不适用**。官方注明活动期间用量大、高峰可能慢。🔴 免费一结束模型照样答得动、只是开始扣 Credits ⇒ freeUntil=None 必须自带失效条件：probe-models.sh 对它判 total_credits：>0 ⇒ 已计费、读不到（缺失 / 乱码）⇒ 无法确认免费（fail-closed），都冷却 24h。⚠️ 与百炼 qwen3.8-flash ⛔ 不是同一表现：09-24 第二轮 Qoder×2 均分 28.3 / 30.5 vs 百炼版 34.5（11:1 p=0.006），答案短、快 3–5 倍。avoid=algorithm·perf：algorithm 按实测（LRU 19.5 / 23.2，其余臂 30–32）；perf 无实测，推导：付费阶梯对 perf 跳过 T1 起步 T2，比 T1 还弱的免费模型更不该接（2026-10-02 由 agent 自行定下，非待决）；Kafka 34.0 / 35.5 同档 ⇒ ⛔ 不扩到 architecture。没有思考档 ⇒ ⛔ 不传 thinkingOptionId。Paseo 走原生 1.1.62 ACP（mode=yolo）。"
+        "note": "🔴 2026-11-19 用户面板实证：cb 免费档位只剩 hy4flash-free（hy3 已不在清单，探活成功是服务端别名路由假象）。freeUntil 不再公布（官方未给截止）⇒ 每次派发前核 rawUsage.credit。thinking 维持 max。"
       },
       {
         "upstream": "joycode",
         "model": "joycode/JoyAI-Code-1.6",
-        "priority": 3,
+        "priority": 2,
         "freeUntil": "2026-11-06T23:59",
         "thinking": null,
         "multimodal": false,
@@ -537,7 +503,8 @@
           "thinking": "high",
           "note": "见 hy4Eval_20260821"
         }
-      }
+      },
+      "status": "🔴 superseded_20261119：id 已从 cb 清单消失（用户面板 m11140），探活假绿=别名路由；派发一律用 hy4flash-free。本节仅作历史证据。"
     },
     "kimi-k3-1": {
       "label": "Kimi-K3",
@@ -1671,7 +1638,8 @@
           "credit": 0.0
         }
       },
-      "note": "T0 免费池 priority 3（见 freePool），截止未公布（Qoder CN 2026-10-02 官方公告延期，10-01 起继续免费）。🔴 ⛔ 与百炼 qwen3.8-flash 不是同一表现（09-24 第二轮 p=0.006）⇒ ⛔ 不能互相代测。无思考档。"
+      "note": "T0 免费池 priority 3（见 freePool），截止未公布（Qoder CN 2026-10-02 官方公告延期，10-01 起继续免费）。🔴 ⛔ 与百炼 qwen3.8-flash 不是同一表现（09-24 第二轮 p=0.006）⇒ ⛔ 不能互相代测。无思考档。",
+      "status": "🔴 paid_20261119：qcn 无免费档（原 deepseek flash 0.10x，用户 m11140）⇒ 退出免费池；付费派发仍可按钱包规则走。"
     },
     "space-bunny": {
       "label": "Space-Bunny（CodeBuddy 内置，匿名 Flash 大模型）",
@@ -1717,6 +1685,17 @@
         }
       },
       "note": "T0 免费池 priority 3（见 freePool），freeUntil 名义上停在 2026-11-06，但 2026-11-16 已用「配额耗尽仍可用」判别法复核 credit=0.0（见 creditRecord）⇒ t0_still_free 通过。经 JoyCode.app 本地 responses 代理 + OpenAI 兼容 shim 派发（SKILL §3.2f），⛔ 无思考档。⚠️ 同 provider 的 GLM-5.3 已硬禁用，Kimi-K2.6 / MiniMax-M3 / Doubao-Seed-2.0-pro 吃积分且账号积分已耗尽 ⇒ 当前只有 1.6 可用。"
+    },
+    "hy4flash-free": {
+      "label": "Hy4 Flash Free（cb 唯一免费档）",
+      "family": "Hy(混元)",
+      "contextWindow": null,
+      "note": "cb 免费 workhorse（『leaner, more efficient everyday workhorse, ideal for high-volume tasks』）。🔴 2026-11-19 免费池 priority 1（用户面板 m11140）。无盲评数据 ⇒ avoid 照 hy3 先例保守三项。",
+      "avoidFor": [
+        "algorithm",
+        "perf",
+        "architecture"
+      ]
     }
   },
   "claudeModels": {
@@ -2691,8 +2670,6 @@
       "kimi-k2.7-code": "k2.7C",
       "hy4-preview": "hy4",
       "hy4-preview-x": "hy4x",
-      "hy3": "hy3",
-      "hy3-x": "hy3x",
       "qwen3.8-max": "qwM3.8",
       "qwen3.8-flash": "qwF3.8",
       "qmodel_38max": "qcnM3.8",
@@ -2738,7 +2715,8 @@
       "trae/MiniMax-M3": "mmM3",
       "trae/Qwen3.8-Flash": "qwF3.8",
       "trae/Qwen3.8-Max": "qwM3.8",
-      "trae/Qwen3.7-Plus": "qwP3.7"
+      "trae/Qwen3.7-Plus": "qwP3.7",
+      "hy4flash-free": "hy4ff"
     },
     "🔴 rules": [
       "⛔ **缩写必须含版本号** —— dspF4 / glmF5.3 / k3.2 / gpt5.5。⛔ 不许写成 dsp / glm / kimi。",
@@ -3151,11 +3129,13 @@
       },
       "hy3": {
         "label": "Hy3",
-        "credit": 0.0
+        "credit": 0.0,
+        "status": "🔴 superseded_20261119：id 已从 cb /model 清单消失"
       },
       "hy3-x": {
         "label": "Hy3",
-        "credit": 0.05
+        "credit": 0.05,
+        "status": "🔴 superseded_20261119：id 已从 cb /model 清单消失"
       },
       "space-bunny": {
         "label": "Space-Bunny",
@@ -3214,6 +3194,11 @@
       "deepseek-v4-pro": {
         "label": "Deepseek-V4-Pro",
         "credit": 0.51
+      },
+      "hy4flash-free": {
+        "label": "Hy4 Flash Free",
+        "credit": 0.0,
+        "note": "🔴 2026-11-19 用户 /model 面板（m11140）：cb 唯一免费档；接替 hy3（hy3 已从清单消失，探活假绿=别名路由）"
       }
     },
     "🔴 changesVs20260924": [
@@ -3698,5 +3683,10 @@
     "fix": "空 cwd（-w \"$(mktemp -d)\"）+ --no-session-persistence + 输出闸门（必需：空 cwd 只去掉 AGENTS.md，agent 系统提示仍在，改后脏率未复测）；probe-models.sh 探活改每次 TemporaryDirectory",
     "check": "consistency-check §3s；probe-models-test.sh 8b",
     "todo": "⚠️ 额度恢复后：新命令真实评审复测 + --system-prompt 小样对照，结果回填 SKILL §3.2h"
+  },
+  "🔴 freeTierStatus_20261119_userPanel": {
+    "🔴 hy3Removed_cbFreeIsHy4flashFree": "🔴 **2026-11-19 用户 /model 面板（m11140）**：cb 免费档位只剩 `hy4flash-free`（x0.00）；`hy3` 已不在清单 ⇒ 免费池 priority1 改为 hy4flash-free；此前探活成功+credit=0 是**服务端对旧 id 静默别名路由**的假象（skill 既有判据，本次实锤）。`hy3-x` 亦从白名单移除（0.05x 付费，无派发角色）。",
+    "🔴 qfmodelNoLongerFree": "🔴 **2026-11-19 用户情报（m11140）**：qoderclicn 已无免费档位，原 deepseek flash 现 0.10x credit ⇒ `qfmodel` 移出免费池（whitelist 保留：付费档仍可按钱包规则派发）。",
+    "joyaiUnchanged": "✅ joycode/JoyAI-Code-1.6 0x 维持（11-16 配额耗尽判别法实证，11-19 无变化）。"
   }
 }

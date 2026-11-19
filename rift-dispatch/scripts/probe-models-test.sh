@@ -90,7 +90,7 @@ echo "JOY $*" >> "$TMPDIR/joy-calls"
 if [ "${FAKE_JOY:-}" = "down" ]; then echo '{"ok":false,"error":"bridge host pid 1 is not running"}'; exit 2; fi
 case "$1" in
   status) echo '{"ok":true,"hostPid":42}' ;;
-  models) echo '{"ok":true,"models":[{"label":"JoyAI-Code-1.5"},{"label":"GLM-5.3"}]}' ;;
+  models) echo '{"ok":true,"models":[{"label":"JoyAI-Code-1.6"},{"label":"GLM-5.3"}]}' ;;
   *) echo '{"ok":false,"error":"probe must not send tasks"}'; exit 9 ;;
 esac
 SH
@@ -212,27 +212,10 @@ echo "$out" | grep -q '查 key' && ok || bad "401 应提示查 key：$out"
 bash "$S/cooldown.sh" get bailian-token-plan other-model >/dev/null; rc=$?
 [ "$rc" -eq 1 ] && ok || bad "401 ⛔ 不该写冷却"
 
-# 18. 🔴 freeUntil=None 的条目必须自带「已计费」探测（2026-10-02 Qoder 延期、截止未公布：免费一结束模型照样答得动、只是开始扣费）
-out=$(bash "$P" --force qoderclicn/qfmodel); rc=$?
-{ [ "$rc" -eq 0 ] && echo "$out" | grep -q 'credits=0'; } && ok || bad "qcn total_credits=0 应 ✅ 且回显 credits=0（rc=${rc}）：$out"
-out=$(FAKE_QCN=billed bash "$P" --force qoderclicn/qfmodel); rc=$?
-{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '已开始计费' && echo "$out" | grep -q '〔模型级〕'; } && ok \
-  || bad "qcn total_credits>0 应判已计费（模型级、非 0 退出）（rc=${rc}）：$out"
-got=$(cd_get qoderclicn qfmodel)
-want=$(python3 -c "import datetime;print((datetime.datetime.now()+datetime.timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M'))")
-[ "$got" = "$want" ] && ok || bad "已计费应冷却 24h=${want}（实际 ${got}）"
-# 🔴 r4 审查：freeUntil=None 条目的**唯一**失效证据就是这个字段 ⇒ 读不到（缺失 / 字符串乱码）不能当免费（fail-closed）
-#    代价：少一个免费选项（回落付费 T1，便宜）；收益：不会因 CLI 输出格式变了而静默扣费
-out=$(FAKE_QCN=nocredits bash "$P" --force qoderclicn/qfmodel); rc=$?
-{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '无法确认' && echo "$out" | grep -q '〔模型级〕'; } && ok \
-  || bad "免费条目缺 total_credits 应判「无法确认」（模型级、非 0 退出）（rc=${rc}）：$out"
-out=$(FAKE_QCN=garbage bash "$P" --force qoderclicn/qfmodel); rc=$?
-{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '无法确认'; } && ok || bad "total_credits 是乱码字符串应判「无法确认」（rc=${rc}）：$out"
-out=$(FAKE_QCN=strbilled bash "$P" --force qoderclicn/qfmodel); rc=$?
-{ [ "$rc" -ne 0 ] && echo "$out" | grep -q '已开始计费'; } && ok || bad "total_credits=\"0.1\"（字符串）应判已计费（rc=${rc}）：$out"
-got=$(cd_get qoderclicn qfmodel)
-want=$(python3 -c "import datetime;print((datetime.datetime.now()+datetime.timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M'))")
-[ "$got" = "$want" ] && ok || bad "无法确认 / 已计费都应冷却 24h=${want}（实际 ${got}）"
+# 📜 2026-11-19：qfmodel 转付费（qcn 无免费档，用户 m11140）⇒ 原 freeUntil=None 的
+#    total_credits 三态判别（billed/unknown/strbilled → fail-closed 冷却 24h）失去载体，
+#    整组用例随 qfmodel 免费条目一并移除（见 git 历史）；「非免费 qcn 型号缺/有 total_credits
+#    都正常」的守卫保留在下方。
 # 非免费 qcn 型号缺字段是正常的，⛔ 不许被 fail-closed 误伤
 out=$(FAKE_QCN=nocredits bash "$P" --force qoderclicn/qmodel_38max); rc=$?
 { [ "$rc" -eq 0 ] && echo "$out" | grep -q '✅ qoderclicn'; } && ok || bad "非免费 qcn 型号缺 total_credits 不该被判无法确认（rc=${rc}）：$out"
@@ -321,13 +304,13 @@ left=$(ps -axo pid=,args= | awk '$2=="sleep" && ($3=="4242" || $3=="4243") {prin
 if [ -n "$left" ]; then bad "codex 超时后残留子进程 PID: $left"; kill $left 2>/dev/null; else ok; fi
 
 # 24. GUI 桥接 JoyCode：被动探活（models，⛔ 不发任务），型号在清单里 ⇒ ✅
-out=$(bash "$P" --force joycode/joycode/JoyAI-Code-1.5); rc=$?
+out=$(bash "$P" --force joycode/joycode/JoyAI-Code-1.6); rc=$?
 { [ "$rc" -eq 0 ] && echo "$out" | grep -q '✅ joycode' && ! grep -q ' ask' "$T/joy-calls"; } && ok \
   || bad "JoyCode 在线且型号在清单 ⇒ 应 ✅ 且不发任务（rc=${rc}）：$out"
 # 25. 桥接不在线 ⇒ ❌，⛔ 不写冷却（不是额度问题，App 开了就好）
-out=$(FAKE_JOY=down bash "$P" --force joycode/joycode/JoyAI-Code-1.5); rc=$?
+out=$(FAKE_JOY=down bash "$P" --force joycode/joycode/JoyAI-Code-1.6); rc=$?
 { [ "$rc" -ne 0 ] && echo "$out" | grep -q '❌ joycode'; } && ok || bad "JoyCode 不在线应 ❌：$out"
-cd_get joycode joycode/JoyAI-Code-1.5 >/dev/null; [ $? -eq 1 ] && ok || bad "JoyCode 不在线 ⛔ 不该写冷却"
+cd_get joycode joycode/JoyAI-Code-1.6 >/dev/null; [ $? -eq 1 ] && ok || bad "JoyCode 不在线 ⛔ 不该写冷却"
 # 26. 型号不在 JoyCode 清单 ⇒ 模型级失败
 out=$(bash "$P" --force joycode/joycode/Nope-9); rc=$?
 { [ "$rc" -ne 0 ] && echo "$out" | grep -q '模型级'; } && ok || bad "JoyCode 清单外型号应判模型级失败：$out"

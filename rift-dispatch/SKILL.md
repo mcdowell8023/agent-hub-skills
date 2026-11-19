@@ -22,7 +22,7 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 | # | 规则 | 落点 |
 |---|---|---|
 | 0 | 🔴🔴 **本地用户策略压过一切**（2026-10-10，§3.2g） | 优先级 **本地策略 > 内置决策树（§2）> 模型自主**。派发前先跑 `python3 scripts/local-policy.py --cwd <工作目录>`：命中规则 ⇒ **只许**规则 `allow` 里的落点（例：公司目录只用 Claude + 此刻确实免费的免费池），免费池拿不到 ⇒ 跳过付费阶梯直接走规则的 `fallback`；⛔ 连探活都不碰付费落点（探活 = 花钱）。规则文件在仓库外（`~/.config/rift-dispatch/policy.local.json`），⛔ 不进仓库；没有文件 ⇒ 下面 1–4 照常 |
-| 1 | **便宜优先，逐级升档** | 免费池（**`FREE_POOL` 登记表**：hy3@max → qfmodel → joycode/JoyAI-Code-1.6（**2026-11-15 起走 JoyCode.app 本地代理 + shim**；⭐ **2026-11-16 已实证 0x** —— 配额耗尽 remain=-20 时仍连跑 3 次出 token、Δ=0，同 provider 其余四个全部 insufficient_quota ⇒ 可当免费档用），逐条按条目判，09-29 起；📜 原 priority 1 的 Space Bunny 2026-10-06 已下线删除）先试 → 付费从 **`deepseek-v4.1-flash`**（火山两套餐 + 百炼；🔴 **cb 上改用同档 `glm-5.3-flash` 0.06x** —— 09-24 cb 的 v4.1 涨到 0.11x）起步 → `deepseek-v4-flash`（0.17x）→ `qwen3.8-max` → `kimi-k3-1`（1.62x）。⛔ **每一级【质量/成本升档】的唯一入口是「上一档已在本任务做砸过一轮」**，理由里要写明哪一轮、砸在哪。写不出来不许升。⚠️ 这条⛔**不管【可用性换档】**——模型在所有 provider 都拿不到时允许向上换档（必须报告），见 §2 第 5 段。⚠️ 例外：`algorithm` / `perf` 两类从 `deepseek-v4-flash` 起步（⚠️ 依据比的是 v4-flash **对 glm**，⛔ 没比过现在的 T1 ⇒ **待补测**）。🔴 并发两类已改回 T1 起步 —— 4 臂拉丁方并发题 v4.1-flash 37.5 > v4-flash 30.5 |
+| 1 | **便宜优先，逐级升档** | 免费池（**`FREE_POOL` 登记表**：**hy4flash-free**@max → joycode/JoyAI-Code-1.6（⭐ 2026-11-16 已实证 0x——配额耗尽仍出 token；🔴 2026-11-19 用户 /model 面板：**cb 免费只剩 hy4flash-free，hy3 已不在清单**（此前探活成功=服务端对旧 id 静默别名路由的假绿），**qcn 无免费档**（qfmodel 0.10x）⇒ qfmodel 移出），逐条按条目判；📜 下线史：Space Bunny 10-06、hy3/qfmodel 11-19）先试 → 付费从 **`deepseek-v4.1-flash`**（火山两套餐 + 百炼；🔴 **cb 上改用同档 `glm-5.3-flash` 0.06x** —— 09-24 cb 的 v4.1 涨到 0.11x）起步 → `deepseek-v4-flash`（0.17x）→ `qwen3.8-max` → `kimi-k3-1`（1.62x）。⛔ **每一级【质量/成本升档】的唯一入口是「上一档已在本任务做砸过一轮」**，理由里要写明哪一轮、砸在哪。写不出来不许升。⚠️ 这条⛔**不管【可用性换档】**——模型在所有 provider 都拿不到时允许向上换档（必须报告），见 §2 第 5 段。⚠️ 例外：`algorithm` / `perf` 两类从 `deepseek-v4-flash` 起步（⚠️ 依据比的是 v4-flash **对 glm**，⛔ 没比过现在的 T1 ⇒ **待补测**）。🔴 并发两类已改回 T1 起步 —— 4 臂拉丁方并发题 v4.1-flash 37.5 > v4-flash 30.5 |
 | 2 | 🔴 **按「要不要看得见」分通道，不是按工具分** | 🔴 **开发实施类 + 大审查 → Paseo；短任务 / 短审查 → `pi -p`；⭐ 审查（大/短审查）2026-10-06 起统一走 CLI `codex exec`（见 #4 与 §3.2c）**。⭐ **例外（2026-10-10）：GUI 桥接渠道（`joycode` / `trae-cn`）一律走桥接 CLI**（§3.2f）—— 它们没有 Paseo provider，可见性来自桌面 App 界面本身。判据是**规模**不是任务类型——Paseo 能看进度、中途干预、拿结构化状态；`pi -p` 跑完即退不堆 serve。⛔ **开发任务和大审查都不要走 `pi -p`**：它不进 Paseo agent 列表，你看不见也打不断（实测大审查走 `pi -p` 跑满 35 分钟零输出 ⚠️ 09-24 起**疑似 stdin 挂死**而非规模问题，见 §3.2b —— 当时未查 stdin，未复测） |
 | 3 | 🔴 **先判失败形态，再决定换什么** | **有产出但不合格** = `bad_output` ⇒ 走【质量/成本升档】（可换模型族）。**没产出**（静默停 / 唤不醒 / 探活不过）= `no_response` ⇒ 走【可用性】：**留在同 provider 降到下一档**，⛔ 不算做砸、⛔ 不跨钱包。⚠️ hy4 经常「碰墙」——允许你用但派发后静默停，**Paseo 抓不到明确错误** ⇒ ⛔ 别把它当成模型能力问题 |
 | 4 | 🔴 **审查的硬约束是「异构」** | ⛔ **评审模型族 ≠ 实施模型族**（全局红线 #8），是**不变量**，不是针对某个模型的禁令。🔴 **含主会话：主会话就是 Claude，我自己写的东西不得派 `claude/*` 去审**。族对照表见 routing §5。⭐ **未显式指定时**默认 **`codex`**（⭐ 2026-10-06 起；模型取 `~/.codex/config.toml` 的 `model`，实测 `gpt-5.6-sol`，可用 `RIFT_REVIEW_MODEL` 覆盖；⛔ 不是「不可覆盖」，显式换 provider 会报冲突）。⚠️ **通道统一走 CLI** `codex exec`（大/短审查同通道——Paseo 的 codex provider `out of credits`，⛔ copilot 全族 2026-10-06 已死）。🔴 codex 撞额度 ⇒ 按 §3.2c 降级阶梯换异族，**显式记录并告知用户** |
@@ -31,16 +31,16 @@ argument-hint: "[--model <name>] [--thinking <level>] [--hub] [--worktree <path>
 **可用性换档**（所有 provider 都拿不到）只许**向上**、必须**报告**，到顶仍拿不到 ⇒ `claude/claude-sonnet-5@max`
 （🔴 **LAST_RESORT**：整套钱包体系就是为了省 Claude 额度，走到这里必须显著告知）。
 
-⚠️ **派发认 model id，⛔ 不认 label**：`hy3`(0.00x) 与 `hy3-x`(**0.05x**) 的 label 都是「Hy3」（09-24 面板）。
+⚠️ **派发认 model id，⛔ 不认 label**；且 **id 必须仍在 /model 清单里** —— 🔴 2026-11-19 实锤：`hy3` 已被服务端移出清单但探活仍「成功且 credit=0」（对旧 id 静默别名路由），派发侧只能认权威清单。
 
 🔴 **`probe_ok(m)` 的可执行实现 —— ⛔ 不是抽象概念，是一条命令**（2026-09-17 补）：
 
 ```bash
 S=~/.claude/skills/rift-dispatch/scripts
 bash $S/probe-models.sh                              # 探当前阶梯默认落点（跨 provider）
-bash $S/probe-models.sh codebuddy-code/hy3 …         # 指定 provider/model
+bash $S/probe-models.sh codebuddy-code/hy4flash-free … # 指定 provider/model
 bash $S/probe-models.sh --all                        # 全部已知落点
-bash $S/cb-probe.sh hy3                              # 兼容 shim：只探 cb
+bash $S/cb-probe.sh hy4flash-free                    # 兼容 shim：只探 cb
 ```
 
 ⭐ **分流 —— 不同 provider 拿得到的证据强度不同，⛔ 别一套办法打天下**：
@@ -64,7 +64,7 @@ bash $S/cb-probe.sh hy3                              # 兼容 shim：只探 cb
 | 信号 | 判定 | 动作 |
 |---|---|---|
 | cb「使用量已超出频率限制，将在 HH:MM:SS 重置」 | 额度 | 换下一个免费条目；冷却到该时刻 |
-| 🔴 codex stderr `ERROR: Your workspace is out of credits.`（rc=1，2026-10-06 实测原文；同类签名 `usage limit` / 401 / 429，大小写不敏感） | 额度耗尽（⭐ **通道级**，codex 全家不可用，⛔ 不是模型级） | 按 §3.2c 降级阶梯换**异族**落点（qfmodel → hy3 → glm-5.3-flash），落点写冷却 +1h，**显式记录并告知用户**（⛔ 不许悄悄换）；⛔ 不许回落 claude 族（主会话）或 copilot 族（已死） |
+| 🔴 codex stderr `ERROR: Your workspace is out of credits.`（rc=1，2026-10-06 实测原文；同类签名 `usage limit` / 401 / 429，大小写不敏感） | 额度耗尽（⭐ **通道级**，codex 全家不可用，⛔ 不是模型级） | 按 §3.2c 降级阶梯换**异族**落点（hy4flash-free → JoyAI-Code-1.6 → glm-5.3-flash），落点写冷却 +1h，**显式记录并告知用户**（⛔ 不许悄悄换）；⛔ 不许回落 claude 族（主会话）或 copilot 族（已死） |
 | Paseo 下 cb 新会话零产出 / 唤不醒 | ⚠️ 先别定性 | **先 CLI 探活**（上面那条就是这样查出来的），⛔ 别直接归因 provider |
 | OpenRouter `429` | 额度（20 次/分 · 50 次/天，北京 08:00 重置） | 换下一个；冷却到 `X-RateLimit-Reset`，没有就 +1h |
 | OpenRouter `402` | 余额为负 | **停用这一条 24h 并报告用户**，继续试下一个免费条目（⛔ 不中止整个派发） |
@@ -108,15 +108,15 @@ n=1 时「全部失败」就是「这一个失败」，⛔ 推不出通道有问
 | 型号 | 免费期 | 当前状态 |
 |---|---|---|
 | ~~`stealth/space-bunny-alpha`~~ | OpenRouter 09-23 上架的隐身预览模型，截止从未公布 | 🔴 **2026-10-06 已下线**：探活 `HTTP 404 No endpoints found for stealth/space-bunny-alpha`，且 OpenRouter 公开 `/api/v1/models`（464 个模型）里已无任何含 `bunny` / `stealth` 的 id ⇒ 条目已从 FREE_POOL / WHITELIST / catalog 删除（用户 m07513 要求） |
-| `hy3` | 🔴🔴 **二次延长至 `2026-10-31 23:59`**（CodeBuddy&混元官方 2026-09-30 公告，用户 10-01 转发截图；此前记的是「09-30 止」，09-15 之前更早记的是「08-31 止」） | ✅ 2026-10-01 探活通过 · ⭐ 现在是 T0 priority **1** |
-| `qfmodel` | ⚠️ **截止未公布**（Qoder CN 官方公告：原定 09-30 的免费期已延长，10-01 起继续免费，「结束时间将提前在本页公告」——⛔ agent 不会读那个页面，靠探活里的 `total_credits` 兜）。仅限个人用户，**企业订阅不适用**；高峰可能慢 | ✅ 2026-10-02 实测（原定 09-30 之后）`total_credits=0` · T0 priority **2** |
+| `hy4flash-free` | 🔴 **2026-11-19 起接替 hy3 成唯一 cb 免费档**（用户 /model 面板 m11140：x0.00；`hy3` 已被服务端移出清单——探活假绿=静默别名路由） | ⭐ T0 priority **1**；⛔ 无公布截止 ⇒ 每次派发核 `rawUsage.credit`；盲评数据 ⛔ 无（承 hy3 先例 avoid 三项） |
+| ~~`qfmodel`~~ | 🔴 **2026-11-19 移出免费池**（用户 m11140：qcn 无免费档，原 deepseek flash 0.10x） | catalog 保留条目标 paid；付费派发按钱包规则仍可用 |
 | ~~`hy4-preview`~~ | `08-28 ~ 09-10` 已过期 | 🔴 **2026-09-15 用户弃用：不稳定** ⇒ ⛔ 已移出 T0，不再考虑 |
 | ~~`hy3-x`~~ | ⛔ 本来就不是免费档（**0.05x**）。⚠️ 09-24 起它比 cb 上的 T1 落点 glm-5.3-flash(0.06x) 还便宜一点，但⛔**不同档**（同轮 08-21 盲评 hy3 84 < glm 91，差距远大于位置偏好 2.5）⇒ 先选档位再挑便宜，轮不到它 | 🔴 **无派发角色** ⇒ ⛔ 不考虑 |
 
 ⚠️ **cb 的 hy 系**是**每日赠额**⛔非连续免费期 —— **不回复 = 当日赠额已用完**，须主动换。
 📜 旧规则（Space Bunny 还活着时）：「迟迟不回⛔ 不能当成耗尽，先看有没有 429 / 探活」——
 它的额度耗尽是明确 429（OpenRouter 20 次/分 · 50 次/天）、且本来就慢（实测 150–400s/题）。
-🔴 现在免费池只剩 **cb 的 hy3** 与 **qcn 的 qfmodel**，这条只对 qfmodel 还可能有意义（额度报错形态⚠️ 未见过原文）。
+🔴 免费池（11-19 起）= **cb 的 hy4flash-free** + **joycode/JoyAI-Code-1.6**；qcn 无免费档。
 🔴 **判据永远是探活 + `promo_active`，⛔ 不是面板上的 `x0.00`** —— 那是价格；
 赠额耗尽后价格仍显示 0，表现是**排队 / 不回复**而⛔不是报错。
 ⭐ **T0 是一张登记表（`FREE_POOL`，2026-09-29 起）**—— 新增 / 下线免费模型**⛔ 不改挑选逻辑**，改的都是数据：
@@ -147,7 +147,7 @@ SKILL §2 `FREE_POOL` + catalog `freePool` 条目（二者 consistency §3o 逐�
 | 参数 | 解析方式 | 默认 |
 |---|---|---|
 | `--model <name>` | 短名或完整 model ID（映射见 catalog `shortNames`） | 自动推荐 |
-| `--thinking <level>` | minimal / low / medium / high / xhigh / max | 按模型定：免费条目取 `FREE_POOL.thinking`（**`hy3`→`max`** · `qfmodel` 无思考档 ⛔ 不传），付费档→`xhigh`（routing §4）。**有思考档的三条通道都必须传** |
+| `--thinking <level>` | minimal / low / medium / high / xhigh / max | 按模型定：免费条目取 `FREE_POOL.thinking`（**`hy4flash-free`→`max`**（承 hy3 先例，同为 Hy 族免费档；⛔ 尚无独立实测）· joycode/JoyAI-Code-1.6 不传），付费档→`xhigh`（routing §4）。**有思考档的三条通道都必须传** |
 | `--hub` | 标记 | 否（本地） |
 | `--worktree <path>` | 路径 | 当前目录 |
 | `--provider <name>` | 强制指定 provider | 按 model 自动选 |
@@ -158,7 +158,7 @@ SKILL §2 `FREE_POOL` + catalog `freePool` 条目（二者 consistency §3o 逐�
 
 - 任务描述缺失 → 要求用户补充，⛔ 不猜
 - `--thinking` 非法值 → 回退到该模型默认档（免费条目按 `FREE_POOL.thinking`，其余→`xhigh`）
-- 目标模型**没有思考档**（`NO_THINKING_MODELS`：`qfmodel` · `kimi-k2.7-code`）→ ⛔ 不传，显式 `--thinking` 也作废，§7 回显「不适用」
+- 目标模型**没有思考档**（`NO_THINKING_MODELS`：`kimi-k2.7-code`；📜 qfmodel 2026-11-19 退出免费池，条目保留在 catalog）→ ⛔ 不传，显式 `--thinking` 也作废，§7 回显「不适用」
 - `--thinking` 合法但**目标模型没有该档** → 按 §3.2e 能力表**降到最近可用档**，⛔ 不得静默升档，且必须在输出里回显实际生效档位
 - `--provider` 与 `--model` 不匹配 → 报告冲突，让用户选
 - `--free` 与 `task_type == review` 同时成立 → **报告冲突，让用户选**（review 硬例外不进免费池：默认 codex 走订阅额度；⛔ 不擅自替用户决定牺牲哪一边）
@@ -185,7 +185,7 @@ args = parse_args(user_input)
 want_free = False          # 第 2 段按 args.free/explicit_model 定值，⛔ 不在别处冒出
 
 WHITELIST = {                                   # P0，routing §1
-  'codebuddy-code':   ['hy4-preview', 'hy3', 'hy3-x', 'glm-5.3-flash',
+  'codebuddy-code':   ['hy4flash-free', 'hy4-preview', 'glm-5.3-flash',
                        'deepseek-v4.1-flash',    # ⚠️ 2026-09-24 起⛔不再是 cb 的 T1 自动落点——
                        # 涨到 **0.11x**（0.06x→0.03x→0.11x，用户截图实测），反超 glm-5.3-flash(0.06x)。
                        # 仍在白名单内⇒可显式 --model 派发，只是不再自动选中（见 WALLET_PREF 同名条目）。
@@ -201,8 +201,8 @@ WHITELIST = {                                   # P0，routing §1
   # 🔴🔴 **陈旧版本别名比无版本别名更危险**：它带着版本号，却指向**另一个版本** ⇒
   #    标题会写 `cb-dspF4` 而实际跑的是 `dspF4.1`，**标题在说谎**，
   #    正好击穿 §3.1 标题规范存在的意义。⇒ ⛔ 必须从白名单移除，不能只加注释。
-  'qoderclicn':       ['qmodel_38max',
-                       'qfmodel'],               # ⭐ 2026-09-29 T0 免费池 priority 3（Qwen3.8-Flash，免费，截止未公布）
+  'qoderclicn':       ['qmodel_38max', 'qfmodel',  # qfmodel 🔴 2026-11-19 移出免费池（qcn 无免费档，0.10x）⇒ 保留在白名单供显式付费派发
+                       ],
   # 📜 2026-09-29 ~ 2026-10-06 这里曾有 `'openrouter-free': ['stealth/space-bunny-alpha']`
   #    —— 🔴 **2026-10-06 整条删除**（用户 m07513 要求）：探活 `HTTP 404 No endpoints found for
   #    stealth/space-bunny-alpha`，且 OpenRouter 公开清单（464 个模型）里已无任何含 bunny / stealth 的 id。
@@ -376,8 +376,8 @@ REVIEW_DEFAULT_MODEL    = codex_config_model()
 # 🔴 codex 额度耗尽 ⇒ 按此阶梯依次换**异族**落点（§3.2c 有命令与实测）。
 #    ⛔ 硬不变量：评审族 ≠ 实施族（routing §5）—— 若实施本身就是 Qwen / Hy / GLM 族，
 #    同族的档⛔跳过，取下一档。⛔ 不许回落 claude 族（主会话）；⛔ 不许回落 copilot 族（全族已死）。
-REVIEW_FALLBACK_LADDER  = [('qoderclicn', 'qfmodel'),            # 免费（截止未公布），Qwen 族
-                           ('codebuddy-code', 'hy3'),            # 免费至 10-31，Hy(混元) 族
+REVIEW_FALLBACK_LADDER  = [('codebuddy-code', 'hy4flash-free'),   # 免费（cb 唯一免费档，11-19 用户面板），Hy(混元) 族
+                           ('joycode', 'joycode/JoyAI-Code-1.6'),  # 免费（0x 实证 11-16）⭐ id 必须带命名空间（⛔ 裸名会被白名单拦）
                            ('codebuddy-code', 'glm-5.3-flash')]  # ⚠️ **付费 0.06x**（⛔ 不是免费），GLM 族
 CODEX_EXHAUSTED_RX      = r'out of credits|usage limit|HTTP 401|HTTP 429'  # 判 codex 额度耗尽的签名（大小写不敏感；2026-10-06 实测原文含 'out of credits'）
 # 🔴 锚定纪律（2026-10-06 异构审 P1-2）：⛔ **不许写裸 `401|429`** —— codex 正常输出里就有
@@ -453,34 +453,27 @@ FREE_POOL = [
   #    ⚠️ 它与 cb 的**付费**路由 `space-bunny`（x0.03，白名单里显式可派）是两回事 —— 那条 ⛔ 未下线、仍保留。
   #    📜 历史评测（可查）：09-29 第三轮 12 格同轮均分 33.3 vs qwen3.8-max 34.5 / glm 34.4 / v4.1 33.7；
   #       D3 用户：并发实现题 30.0 偏弱 ⇒ 只提醒不排除；D2 用户：服务方可能留存 prompt，用户知情。
-  {'upstream': 'codebuddy-code', 'model': 'hy3', 'priority': 1,
-   'freeUntil': '2026-10-31T23:59', 'thinking': 'max', 'multimodal': False,
+  {'upstream': 'codebuddy-code', 'model': 'hy4flash-free', 'priority': 1,
+   'freeUntil': None, 'thinking': 'max', 'multimodal': False,
    'avoidTaskTypes': {'algorithm', 'perf', 'architecture'}, 'cautionTaskTypes': set(),
    'retainsData': False, 'allowInSensitiveWorkspace': True},
-   # 🔴 2026-10-01 CodeBuddy&混元官方公告二次延期至 10-31 23:59（原 09-30）——
-   #    同一公告里 hy4-preview 也改成「夜间 23:00-次日8:00 限免延至 10-31」的新结构，
-   #    ⛔ 但 hy4-preview 09-15 被弃用的理由是【不稳定/碰墙】，与免费窗口无关 ⇒ 仍不纳入 FREE_POOL。
-   # 🔴 用户 2026-09-15：「hy3 能用最高就用最高思考强度」⇒ `max`。
+   # 🔴 2026-11-19 起 cb 免费档换成 hy4flash-free（hy3 被服务端移出清单，别名路由假绿）；thinking 承 hy3 先例取 `max`。
+   #    freeUntil=None（🔴 用户 /model 面板 m11140：x0.00 且无公布截止；📜 hy3 时代的 10-31 窗口已随该 id 下线作废）
+   #    ⇒ 窗口之外还有 creditRecord 新鲜度闸门（⛔ 2027-06 用例已证：不给新鲜复核记录照样落 T1）。
+   # 📜 2026-10-01 CodeBuddy&混元官方公告（原 hy3 的 10-31 窗口）随 hy3 下线一并作废。
    # ⚠️ **`max` 只验证了「被接受」，⛔ 没验证「想得更多」** —— 同一道推理题实测
    #    `minimal` 1384 / `high` 1130 / `max` **653** reasoning_tokens，非单调（与 `-0731` 六档空转同形）。
    #    ⭐ 但它免费且不报错 ⇒ 按用户指示取最高档，代价为零。
+   # 📜 qfmodel 条目 2026-11-19 移出（qcn 无免费档，0.10x）—— 原条目见 git 历史 v11.18。
    # ⚠️ avoid 三项就是旧的全局排除清单 —— 那张清单**本来就是给 hy3 定的**（07-20 / 08-21 盲评）
    # ⚠️ 多模态 ⇒ cb 会切到付费多模态模型，免费不成立
-  {'upstream': 'qoderclicn', 'model': 'qfmodel', 'priority': 2,
-   'freeUntil': None, 'thinking': None, 'multimodal': False,
-   # 🔴 2026-10-02 Qoder CN 官方公告：原定 09-30 23:59:59 的免费期延长，10-01 起继续免费，「结束时间将提前在本页公告」
-   #    ⇒ 截止未公布（与已下线的 Space Bunny 同口径）。⭐ 实测原定 09-30 之后 `total_credits` 仍为 0。
-   #    ⚠️ None = 视为开着，⛔ 所以它必须自带失效条件：probe-models.sh 的 QCN 映射对它判 total_credits>0 ⇒ 已计费 ⇒ 冷却 24h
-   #       （consistency §3o ⑬ 强制：freeUntil=None 的条目没有计费探测就报错）。
-   'avoidTaskTypes': {'algorithm', 'perf'}, 'cautionTaskTypes': set(),
-   'retainsData': None, 'allowInSensitiveWorkspace': True},
    # ⭐ Qoder 免费版 Qwen3.8-Flash（仅 Qoder CN 个人用户；企业订阅用户不适用）。🔴 **⛔ 不等于百炼直连版**：
    #    09-24 第二轮 Qoder×2 均分 28.3 / 30.5 vs 百炼版 34.5（11:1 p=0.006）——答案短、快 3–5 倍，疑似默认思考更低
    # avoid algorithm：按实测（LRU 19.5 / 23.2，其余臂 30–32）。
    # avoid perf：⭐ 2026-10-02 agent 自行定下（⛔ 非待决，改回只需删这一项）—— perf 无任何模型的实测；推导：付费阶梯对 perf 跳过 T1、
    #    从 T2 起步（见 ENTRY），比 T1 还弱的免费模型更不该接（审查 r2 也指出只挡 algorithm 会让 perf 落到它）；
    #    架构题（Kafka 34.0 / 35.5）与其余臂同档 ⇒ ⛔ 不扩大到 architecture
-  {'upstream': 'joycode', 'model': 'joycode/JoyAI-Code-1.6', 'priority': 3,
+  {'upstream': 'joycode', 'model': 'joycode/JoyAI-Code-1.6', 'priority': 2,
    'freeUntil': '2026-11-06T23:59', 'thinking': None, 'multimodal': False,
    # ⭐ 2026-10-10 接入（GUI 桥接，§3.2f）：JoyCode 模型菜单标 0x；用户账号「团队版（限免）有效期至 2026年11月6日」（用户截图）。
    #    🔴 给了明确截止 ⇒ 不走 ⑬ 的计费探测；过期后由 t0_still_free 把关（窗口之后 7 天内核到 credit=0 才续用，否则自动退出）。
@@ -900,7 +893,7 @@ if task_type == 'review':
         _cx = (review_impl_family(), f"本地策略 {policy_rule['id']}：⛔ {upstream}（付费）")   # 走同一条降级阶梯
     if _cx is not None:
         _impl_family, _detail = _cx
-        for _prov, _mid in REVIEW_FALLBACK_LADDER:   # ① qoderclicn/qfmodel ② codebuddy-code/hy3 ③ …/glm-5.3-flash
+        for _prov, _mid in REVIEW_FALLBACK_LADDER:   # ① codebuddy-code/hy4flash-free ② joycode/JoyAI-Code-1.6
             if not policy_allows(policy_rule, _prov, _mid):
                 continue                             # 🔴 本地策略：⛔ 付费档连探活都不许（探活 = 花钱）
             if family_of(_prov, _mid) == _impl_family:
@@ -1233,7 +1226,7 @@ copilot 凭据被删、Paseo codex provider 撞额度后，Paseo 侧没有可用
 可见性降级为「后台跑 + 输出落文件 + 完成后回读」。若将来 Paseo codex 恢复额度，再按「要不要看得见」把大审查升回 Paseo。
 
 模型侧不变：审查⛔用同族；⭐ 默认 `codex`（CLI；模型取 `~/.codex/config.toml` 的 `model`，实测 `gpt-5.6-sol`，
-`RIFT_REVIEW_MODEL` 可覆盖）。codex 撞额度 ⇒ §3.2c 降级阶梯（qfmodel → hy3 → glm-5.3-flash），显式告知用户。
+`RIFT_REVIEW_MODEL` 可覆盖）。codex 撞额度 ⇒ §3.2c 降级阶梯（hy4flash-free → JoyAI-Code-1.6 → glm-5.3-flash），显式告知用户。
 
 ### 📌 派发路径用例 —— 🔴 **这张表有可执行测试**
 
@@ -2176,7 +2169,7 @@ ssh hub "paseo run --detach \
 - 代码 / 文档变更 → **未显式指定时**默认 `codex`（⭐ 2026-10-06 起；模型取 `~/.codex/config.toml` 的 `model`，
   `RIFT_REVIEW_MODEL` 可覆盖；⛔ 换族，见 routing §5；显式换 provider 会报 review 冲突），
   **通道**统一 CLI：`codex exec --skip-git-repo-check "{review_prompt}" < /dev/null`（§3 通道判据总表）；
-  codex 撞额度 ⇒ §3.2c 降级阶梯（qfmodel → hy3 → glm-5.3-flash），显式记录并告知用户
+  codex 撞额度 ⇒ §3.2c 降级阶梯（hy4flash-free → JoyAI-Code-1.6 → glm-5.3-flash），显式记录并告知用户
 - 审查发现按 ❌/⚠️/💡 分级，❌ 必须修复
 
 ⛔ 真正的约束是 **评审族 ≠ 实施族**（routing §5）。实施是 DeepSeek 时评审才排除 DeepSeek 族；
