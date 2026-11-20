@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""rift-mfa - generic RFC 6238 TOTP code generator (stdlib only).
+
+Reads secrets from a LOCAL file (never in git):
+  default: ~/.local/share/rift-mfa/seeds.json  (file 0600, dir 0700)
+  override for tests: RIFT_MFA_SEEDS=/path/to/fake/seeds.json
+
+seed file format: {"<entry-name>": "<base32 or otpauth:// URI>", ...}
+
+Usage:
+  rift-mfa list              list entry names only (never prints seeds)
+  rift-mfa <name|keyword>    print ONLY the current 6-digit code to stdout
+  rift-mfa <name> --ahead N  roll to the next 30s window if <= N seconds left
+
+Exit codes: 0 ok / 2 arg error / 3 no such entry / 4 seed file missing or
+insecure permissions / 5 ambiguous keyword / 6 other failure.
+All diagnostics go to stderr; stdout carries only the code or the key list.
+"""
+import base64
+import hashlib
+import hmac
+import json
+import os
+import stat
+import sys
+import time
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+DEFAULT_SEEDS = Path.home() / ".local" / "share" / "rift-mfa" / "seeds.json"
+STEP = 30
+DIGITS = 6
+
+
+def _err(msg):
+    print(f"rift-mfa: {msg}", file=sys.stderr)
+
+
+def seed_path():
+    return Path(os.environ.get("RIFT_MFA_SEEDS", str(DEFAULT_SEEDS))).expanduser()
+
+
+def load_seeds():
+    p = seed_path()
+    if not p.is_file():
+        _err(f"seed file not found: {p.parent.name}/seeds.json")
+        return None, 4
+    mode = stat.S_IMODE(p.stat().st_mode)
+    if mode != 0o600:
+        _err(f"insecure seed file permissions {oct(mode)}, require 0600")
+        return None, 4
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except Exception as e:
+        _err(f"cannot read seed file: {type(e).__name__}")
+        return None, 6
+    if not isinstance(data, dict):
+        _err("seed file must be a JSON object")
+        return None, 6
+    return data, 0
+
+
+def extract_secret(value):
+    """Return base32 secret from a raw base32 string or an otpauth:// URI."""
+    if isinstance(value, str) and value.lower().startswith("otpauth://"):
+        params = parse_qs(urlparse(value).query)
+        secret = (params.get("secret") or [""])[0]
+    else:
+        secret = value if isinstance(value, str) else ""
+    secret = secret.strip().upper().replace(" ", "")
+    return secret
+
+
+def totp(secret_b32, now, ahead=0):
+    """RFC 6238: SHA1, 30s step, 6 digits."""
+    counter = int(now // STEP)
+    if ahead > 0 and (STEP - int(now) % STEP) <= ahead:
+        counter += 1
+    key = base64.b32decode(secret_b32 + "=" * (-len(secret_b32) % 8))
+    digest = hmac.new(key, counter.to_bytes(8, "big"), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    binary = int.from_bytes(digest[offset:offset + 4], "big") & 0x7FFFFFFF
+    return str(binary % (10 ** DIGITS)).zfill(DIGITS)
+
+
+def resolve(data, key):
+    """Exact name wins; otherwise substring; 0 -> (None,3), >1 -> (None,5)."""
+    if key in data:
+        return key, 0
+    matches = [k for k in data if key in k]
+    if not matches:
+        _err(f"no entry matches '{key}'")
+        return None, 3
+    if len(matches) > 1:
+        _err(f"ambiguous keyword '{key}' matches {len(matches)} entries")
+        return None, 5
+    return matches[0], 0
+
+
+def main(argv):
+    if not argv:
+        _err("usage: rift-mfa list | rift-mfa <name|keyword> [--ahead N]")
+        return 2
+
+    cmd = argv[0]
+    if cmd in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+
+    data, rc = load_seeds()
+    if rc:
+        return rc
+
+    if cmd == "list":
+        for k in data:
+            print(k)
+        return 0
+
+    ahead = 0
+    args = argv[1:]
+    if args and args[0] == "--ahead":
+        if len(args) < 2 or not args[1].isdigit():
+            _err("--ahead requires a non-negative integer")
+            return 2
+        ahead = int(args[1])
+        args = args[2:]
+    if args and args[0].startswith("--"):
+        _err(f"unknown option: {args[0]}")
+        return 2
+
+    name, rc = resolve(data, cmd)
+    if rc:
+        return rc
+    secret = extract_secret(data[name])
+    if not secret:
+        _err("entry has no usable secret")
+        return 6
+    now = float(os.environ.get("RIFT_MFA_NOW", time.time()))
+    try:
+        code = totp(secret, now, ahead)
+    except Exception as e:
+        _err(f"TOTP computation failed: {type(e).__name__}")
+        return 6
+    print(code)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

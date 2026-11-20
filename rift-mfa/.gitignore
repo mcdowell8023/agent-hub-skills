@@ -1,0 +1,9 @@
+# 种子与凭据绝不进 git —— 本地状态区见 SKILL.md §3
+seeds.json
+*.seeds.json
+*otpauth*
+*secret*.json
+credentials*.json
+__pycache__/
+*.pyc
+.DS_Store
