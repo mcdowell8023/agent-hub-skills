@@ -32,8 +32,12 @@ argument-hint: "<setup|selfcheck|fetch|draft|send|dedupe> [参数...]"
   不可见只表示服务商自动归档可能延迟，不得补写 Sent、不得重发、不得把 `--apply` 再跑一次当作确认。
 - `fetch_mail.py` 读邮件一律用 `BODY.PEEK[]`，不会把未读邮件静默标成已读。
 - `dedupe_drafts.py` 只删「同主题里比最新那封更旧」的草稿，且默认 dry-run；删掉的草稿都能从本地
-  `drafts/*.json` 用 `rift-mail draft` 重新生成，可逆。
+  `<STATE_DIR>/drafts/*.json` 用 `rift-mail draft` 重新生成，可逆。
 - 凭据存 macOS 钥匙串（`security` 命令），不落盘明文；仅在子进程环境变量里短暂存在。
+- **运行数据不进 skill 源仓**：`fetch` 的 `--out`、`draft` 的 `--json` 传相对路径时（如
+  `state/inbox.json`、`drafts/reply.json`）一律锚到本机状态目录 `<STATE_DIR>`，不会写进仓内；
+  绝对路径仍原样使用。`STATE_DIR` 默认 `~/.local/state/rift-mail-triage`，可用环境变量
+  `RIFT_MAIL_STATE_DIR` 整体改位（Agent Hub 等无钥匙串环境设一个变量即可）。
 
 ## 1. 首次设置
 
@@ -55,16 +59,17 @@ cp "$REPO/scripts/config.example.json" "$REPO/scripts/config.json"
 
 ## 2. 用法
 
-在 `rift-mail-triage/` 目录下执行（或用上面的 `$REPO` 前缀）：
+在任意目录下执行（脚本路径用上面的 `$REPO` 前缀）。`fetch --out`/`draft --json` 的相对路径会落到
+`<STATE_DIR>` 下，默认 `~/.local/state/rift-mail-triage/{state,drafts}`：
 
 ```bash
-scripts/rift-mail selfcheck                              # 连通性自检，不改任何邮件状态
-scripts/rift-mail fetch --days 7 --out state/inbox.json  # 拉近 7 天邮件到 JSON（人工看/喂给会话都行）
-scripts/rift-mail draft --json drafts/reply.json         # 把一份草稿定义写进草稿箱
-scripts/rift-mail send --uid 456                         # dry-run：核对精确草稿，零发送副作用
-scripts/rift-mail send --uid 456 --apply                 # 仅在用户明确授权当前邮件后真实发送
-scripts/rift-mail dedupe                                 # 预演：列出可清理的同主题重复草稿
-scripts/rift-mail dedupe --apply                         # 真正执行清理
+"$REPO/scripts/rift-mail" selfcheck                              # 连通性自检，不改任何邮件状态
+"$REPO/scripts/rift-mail" fetch --days 7 --out state/inbox.json  # 拉近 7 天邮件到 JSON（人工看/喂给会话都行）
+"$REPO/scripts/rift-mail" draft --json drafts/reply.json         # 把一份草稿定义写进草稿箱
+"$REPO/scripts/rift-mail" send --uid 456                         # dry-run：核对精确草稿，零发送副作用
+"$REPO/scripts/rift-mail" send --uid 456 --apply                 # 仅在用户明确授权当前邮件后真实发送
+"$REPO/scripts/rift-mail" dedupe                                 # 预演：列出可清理的同主题重复草稿
+"$REPO/scripts/rift-mail" dedupe --apply                         # 真正执行清理
 ```
 
 `draft` 成功后会输出 `[draft] uid=456` 和下一条 dry-run 命令。先运行 dry-run，把主题、收件人、
@@ -121,7 +126,8 @@ scripts/rift-mail dedupe --apply                         # 真正执行清理
 原版用 Windows DPAPI（`ConvertFrom-SecureString`，绑定当前 Windows 用户+本机）经 PowerShell 脚本注入
 环境变量；本版换成 **macOS 钥匙串**（`security` 命令，同样绑定当前系统用户账号），经 `rift-mail`
 这个 bash 入口统一取出后注入环境变量，两者安全属性等价（文件/钥匙串项泄露 ≠ 密码泄露）。受控发送
-另使用本地 receipt 记录幂等状态，默认目录为 `~/.local/state/rift-mail-triage/send-receipts/`。
+另使用本地 receipt 记录幂等状态，默认目录为 `<STATE_DIR>/send-receipts/`（即
+`~/.local/state/rift-mail-triage/send-receipts/`，随 `RIFT_MAIL_STATE_DIR` 一起改位）。
 
 原版另有一层"每日自动巡检"（Windows 计划任务 + headless Claude Code + 团队自定义的
 分类/去重/bug 推进 SOP skill）**未纳入本次移植**——那一层强依赖具体团队的业务规则，

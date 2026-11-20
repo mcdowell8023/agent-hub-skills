@@ -30,13 +30,28 @@ from email.utils import parsedate_to_datetime
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _CONFIG_PATH = os.path.join(_SCRIPT_DIR, "config.json")
 
+# 运行数据（drafts/state/send-receipts）一律落在本机状态目录，不进 skill 源仓。
+# RIFT_MAIL_STATE_DIR 可供 Agent Hub 等无钥匙串环境改到另一位置。
+STATE_DIR = os.path.abspath(os.path.expanduser(
+    os.environ.get("RIFT_MAIL_STATE_DIR", "~/.local/state/rift-mail-triage")))
+
+
+def resolve_state_path(path):
+    """绝对路径原样返回；相对路径锚到 STATE_DIR（含 drafts/、state/ 约定子目录）。"""
+    p = os.path.expanduser(str(path))
+    if not os.path.isabs(p):
+        p = os.path.join(STATE_DIR, p)
+    return os.path.abspath(p)
+
+
 _DEFAULT_CONFIG = {
     "imap_host": "imap.qiye.163.com",
     "imap_port": 993,
     "smtp_host": "smtp.qiye.163.com",
     "smtp_port": 465,
     "client_id_contact": "you@example.com",
-    "send_receipt_root": "~/.local/state/rift-mail-triage/send-receipts",
+    # 默认随 STATE_DIR（即 RIFT_MAIL_STATE_DIR）走，hub 只需设一个变量即可整体改位
+    "send_receipt_root": os.path.join(STATE_DIR, "send-receipts"),
     "sent_poll_timeout_seconds": 15,
     "sent_poll_interval_seconds": 1,
 }

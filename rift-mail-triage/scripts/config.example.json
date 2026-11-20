@@ -10,14 +10,12 @@
 
   "client_id_contact": "you@example.com",
 
-  "send_receipt_root": "~/.local/state/rift-mail-triage/send-receipts",
   "sent_poll_timeout_seconds": 15,
   "sent_poll_interval_seconds": 1,
-  "_comment_send": "send receipt 是防止重复投递的本地状态；SMTP 接受后仅只读轮询 Sent，超时也不会重发或向 Sent APPEND。",
+  "_comment_send": "send receipt 是防止重复投递的本地状态，默认落 STATE_DIR/send-receipts/（随 RIFT_MAIL_STATE_DIR 一起改位）。SMTP 接受后仅只读轮询 Sent，超时也不会重发或向 Sent APPEND。如需单独指定 receipt 目录，在此加 \"send_receipt_root\": \"<绝对路径>\" 覆盖。",
 
   "mailbox_default": "",
   "_comment_mailbox": "rift-mail 的默认邮箱地址，留空则每次手动传参或交互填写。",
 
-  "output_root": "~/mail-triage-output",
-  "_comment_output": "建议的落盘根目录（fetch/draft 的 --out/--json 参数按此约定组织子目录），仅作文档参考，脚本不会读取这个字段。"
+  "_comment_state": "fetch --out / draft --json 的相对路径一律锚到 STATE_DIR（默认 ~/.local/state/rift-mail-triage，可用环境变量 RIFT_MAIL_STATE_DIR 整体改位）。运行数据不写进 skill 源仓，源仓 .gitignore 已忽略 drafts/ state/ logs/ 与 *.output.json。绝对路径参数仍原样使用。"
 }

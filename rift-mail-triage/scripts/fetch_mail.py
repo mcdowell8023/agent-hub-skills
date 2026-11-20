@@ -20,7 +20,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mail_lib import (attachments_of, body_of, decode_mime, imap_connect,  # noqa: E402
-                      msg_datetime, parse_message, since_date)
+                      msg_datetime, parse_message, resolve_state_path, since_date)
 
 
 def main():
@@ -30,6 +30,8 @@ def main():
     ap.add_argument("--body-limit", type=int, default=6000)
     ap.add_argument("--max-messages", type=int, default=200)
     args = ap.parse_args()
+    # 相对路径（如 state/inbox.json）锚到 STATE_DIR，绝对路径原样保留
+    out_path = resolve_state_path(args.out)
 
     M = imap_connect()
     try:
@@ -89,10 +91,10 @@ def main():
             "unread_count": sum(1 for m in messages if m["unread"]),
             "messages": messages,
         }
-        os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
-        with open(args.out, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as f:
             json.dump(out, f, ensure_ascii=False, indent=1)
-        print(f"[fetch] OK  {len(messages)} 封（未读 {out['unread_count']}）-> {args.out}")
+        print(f"[fetch] OK  {len(messages)} 封（未读 {out['unread_count']}）-> {out_path}")
     finally:
         try:
             M.close()

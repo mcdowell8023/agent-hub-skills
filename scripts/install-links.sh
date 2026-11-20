@@ -19,6 +19,7 @@ DIRS=(
   "$HOME/.agents/skills"
   "$HOME/.codex/skills"
   "$HOME/.codebuddy/skills"
+  "$HOME/.config/opencode/skills"
 )
 
 skills_list() {

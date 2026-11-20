@@ -15,7 +15,8 @@
   "from_name":   "张三",                  // 可选，发件人显示名；地址恒为登录账号，不可伪造
   "body_zh":     "中文版正文",            // body 是英文时必填，仅供本地查看
   "in_reply_to": "<原邮件 Message-ID>",   // 可选，挂线程用
-  "references":  "<...> <...>"           // 可选
+  "references":  "<...> <...>",          // 可选
+  "attachments": ["/abs/path/a.docx"]    // 可选，绝对路径列表；按扩展名猜 MIME
 }
 
 英文草稿会在 JSON 同目录导出 `<文件名>_中文版.md`（中英对照）供本地查看，
@@ -40,7 +41,7 @@ from email.utils import formatdate, make_msgid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mail_lib import (decode_mime, find_folder, get_credentials,  # noqa: E402
-                      imap_connect, parse_message)
+                      imap_connect, parse_message, resolve_state_path)
 
 import imaplib  # noqa: E402
 
@@ -130,7 +131,41 @@ def build_message(d, sender):
     # 有 HTML 版就发 multipart/alternative：纯文本兜底，富客户端看表格版
     if d.get("body_html"):
         msg.add_alternative(d["body_html"], subtype="html", charset="utf-8")
+    # 附件：正文（含 HTML 替代）先成 multipart/alternative，再整体升 mixed
+    for path in d.get("attachments") or []:
+        _add_attachment(msg, path)
     return msg
+
+
+MIME_BY_EXT = {
+    ".docx": ("application", "vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    ".doc": ("application", "msword"),
+    ".xlsx": ("application", "vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    ".pdf": ("application", "pdf"),
+    ".png": ("image", "png"),
+    ".jpg": ("image", "jpeg"),
+    ".jpeg": ("image", "jpeg"),
+    ".csv": ("text", "csv"),
+    ".txt": ("text", "plain"),
+    ".md": ("text", "markdown"),
+    ".zip": ("application", "zip"),
+}
+
+
+def _add_attachment(msg, path):
+    """把本地文件作为附件挂到 msg 上；缺文件直接报错，不静默丢附件。"""
+    if not os.path.isabs(path):
+        raise SystemExit(f"[draft] 附件必须给绝对路径: {path}")
+    if not os.path.isfile(path):
+        raise SystemExit(f"[draft] 附件不存在: {path}")
+    ctype, subtype = MIME_BY_EXT.get(
+        os.path.splitext(path)[1].lower(), ("application", "octet-stream")
+    )
+    with open(path, "rb") as f:
+        msg.add_attachment(
+            f.read(), maintype=ctype, subtype=subtype, filename=os.path.basename(path)
+        )
+    print(f"[draft] 附件 -> {os.path.basename(path)} ({os.path.getsize(path)} bytes)")
 
 
 def count_same_subject(M, quoted_folder, subject):
@@ -224,8 +259,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", required=True, help="草稿定义 JSON 文件")
     args = ap.parse_args()
+    # 相对路径（如 drafts/reply.json）锚到 STATE_DIR，绝对路径原样保留
+    json_path = resolve_state_path(args.json)
 
-    with open(args.json, "r", encoding="utf-8") as f:
+    with open(json_path, "r", encoding="utf-8") as f:
         d = json.load(f)
 
     for k in ("subject", "body"):
@@ -269,7 +306,7 @@ def main():
         M.logout()
 
     # 英文草稿必须留中文阅读版在本地，否则用户看不懂自己要发什么、也不知道来龙去脉
-    zh_path = export_chinese(args.json, d)
+    zh_path = export_chinese(json_path, d)
     if zh_path:
         missing = [k for k in ("body_zh", "context_zh", "incoming_zh")
                    if not d.get(k, "").strip()]

@@ -41,8 +41,8 @@ usage() {
   -h, --help       显示本帮助
 
 示例:
-  hub-push.sh 100.101.57.43 /home/mcdowell/wb/projects/tenant-app
-  hub-push.sh 100.101.57.43:6767 /Users/mcdowell/AgentWorkspace --provider codebuddy-code --model deepseek-v4-pro
+  hub-push.sh <mac-ip> ~/wb/projects/«ORG:1640e5993eb3»
+  hub-push.sh <mac-ip>:6767 ~/AgentWorkspace --provider codebuddy-code --model deepseek-v4-pro
 
 输出：远端 agent ID
 EOF

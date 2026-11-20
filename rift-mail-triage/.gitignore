@@ -2,10 +2,15 @@
 scripts/config.json
 
 # 运行产物 —— 含真实邮件内容/收件人，绝不提交
-scripts/state/
-scripts/drafts/
-scripts/logs/
+# 这些目录在 skill 仓根下（历史误写成 scripts/state/ 等，实际从未在 scripts/ 下）。
+# 无前导斜杠的目录模式在任意层级都生效，故旧写法一并被覆盖。
+state/
+drafts/
+logs/
+
+# 兜底：运行快照/输出无论落在哪一层都不得进公开仓
 *.output.json
+*.snapshot.json
 
 __pycache__/
 *.pyc

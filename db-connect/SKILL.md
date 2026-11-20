@@ -109,7 +109,7 @@ bash ~/.claude/skills/db-connect/scripts/tests/test-db.sh
 ### databases.json 配置示例
 
 ```json
-"test-wb-ucs": {
+"«ORG:722e08d7f1b1»": {
   "type": "mysql",
   "host": "172.31.5.87", "port": 3306,
   "user": "root", "pass": "Doh+SaNyUdsVxg", "db": "wb_ucs",
@@ -118,7 +118,7 @@ bash ~/.claude/skills/db-connect/scripts/tests/test-db.sh
   "label": "测试 wb_ucs (内网, JumpServer 中转)",
   "transport": "jms_exec",
   "jms": {
-    "url": "https://jump.lvshiwanyang.com",
+    "url": "https://«ORG:2a2b8a189314»",
     "username": "mengxianchao",
     "asset_id": "a4cd3fa9-47d3-4059-9e48-d969748766d7",
     "account_id": "e9b49234-1f40-4173-ac61-655336dc8912"
@@ -169,8 +169,8 @@ sing-box gvisor TUN 会破坏 MySQL 协议握手，导致所有数据库连接�
      ```
    - **IP**（当前解析，RDS IP 会变需定期更新）:
      ```
-     100.31.205.43,
-     100.31.205.99,
+     <rds-ip-1>,
+     <rds-ip-2>,
      3.211.153.99,
      172.31.5.87,
      3.220.48.20,

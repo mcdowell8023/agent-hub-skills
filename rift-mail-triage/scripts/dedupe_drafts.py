@@ -11,7 +11,8 @@
   * 只删「同主题且不是最新那封」的草稿，最新一封永远保留。
   * 主题不在本闭环生成范围内的（比如手工写的测试草稿）默认不动，
     除非用 --include-foreign 明确放开。
-  * 删掉的草稿都能从本地 drafts/*.json（落盘目录见 config.json 的 output_root）
+  * 删掉的草稿都能从本地 drafts/*.json（默认落 STATE_DIR/drafts/，
+    即 ~/.local/state/rift-mail-triage/drafts，可用 RIFT_MAIL_STATE_DIR 改）
     重新生成，所以是可逆的。
 """
 import argparse

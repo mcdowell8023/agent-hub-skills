@@ -79,7 +79,7 @@ setup() {
       "label": "测试 wb_ucs (内网, JumpServer 中转)",
       "transport": "jms_exec",
       "jms": {
-        "url": "https://jump.lvshiwanyang.com",
+        "url": "https://«ORG:2a2b8a189314»",
         "username": "mengxianchao",
         "asset_id": "a4cd3fa9-47d3-4059-9e48-d969748766d7",
         "account_id": "e9b49234-1f40-4173-ac61-655336dc8912"
@@ -94,7 +94,7 @@ setup() {
       "label": "测试 JMS 无密码场景",
       "transport": "jms_exec",
       "jms": {
-        "url": "https://jump.lvshiwanyang.com",
+        "url": "https://«ORG:2a2b8a189314»",
         "username": "mengxianchao",
         "asset_id": "a4cd3fa9-47d3-4059-9e48-d969748766d7",
         "account_id": "e9b49234-1f40-4173-ac61-655336dc8912"

@@ -156,6 +156,7 @@ MYSQL_DENY_REGEX+='|;.*;'  # 禁止多语句
 check_mysql_permission() {
     local sql="$1"
     local permission="$2"
+    local confirmed_ddl="${3:-}"
 
     # 0. 拒绝任何包含分号的输入：mysql -e 虽是单语句，但允许多语句是
     #    已知攻击面（SELECT 1; DELETE FROM users）。安全优先，一律拒绝。
@@ -164,10 +165,20 @@ check_mysql_permission() {
         return 1
     fi
 
-    # 1. 总是拒绝 DDL/高危
+    # 1. DDL/高危：readonly（生产/未知环境）永远拒绝，无任何豁免。
+    #    非 readonly（测试库）时，2026-09-16 起允许执行，但必须显式传
+    #    --confirm-ddl（对应"每次都要当场确认"这条策略——见 00-core.md
+    #    §数据库写操作红线）。不传该标志时保持原有的默认拒绝行为。
     if echo "$sql" | grep -iqE "$MYSQL_DENY_REGEX"; then
-        err "禁止执行 DDL/高危语句（DROP/ALTER/CREATE/TRUNCATE/CALL/LOAD DATA/INTO OUTFILE/SET GLOBAL）"
-        return 1
+        if [ "$permission" = "readonly" ]; then
+            err "禁止执行 DDL/高危语句（生产/只读库，无例外）"
+            return 1
+        fi
+        if [ "$confirmed_ddl" != "1" ]; then
+            err "测试库 DDL 需要显式确认：加 --confirm-ddl（每次调用都要带，不可省略——这是当场确认的凭证，不是一次性开关）"
+            return 1
+        fi
+        # 已确认，测试库 DDL 放行；继续往下走分号/multi-statement 等其余检查
     fi
 
     # 2. readonly 额外限制：拒绝 INSERT/UPDATE/DELETE/REPLACE
@@ -274,8 +285,12 @@ cmd_test() {
 
 cmd_query() {
     local query="${1:-}"
+    local confirm_ddl=""
+    if [ "${2:-}" = "--confirm-ddl" ]; then
+        confirm_ddl="1"
+    fi
     if [ -z "$query" ]; then
-        err "用法: db query \"SQL or mongo shell cmd\""
+        err "用法: db query \"SQL or mongo shell cmd\" [--confirm-ddl]"
         return 1
     fi
 
@@ -285,7 +300,7 @@ cmd_query() {
 
     case "$type" in
         mysql)
-            if ! check_mysql_permission "$query" "$permission"; then
+            if ! check_mysql_permission "$query" "$permission" "$confirm_ddl"; then
                 return 1
             fi
 

@@ -40,7 +40,7 @@ description: "将当前或指定的 Paseo agent 工作交接到 Agent Hub 继续
 
 直接使用该 ID，调用 `mcp__paseo__get_agent_status` 获取信息。
 
-**C. 带名称关键词（"在 Hub 继续 tenant-app 的工作"）**
+**C. 带名称关键词（"在 Hub 继续 «ORG:1640e5993eb3» 的工作"）**
 
 1. 调用 `mcp__paseo__list_agents` 获取最近 agent 列表
 2. 按 title 模糊匹配
@@ -121,7 +121,7 @@ $SCRIPT verify-state "$hub_cwd"
 
 生成 handoff prompt 时**必须遵守**：
 
-1. **所有路径必须是 Hub 路径**（`/home/mcdowell/...`），不能有 `/Users/mcdowell/...`
+1. **所有路径必须是 Hub 路径**（`~/...`），不能有 Mac 家目录绝对路径
 2. **状态描述必须来自 `verify-state` 输出**，不能复制 Mac 的 git status
 3. **Memory 引用必须指向 Hub 已同步的路径**，或改用仓库内文档（README/CHANGELOG）
 4. **"未提交变更"等断言必须在 Hub 上 `git status` 确认**，两台机器状态可能不同
@@ -212,9 +212,9 @@ SSH 检查、路径映射、git clone/fetch、memory 同步、目录创建、pro
 ```
 用户：在 Hub 继续
 Agent：检测到当前会话：
-  📋 tenant-app MoveOut/MoveIn 测试
+  📋 «ORG:1640e5993eb3» MoveOut/MoveIn 测试
   🤖 claude / claude-opus-4-8 / thinking: max
-  📂 ~/wb/projects/tenant-app
+  📂 ~/wb/projects/«ORG:1640e5993eb3»
   确认？
 用户：确认
 Agent：[执行 Phase 1-6]
@@ -257,10 +257,10 @@ Agent：[发送新 prompt 到现有 agent]
 ### 流程
 
 ```
-用户："Hub 上 tenant-app 做到哪了"
+用户："Hub 上 «ORG:1640e5993eb3» 做到哪了"
   ↓
 Phase 1：hub-harvest.sh 采集 Hub 上下文
-  $SCRIPT_DIR/hub-harvest.sh hub /home/mcdowell/wb/projects/tenant-app [--agent-id <id>]
+  $SCRIPT_DIR/hub-harvest.sh hub /home/mcdowell/wb/projects/«ORG:1640e5993eb3» [--agent-id <id>]
   → 输出 Markdown 报告（Agent 状态/Memory/Git/文档/阻塞）
   ↓
 Phase 2（可选）：用户看报告后决定
@@ -268,7 +268,7 @@ Phase 2（可选）：用户看报告后决定
   "本地继续" → Phase 3
   ↓
 Phase 3：hub-return.sh 在本地创建续接 agent
-  $SCRIPT_DIR/hub-return.sh hub /home/mcdowell/wb/projects/tenant-app [--provider claude --model opus]
+  $SCRIPT_DIR/hub-return.sh hub /home/mcdowell/wb/projects/«ORG:1640e5993eb3» [--provider claude --model opus]
   → 本地创建 agent，注入 Hub 上下文
 ```
 
@@ -276,7 +276,7 @@ Phase 3：hub-return.sh 在本地创建续接 agent
 
 ```
 用户：Hub 上 CRM bridge 做到哪了
-Agent：[执行 hub-harvest.sh hub /home/mcdowell/wb/projects/wb-mcs-check]
+Agent：[执行 hub-harvest.sh hub /home/mcdowell/wb/projects/«ORG:20934df88d48»]
   📋 Hub Harvest Report
   Agent: bf6f262 | idle | GLM-5.2
   Branch: feat-crm-bridge (3 new commits)
@@ -285,7 +285,7 @@ Agent：[执行 hub-harvest.sh hub /home/mcdowell/wb/projects/wb-mcs-check]
   
   要在本地继续吗？
 用户：继续，用 opus
-Agent：[执行 hub-return.sh hub /home/mcdowell/wb/projects/wb-mcs-check --provider claude --model opus]
+Agent：[执行 hub-return.sh hub /home/mcdowell/wb/projects/«ORG:20934df88d48» --provider claude --model opus]
   ✅ 本地 agent 已创建 (ID: xxxx)
 ```
 
@@ -301,12 +301,12 @@ Agent：[执行 hub-return.sh hub /home/mcdowell/wb/projects/wb-mcs-check --prov
 与 Pull from Hub 对称，方向反转：
 
 ```
-Hub agent："从 Mac 拉取 tenant-app 进度"
+Hub agent："从 Mac 拉取 «ORG:1640e5993eb3» 进度"
   ↓
-hub-harvest.sh <mac-host> /Users/mcdowell/wb/projects/tenant-app
+hub-harvest.sh <mac-host> ~/wb/projects/«ORG:1640e5993eb3»
   → 采集 Mac 上的 agent 状态/git/memory
   ↓
-hub-return.sh <mac-host> /Users/mcdowell/wb/projects/tenant-app
+hub-return.sh <mac-host> ~/wb/projects/«ORG:1640e5993eb3»
   → 在 Hub 本地创建续接 agent
 ```
 
@@ -336,7 +336,7 @@ hub-push.sh <mac-host> <hub-cwd> [--provider claude --model opus]
 ### 示例
 
 Hub agent：Mac 端需要调试，交回去
-Agent：[执行 hub-push.sh 100.101.57.43 /home/mcdowell/wb/projects/tenant-app]
+Agent：[执行 hub-push.sh <hub-ip> ~/wb/projects/«ORG:1640e5993eb3»]
   ✅ Mac agent 已创建 (ID: xxxx)
 
 ### 注意
