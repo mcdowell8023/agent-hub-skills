@@ -1764,7 +1764,7 @@ node ~/AgentWorkspace/configs/trae-bridge/trae-dispatch.mjs    status
 lsof -iTCP:39240 -sTCP:LISTEN          # 无输出 ⇒ 没起；有 Electron 行 ⇒ 已起，跳到 ③
 
 # ② 打开 App 并【同时指定工作区目录】—— 这一步同时解决「没起」与「没工作区」两个坑
-open -a "/Applications/Trae CN.app" /Users/mcdowell/AgentWorkspace/tmp/<你的专用目录>
+open -a "/Applications/Trae CN.app" ~/AgentWorkspace/tmp/<你的专用目录>
 
 # ③ 自检（约 10~15 s 后端口才起来；太早跑会看到 ECONNREFUSED）
 node ~/AgentWorkspace/configs/trae-bridge/trae-dispatch.mjs status
