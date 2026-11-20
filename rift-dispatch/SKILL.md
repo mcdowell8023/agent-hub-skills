@@ -454,12 +454,13 @@ FREE_POOL = [
   #    📜 历史评测（可查）：09-29 第三轮 12 格同轮均分 33.3 vs qwen3.8-max 34.5 / glm 34.4 / v4.1 33.7；
   #       D3 用户：并发实现题 30.0 偏弱 ⇒ 只提醒不排除；D2 用户：服务方可能留存 prompt，用户知情。
   {'upstream': 'codebuddy-code', 'model': 'hy4flash-free', 'priority': 1,
-   'freeUntil': None, 'thinking': 'max', 'multimodal': False,
+   'freeUntil': '2026-11-30T23:29', 'thinking': 'max', 'multimodal': False,
    'avoidTaskTypes': {'algorithm', 'perf', 'architecture'}, 'cautionTaskTypes': set(),
    'retainsData': False, 'allowInSensitiveWorkspace': True},
    # 🔴 2026-11-19 起 cb 免费档换成 hy4flash-free（hy3 被服务端移出清单，别名路由假绿）；thinking 承 hy3 先例取 `max`。
-   #    freeUntil=None（🔴 用户 /model 面板 m11140：x0.00 且无公布截止；📜 hy3 时代的 10-31 窗口已随该 id 下线作废）
-   #    ⇒ 窗口之外还有 creditRecord 新鲜度闸门（⛔ 2027-06 用例已证：不给新鲜复核记录照样落 T1）。
+   #    freeUntil='2026-11-30T23:29'（🔴 2026-11-20 用户 /model 面板核实：x0.00 且官方公布截止 11-30 23:29；📜 hy3 时代 10-31 窗口已作废）
+   #    窗口后还有 creditRecord 新鲜度闸门：须有 verifiedOn > 11-30 且 7 天内的 credit=0 复核记录才续当免费档
+   #    （⛔ 窗口内/窗口前的旧记录不算——verifiedOn=2026-11-19 在窗口前，12-01 起会被 t0_still_free 拒 ⇒ 落 T1 提示待核）。
    #    🔴 **x0.00 ≠ 无限**（用户 m11725 定性）：cb 免费档**有限额**，限额特征 = 429 限流 / 请求发出无响应（发出去没反应基本就是限额）。
    #       命中限额不要急着升档 —— 先用 **rsw 切号**恢复（前提：本机已装 rsw 且配好多账号槽）：
    #       `rsw status` → `rsw use codebuddy <另一个槽>` → 重探 `probe-models.sh codebuddy-code/hy4flash-free`。
@@ -1342,6 +1343,32 @@ create_agent({
 ✅ `consistency-check.py` §3f 守着四条：每个可派发落点都有缩写 · 缩写必须带数字 ·
 无版本别名⛔不得有缩写 · **同渠道内⛔不许两个模型撞同一缩写**。
 
+#### 🔴 跨设备会话工作区命名：`hub2mac-<目录>-<业务>`
+
+用户 2026-11-20 明确：「所有 agent 工作区都必须遵循规范」「同一个需求复用同一个工作区」。
+本规则与上面的**标题后缀规则正交**——标题后缀标「哪个渠道-模型做的」，本规则标「哪个设备-目录-业务线」，
+⛔ 二者互不覆盖，派发时两条都要守。
+
+```
+hub2mac-<目录>-<业务>
+```
+
+| 段 | 含义 | 例 |
+|---|---|---|
+| `hub2mac` | 跨设备方向前缀（Agent Hub ↔ Mac 协作固定写法） | `hub2mac` |
+| `<目录>` | 落点工作区目录名 | `wb` |
+| `<业务>` | 业务线/项目短名 | `CRM` |
+
+示例：`hub2mac-wb-CRM`（hub↔mac 的 wb 目录下 CRM 业务）。
+
+🔴 **同需求复用同一工作区**：同一业务需求下的多个 agent（含重跑、换模型、review）必须复用同一个工作区，
+⛔ **禁止大面积新建 worktree** —— 每建一个 worktree 就是一份独立磁盘/记忆/同步面，散落后无从收敛。
+Paseo 侧机制（落到 create_agent 的参数上）：
+
+- `create_agent` **不带 `workspaceId`**（即用 `workspace: { kind: "current" }`）= 复用主会话当前工作区 ⇒ 默认就这么写。
+- 确需独立 worktree 时，仅在「并行改同一批文件 / 需要隔离脏工作树」场景才建，且命名照 `hub2mac-<目录>-<业务>`；
+  任务结束后用 `archive_workspace`（可配 `background: true` 隐藏）归档，⛔ 不要留在列表里累积。
+
 #### 🔴 `settings` 必须按 provider 生成，⛔ 不能无条件传 `modeId`
 
 ```python
@@ -2047,6 +2074,7 @@ ssh hub "paseo run --detach \
 | 是否要求真实浏览器验证 | happy-dom 里 `getBoundingClientRect()` 恒 0×0，TDesign 浮层会被 `isHidden` guard 立刻关闭，导致"点不动"假阴性 |
 | **permission_mode 传了吗** | 漏传导致整批任务卡在权限询问上不执行 |
 | 🔴 **标题带「渠道-模型」后缀了吗？版本号在里面吗** | ⛔ 漏标 ⇒ 回头翻 agent 列表分不清哪个产出是哪代模型做的（`dspF4` vs 未来的 `dspF4.1` 差距很大）|
+| 🔴 **工作区复用了吗**（`hub2mac-<目录>-<业务>`） | 同一需求的多个 agent（重跑/换模型/review）必须用同一工作区（`create_agent` 不带 `workspaceId`）。⛔ 大面积新建 worktree ⇒ 磁盘/记忆/同步面散落无从收敛；确需独立 worktree 只在并行改同批文件时建，用完 `archive_workspace` 归档 |
 
 ### 收割时（⛔ 不能只看 agent 的报告）
 

@@ -343,7 +343,7 @@
         "upstream": "codebuddy-code",
         "model": "hy4flash-free",
         "priority": 1,
-        "freeUntil": null,
+        "freeUntil": "2026-11-30T23:29",
         "thinking": "max",
         "multimodal": false,
         "avoidTaskTypes": [
@@ -361,7 +361,7 @@
         },
         "verifyVia": "⭐ 权威=用户 /model 面板（2026-11-19 读数 hy4flash-free x0.00）；每次派发读 providerData.rawUsage.credit=0 复核；⛔ 探活「成功且 credit=0」不能证明 id 存在（cb 对旧 id 静默别名路由，hy3 即先例）",
         "evalRef": "sameRoundEval_20260816 · hy4Eval_20260821",
-        "note": "🔴 2026-11-19 用户面板实证：cb 免费档位只剩 hy4flash-free（hy3 已不在清单，探活成功是服务端别名路由假象）。freeUntil 不再公布（官方未给截止）⇒ 每次派发前核 rawUsage.credit。thinking 维持 max。",
+        "note": "🔴 2026-11-19 用户面板实证：cb 免费档位只剩 hy4flash-free（hy3 已不在清单，探活成功是服务端别名路由假象）。2026-11-20 核实官方公布截止 11-30 23:29（freeUntil 已据此填写）。⚠️ creditRecord.verifiedOn=2026-11-19 在免费窗口(截止 11-30)之前，按 t0_still_free 规则不算窗口后复核 ⇒ 12-01 起该记录失效、须重新核 rawUsage.credit=0（且 verifiedOn>11-30、7 天内）才继续当免费档，否则落 T1 提示待核。thinking 维持 max。",
         "quotaNote": "🔴 x0.00 ≠ 无限（用户 m11725）：cb 免费档有限额，特征=429/请求无响应；恢复=rsw 切号（前提本机装 rsw+多账号槽，https://github.com/mcdowell8023/agent-switch），切号后重探 probe-models.sh，原账号进冷却，派发记录仍写明「限额 → 切号 <槽>」",
         "recoveryTool": {
           "name": "rsw",

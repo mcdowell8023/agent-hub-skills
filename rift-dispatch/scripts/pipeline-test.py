@@ -184,9 +184,10 @@ REMOVED_KNOBS = {'blockers': "改用 free_off=True / cooldowns / multimodal / �
 #    常量留作「已退役 provider 必被拦」的反例（它同时已移出 EXEMPT_PROVIDERS）。
 RETIRED_FREE = 'openrouter-free'
 HY3, QFM = 'codebuddy-code/hy4flash-free', 'codebuddy-code/hy4flash-free'   # 🔴 2026-11-19：cb 免费档换成 hy4flash-free（用户 /model 面板，hy3 已被服务端移出清单）；QFM 别名保留只为让旧夹具名继续可读
-# 🔴 hy4flash-free 的 freeUntil=None（无公布截止）⇒ 「免费过期分支」无法用真实日期触发，只能用 cooldown 表达；
-#    AFTER_EXPIRY 保留为一个普通时刻（不再对应任何条目的 freeUntil），相关用例已改走 cooldown/unavailable 路径。
+# 🔴 hy4flash-free 的 freeUntil=2026-11-30T23:29（2026-11-20 官方公布截止）⇒ 「免费过期分支」可用真实日期触发（HY4_EXPIRED 新用例）；
+#    AFTER_EXPIRY 保留为历史普通时刻（曾=hy3 过期时刻），相关用例走的是 probe_ok/cooldown 路径，与 hy4 截止无关。
 AFTER_EXPIRY = DT(2026, 11, 2, 15)   # 历史名（曾=hy3 过期后时刻）；现仅作测试时刻常量
+HY4_EXPIRED = DT(2026, 12, 3, 15)    # hy4 freeUntil=2026-11-30T23:29 之后 ⇒ 测「窗口过期」闸门
 JOY = 'joycode/JoyAI-Code-1.6'
 JOYK = f'joycode/{JOY}'              # 冷却 / 核价记录的键是 'upstream/model'
 # 🔴 2026-11-19 起免费池= hy4flash-free + JoyAI-Code-1.6；「只留 hy4flash-free」须把 JoyAI 冷却
@@ -342,6 +343,13 @@ CASES = [
       cooldowns=COOL_NON_JOY,
       want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash',
                 t0_free_unverified=[JOY])),
+ # 🔴 2026-11-20 task-23：hy4 免费窗口（freeUntil=2026-11-30T23:29）过期后，若只有**窗口前**的
+ #    复核记录（verifiedOn=2026-11-19 ≤ 11-30）⇒ t0_still_free 拒 ⇒ 退出 T0 并提示费率待核。
+ dict(n='hy4 窗口(11-30)过期后只有窗口前复核 ⇒ 退出 T0 落 T1 且提示待核', task_type='core',
+      when=HY4_EXPIRED, cooldowns=COOL_NON_HY3,
+      credit_records={HY3: {'credit': 0.0, 'verifiedOn': '2026-11-19'}},
+      want=dict(upstream='volcengine-coding', model='deepseek-v4.1-flash',
+                t0_free_unverified=['hy4flash-free'])),
  # ⭐ 窗口过后复核过费率（catalog 已更新）⇒ 照常当免费档用
  dict(n='费率已复核（窗口过后、3 天内）⇒ T0 照常可用', task_type='core', when=DT(2026, 11, 4, 15),
       cooldowns=COOL_NON_HY3,
@@ -377,7 +385,7 @@ CASES = [
       credit_records={JOYK: {'credit': 0.0}},
       want=dict(model='deepseek-v4.1-flash')),
  # ⭐ 反例：探活也不过 ⇒ ⛔ 不提示（没有「本可省钱」这回事）
- dict(n='窗口过期且探活不过 ⇒ ⛔ 不提示', task_type='core', when=AFTER_EXPIRY, probe_ok=False,
+ dict(n='免费档探活不过 ⇒ ⛔ 不提示（与窗口是否过期无关）', task_type='core', when=AFTER_EXPIRY, probe_ok=False,
       cooldowns=COOL_NON_HY3,     # ⭐ 显式挡掉另两条（审查 r2：别只靠全局 probe_ok=False 顺带挡住它们）
       want=dict(model='deepseek-v4.1-flash', t0_free_unverified=[])),
  # 🔴 T0 碰墙（探活不过）⇒ 必须落**同 provider** 的 T1，⛔ 不跨钱包（用户 2026-09-10）
@@ -501,14 +509,14 @@ CASES = [
  dict(n='显式 --thinking low ⇒ hy4flash-free 用 low（⛔ 不被条目默认 max 覆盖）', task_type='core',
       thinking='low', want=dict(model='hy4flash-free', thinking='low')),
  # 🔴 2026-11-19：hy3 下线、qfmodel 转付费 ⇒ 原「hy3 到期后落 qfmodel」用例失效；
- #    freeUntil=None 的「无截止」行为改由 hy4flash-free 承担（下方 2027 用例）
- dict(n='2027-06 hy4flash-free 仍可当选（freeUntil=None 不会因日期老而过期）', task_type='core', when=DT(2027, 6, 1, 15),
+ #    「窗口过期但有新鲜复核仍可选」行为改由 hy4flash-free 承担（下方 2027 用例：窗口 11-30 已过，verifiedOn 2027-05-30 在窗口后且够新）
+ dict(n='2027-06 hy4flash-free 仍可当选（窗口早已过但有窗口后新鲜 credit 复核）', task_type='core', when=DT(2027, 6, 1, 15),
       credit_records={'codebuddy-code/hy4flash-free': {'credit': 0.0, 'verifiedOn': '2027-05-30'}},   # 🔴 双闸门：免费窗口之外还要 creditRecord 够新（⛔ 不给就落 T1）
       want=dict(upstream='codebuddy-code', model='hy4flash-free', thinking='max', t0_free_unverified=[])),
  # ⭐ 正面回归：10-01 ~ 10-31 23:59（hy3 延期窗口内）⇒ hy3 正常当选，⛔ 不提前判过期
  #    这条直接验证「二次延期生效」——若 SKILL 的 freeUntil 没跟着改，这里会落 qfmodel 而不是 hy3
  # 📜 hy3 延期窗口（10-31）与 qfmodel 免费期两条用例随 2026-11-19 下线/转付费一并移除；
- #    「freeUntil=None 不会因日期老而过期」由上面 2027-06 的 hy4flash-free 用例承接。
+ #    「窗口过期但有新鲜复核仍可选」由上面 2027-06 的 hy4flash-free 用例承接。
  # 📜 D3（用户 09-29）原是对 Space Bunny 的 `concurrency_impl` 提醒；它 2026-10-06 下线后
  #    现役两条免费条目的 `cautionTaskTypes` 都是空集 ⇒ 落 hy3 且**不产生提醒**（字段与机制保留）
  dict(n='concurrency_impl ⇒ 落 hy4flash-free，无 caution 提醒（现役条目 caution 为空集）', task_type='concurrency_impl',
