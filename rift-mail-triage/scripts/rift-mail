@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# rift-mail — macOS 入口：凭据存/取走 Keychain，业务逻辑交给同目录的 Python 脚本。
+# rift-mail — 跨平台入口：凭据按 env → macOS 钥匙串 / Linux 600 文件 的优先级读取，
+# 业务逻辑交给同目录的 Python 脚本。
 #
-# 这是本 skill 与原始 Windows 版本(set_credential.ps1 + DPAPI)的唯一实质差异：
-# DPAPI 换成了 macOS 钥匙串(security 命令)，其余脚本(mail_lib.py 等)未改逻辑。
+# 凭据优先级：
+#   ① env MAIL_USER + MAIL_PASS 都已设置 → 直接用，不覆盖
+#   ② macOS：security 钥匙串（service=rift-mail-triage, account=mailbox）
+#   ③ Linux：600 权限凭据文件（默认 ~/.local/share/rift-mail-triage/mail_credentials，
+#      RIFT_MAIL_CRED_FILE 可覆盖）
+# 原始 Windows 版用 DPAPI，其余 Python 脚本逻辑未改。
 #
 # 用法:
-#   rift-mail setup [mailbox]        交互式录入邮箱 + 客户端授权码，存入钥匙串并验证登录
+#   rift-mail setup [mailbox]        交互式录入邮箱 + 客户端授权码，存凭据并验证登录
 #   rift-mail selfcheck              连通性自检（不改任何邮件状态）
 #   rift-mail fetch --days 7 --out state/inbox.json
 #   rift-mail draft --json drafts/xxx.json
@@ -16,6 +21,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE="rift-mail-triage"
 CONFIG_FILE="$SCRIPT_DIR/config.json"
 
+_platform() {
+  uname -s 2>/dev/null || echo unknown
+}
+
+_default_cred_file() {
+  printf '%s\n' "${RIFT_MAIL_CRED_FILE:-$HOME/.local/share/rift-mail-triage/mail_credentials}"
+}
+
 _mailbox_default() {
   [ -f "$CONFIG_FILE" ] || return 0
   python3 -c "
@@ -25,6 +38,25 @@ try:
 except Exception:
     pass
 " 2>/dev/null || true
+}
+
+# 读取凭据；成功时 stdout=授权码，失败返回非 0。全程不回显到终端。
+_read_creds_pass() {
+  local mailbox="$1"
+  case "$(_platform)" in
+    Darwin)
+      security find-generic-password -a "$mailbox" -s "$SERVICE" -w 2>/dev/null
+      ;;
+    Linux)
+      local cred_file
+      cred_file="$(_default_cred_file)"
+      [ -f "$cred_file" ] || return 1
+      cat "$cred_file"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 cmd_setup() {
@@ -61,29 +93,57 @@ cmd_setup() {
     exit 1
   fi
 
-  # -U：已存在同 account+service 的项就地更新，避免重复项导致后续 find 出错
-  security add-generic-password -a "$mailbox" -s "$SERVICE" -w "$apppass" -U
+  local platform
+  platform="$(_platform)"
+  case "$platform" in
+    Darwin)
+      # -U：已存在同 account+service 的项就地更新，避免重复项导致后续 find 出错
+      security add-generic-password -a "$mailbox" -s "$SERVICE" -w "$apppass" -U
+      ;;
+    Linux)
+      local cred_file
+      cred_file="$(_default_cred_file)"
+      mkdir -p -m 700 "$(dirname "$cred_file")"
+      (umask 077 && printf '%s\n' "$apppass" > "$cred_file")
+      chmod 600 "$cred_file"
+      ;;
+    *)
+      echo "ERROR: 不支持的平台 '$platform'。请在 macOS 或 Linux 上运行。" >&2
+      exit 1
+      ;;
+  esac
   unset apppass
 
   echo
-  echo "已存入 macOS 钥匙串（service=$SERVICE, account=$mailbox）。"
+  echo "已保存凭据（平台=$platform）。"
   echo "验证登录中..."
   echo
   MAIL_USER="$mailbox" \
-    MAIL_PASS="$(security find-generic-password -a "$mailbox" -s "$SERVICE" -w)" \
+    MAIL_PASS="$(_read_creds_pass "$mailbox")" \
     python3 "$SCRIPT_DIR/selfcheck.py"
 }
 
 _load_creds() {
+  # ① env 齐全：直接用，不覆盖
+  if [ -n "${MAIL_USER:-}" ] && [ -n "${MAIL_PASS:-}" ]; then
+    export MAIL_USER MAIL_PASS
+    return 0
+  fi
+
   local mailbox="${MAIL_USER:-}"
   [ -z "$mailbox" ] && mailbox="$(_mailbox_default)"
   if [ -z "$mailbox" ]; then
     echo "ERROR: 未指定邮箱。先跑 'rift-mail setup <mailbox>'，或在 config.json 设 mailbox_default。" >&2
     exit 1
   fi
+
   local pass
-  if ! pass="$(security find-generic-password -a "$mailbox" -s "$SERVICE" -w 2>/dev/null)"; then
-    echo "ERROR: 钥匙串里找不到 $mailbox 的凭据。先跑 'rift-mail setup $mailbox'。" >&2
+  if ! pass="$(_read_creds_pass "$mailbox")" || [ -z "$pass" ]; then
+    case "$(_platform)" in
+      Darwin) echo "ERROR: 钥匙串里找不到 $mailbox 的凭据。先跑 'rift-mail setup $mailbox'。" >&2 ;;
+      Linux)  echo "ERROR: 找不到 $mailbox 的凭据文件（$(_default_cred_file)）。先跑 'rift-mail setup $mailbox' 或设置 RIFT_MAIL_CRED_FILE。" >&2 ;;
+      *)      echo "ERROR: 平台未知，请用 env MAIL_USER/MAIL_PASS 显式提供凭据。" >&2 ;;
+    esac
     exit 1
   fi
   export MAIL_USER="$mailbox"
@@ -124,7 +184,7 @@ case "${1:-}" in
     cat <<'USAGE'
 用法: rift-mail <setup|selfcheck|fetch|draft|send|dedupe> [参数...]
 
-  setup [mailbox]   交互式录入邮箱 + 客户端授权码到 macOS 钥匙串（首次必做）
+  setup [mailbox]   交互式录入邮箱 + 客户端授权码（macOS 存钥匙串 / Linux 存 600 文件，首次必做）
   selfcheck         连通性自检：登录、定位草稿箱、数一下近 7 天邮件量
   fetch --days 7 --out state/inbox.json [--body-limit N] [--max-messages N]
   draft --json drafts/xxx.json
