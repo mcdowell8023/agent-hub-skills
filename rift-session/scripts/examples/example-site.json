@@ -1,0 +1,38 @@
+{
+  "_comment": "占位样例：复制到 ~/.config/rift-session/sites/<site>.json（chmod 600），把 example.com 换成真实站点。账号密码只写来源（文件路径 + 键名），不写值。",
+  "base_url": "https://app.example.com/",
+  "login_url": "https://app.example.com/login",
+  "logged_in_check": { "title_regex": "Dashboard" },
+  "login_page_check": { "title_regex": "Login" },
+  "login_form": {
+    "username": "input[name=\"username\"]",
+    "next": "button:has-text(\"Next\")",
+    "password": "input[name=\"password\"]",
+    "submit": "button:has-text(\"Log In\")",
+    "after_next_wait_ms": 2500,
+    "after_submit_wait_ms": 6000
+  },
+  "secret_refs": {
+    "file": "~/.config/agent-secrets/example-site.json",
+    "format": "json",
+    "user_key": "username",
+    "password_key": "password"
+  },
+  "session_cookie_names": ["SESSION_ID"],
+  "device_token_cookie_names": ["REMEMBER_DEVICE"],
+  "two_factor": {
+    "type": "manual_code",
+    "page_title_regex": "Two-Factor",
+    "page_url_regex": "/(token|verify)",
+    "code_input": "input[name=\"code\"]",
+    "submit": "button:has-text(\"Submit\")",
+    "remember": "input[name=\"remember\"]"
+  },
+  "keepalive": { "url": "https://app.example.com/", "interval_minutes": 10, "auto_relogin": true },
+  "relogin_policy": { "max_per_hour": 1 },
+  "allowed_hosts": ["app.example.com"],
+  "backend": "auto",
+  "backend_host": "my-mac",
+  "task_space": "rift-session-example",
+  "drill_allowed": false
+}

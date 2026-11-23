@@ -1,0 +1,1236 @@
+#!/usr/bin/env python3
+"""rift-session - 通用「登录态固化 + 保活 + 自动重登 + 演练」引擎（Python3 标准库，Linux / macOS）。
+
+站点配置在用户目录 ~/.config/rift-session/sites/<site>.json（不进 git）；本文件只含引擎。
+命令：list | status | login | keepalive | relogin | backup | restore | drill | schedule
+每个命令输出两行：一行机器可读（RIFT_SESSION key=value ...）+ 一行人话。
+退出码：0 成功 / 2 需要人（NEED_CODE）/ 3 会话丢失且无法自动恢复 / 4 配置或后端不可用。
+
+安全：密码与验证码只经 stdin 交给后端进程；不进 argv / 环境变量 / 日志 / stdout；cookie 值从不打印。
+"""
+import argparse
+import json
+import os
+import plistlib
+import re
+import shutil
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Callable, Optional
+from urllib.parse import urlparse
+
+ENGINE_DIR = Path(__file__).resolve().parent
+ENGINE_PATH = ENGINE_DIR / "rift-session"
+
+EXIT_OK, EXIT_NEED_HUMAN, EXIT_LOST, EXIT_CONFIG = 0, 2, 3, 4
+LOG_MAX_BYTES = 1024 * 1024
+MARKER_PREFIX = "# rift-session:"
+TOTP_MIN_REMAINING = 16
+
+
+# --------------------------------------------------------------------------- errors
+class RiftSessionError(Exception):
+    pass
+
+
+class ConfigError(RiftSessionError):
+    pass
+
+
+class BackendError(RiftSessionError):
+    pass
+
+
+class BackendUnavailable(BackendError):
+    pass
+
+
+class BackendUnsupported(BackendError):
+    pass
+
+
+class HostBlocked(RiftSessionError):
+    pass
+
+
+class UsageError(RiftSessionError):
+    pass
+
+
+# --------------------------------------------------------------------------- scrubbing
+class Scrubber:
+    """Replace known secret values in any text that might reach stdout / stderr / logs."""
+
+    def __init__(self):
+        self.values = set()
+
+    def add(self, *vals):
+        for v in vals:
+            if isinstance(v, str) and len(v) >= 4:
+                self.values.add(v)
+
+    def __call__(self, text):
+        text = str(text)
+        for v in sorted(self.values, key=len, reverse=True):
+            text = text.replace(v, "<redacted>")
+        return text
+
+
+SCRUB = Scrubber()
+
+
+# --------------------------------------------------------------------------- paths
+def home_dir():
+    return Path(os.environ.get("RIFT_SESSION_HOME") or "~/.config/rift-session").expanduser()
+
+
+def state_dir():
+    return Path(os.environ.get("RIFT_SESSION_STATE") or "~/.local/state/rift-session").expanduser()
+
+
+def secrets_dir():
+    return Path(os.environ.get("RIFT_SESSION_SECRETS") or "~/.config/agent-secrets").expanduser()
+
+
+def launch_agents_dir():
+    return Path(os.environ.get("RIFT_SESSION_LAUNCH_AGENTS") or "~/Library/LaunchAgents").expanduser()
+
+
+def log_path(site):
+    return state_dir() / f"{site}.log"
+
+
+def status_path(site):
+    return state_dir() / f"{site}.status.json"
+
+
+def attempts_path(site):
+    return state_dir() / f"{site}.relogin.json"
+
+
+def backup_path(cfg):
+    if cfg.get("backup_file"):
+        return Path(cfg["backup_file"]).expanduser()
+    return secrets_dir() / f"rift-session-{cfg['name']}.json"
+
+
+def ensure_private_dir(path, mode=0o700):
+    path = Path(path)
+    path.mkdir(parents=True, exist_ok=True)
+    os.chmod(path, mode)
+
+
+def write_private(path, text, mode=0o600):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.chmod(tmp, mode)
+    os.replace(tmp, path)
+
+
+def iso(ts):
+    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# --------------------------------------------------------------------------- hosts
+def _hostname(url):
+    try:
+        return (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return ""
+
+
+def host_allowed(url, allowed_hosts):
+    host = _hostname(url)
+    if not host:
+        return False
+    for pat in allowed_hosts:
+        pat = pat.lower()
+        if pat.startswith("*."):
+            if host.endswith(pat[1:]) and host != pat[2:]:
+                return True
+        elif host == pat:
+            return True
+    return False
+
+
+# --------------------------------------------------------------------------- config
+BACKENDS = ("ego", "rift", "auto")
+SITE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _is_regex(s):
+    try:
+        re.compile(s)
+        return True
+    except (re.error, TypeError):
+        return False
+
+
+def validate_config(cfg):
+    """Return a list of human-readable error strings (empty = valid)."""
+    errs = []
+    if not isinstance(cfg, dict):
+        return ["配置必须是 JSON 对象"]
+    for k in ("base_url", "login_url"):
+        if not isinstance(cfg.get(k), str) or not cfg.get(k, "").startswith(("http://", "https://")):
+            errs.append(f"{k}: 必填，且必须是 http(s) URL")
+    allowed = cfg.get("allowed_hosts")
+    if not isinstance(allowed, list) or not allowed or not all(isinstance(h, str) and h for h in allowed):
+        errs.append("allowed_hosts: 必填，非空字符串数组")
+        allowed = []
+    for k in ("base_url", "login_url"):
+        if isinstance(cfg.get(k), str) and allowed and not host_allowed(cfg[k], allowed):
+            errs.append(f"{k}: 主机不在 allowed_hosts 内")
+    ka = cfg.get("keepalive") or {}
+    if not isinstance(ka, dict):
+        errs.append("keepalive: 必须是对象")
+        ka = {}
+    if ka.get("url") and allowed and not host_allowed(ka["url"], allowed):
+        errs.append("keepalive.url: 主机不在 allowed_hosts 内")
+    if ka.get("interval_minutes") is not None and not (isinstance(ka["interval_minutes"], int)
+                                                       and 1 <= ka["interval_minutes"] <= 59):
+        errs.append("keepalive.interval_minutes: 1..59 的整数")
+
+    chk = cfg.get("logged_in_check")
+    if not isinstance(chk, dict) or not any(chk.get(k) for k in ("title_regex", "selector", "text")):
+        errs.append("logged_in_check: 必填，至少含 title_regex / selector / text 之一")
+    elif chk.get("title_regex") and not _is_regex(chk["title_regex"]):
+        errs.append("logged_in_check.title_regex: 不是合法正则")
+    lp = cfg.get("login_page_check") or {}
+    if lp.get("title_regex") and not _is_regex(lp["title_regex"]):
+        errs.append("login_page_check.title_regex: 不是合法正则")
+
+    form = cfg.get("login_form")
+    if not isinstance(form, dict):
+        errs.append("login_form: 必填（username / password / submit 选择器，next 可选）")
+    else:
+        for k in ("username", "password", "submit"):
+            if not form.get(k):
+                errs.append(f"login_form.{k}: 必填")
+
+    ref = cfg.get("secret_refs")
+    if not isinstance(ref, dict) or not ref.get("file"):
+        errs.append("secret_refs: 必填（file + format，只写路径与键名，不写值）")
+    else:
+        fmt = ref.get("format", "json")
+        if fmt not in ("json", "env", "md_row"):
+            errs.append("secret_refs.format: json | env | md_row")
+        elif fmt in ("json", "env") and not (ref.get("user_key") and ref.get("password_key")):
+            errs.append("secret_refs: json/env 需要 user_key 与 password_key")
+        elif fmt == "md_row" and not ref.get("row_match"):
+            errs.append("secret_refs: md_row 需要 row_match")
+
+    names = cfg.get("session_cookie_names")
+    if not isinstance(names, list) or not names or not all(isinstance(n, str) and n for n in names):
+        errs.append("session_cookie_names: 必填，非空字符串数组")
+    dn = cfg.get("device_token_cookie_names", [])
+    if not isinstance(dn, list):
+        errs.append("device_token_cookie_names: 必须是数组")
+
+    tf = cfg.get("two_factor", "none")
+    if isinstance(tf, str):
+        tf = {"type": tf}
+    ttype = tf.get("type", "none") if isinstance(tf, dict) else None
+    if ttype is None:
+        errs.append("two_factor: 必须是字符串或对象")
+    elif ttype == "none" or ttype == "manual_code" or (ttype.startswith("totp:") and ttype[5:].strip()):
+        if ttype != "none":
+            for k in ("code_input", "submit"):
+                if not tf.get(k):
+                    errs.append(f"two_factor.{k}: 必填")
+            if not (tf.get("page_title_regex") or tf.get("page_url_regex")):
+                errs.append("two_factor: 需要 page_title_regex 或 page_url_regex 识别验证码页")
+            for k in ("page_title_regex", "page_url_regex"):
+                if tf.get(k) and not _is_regex(tf[k]):
+                    errs.append(f"two_factor.{k}: 不是合法正则")
+    else:
+        errs.append("two_factor.type: none | manual_code | totp:<rift-mfa 条目名>")
+
+    rp = cfg.get("relogin_policy") or {}
+    if rp.get("max_per_hour") is not None and not (isinstance(rp["max_per_hour"], int) and rp["max_per_hour"] >= 1):
+        errs.append("relogin_policy.max_per_hour: 正整数")
+    if cfg.get("backend", "auto") not in BACKENDS:
+        errs.append("backend: ego | rift | auto")
+    return errs
+
+
+def load_site(name):
+    if not SITE_NAME_RE.match(name or ""):
+        raise ConfigError(f"站点名不合法: {name!r}")
+    path = home_dir() / "sites" / f"{name}.json"
+    if not path.exists():
+        raise ConfigError(f"站点配置不存在: {path}")
+    if os.stat(path).st_mode & 0o077:
+        raise ConfigError(f"站点配置权限过宽，请 chmod 600 {path}")
+    try:
+        cfg = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise ConfigError(f"站点配置不是合法 JSON: {e}")
+    errs = validate_config(cfg)
+    if errs:
+        raise ConfigError("站点配置校验失败: " + "; ".join(errs))
+    cfg["name"] = name
+    return cfg
+
+
+def list_site_names():
+    d = home_dir() / "sites"
+    return sorted(p.stem for p in d.glob("*.json")) if d.is_dir() else []
+
+
+def two_factor_cfg(cfg):
+    tf = cfg.get("two_factor", "none")
+    return {"type": tf} if isinstance(tf, str) else tf
+
+
+# --------------------------------------------------------------------------- credentials
+def load_credentials(ref):
+    """Return (user, password) from the local private file named in secret_refs. Never prints values."""
+    path = Path(ref["file"]).expanduser()
+    if not path.exists():
+        raise ConfigError(f"secret_refs.file 不存在: {path}")
+    fmt = ref.get("format", "json")
+    try:
+        if fmt == "json":
+            data = json.loads(path.read_text(encoding="utf-8"))
+            user, pw = data[ref["user_key"]], data[ref["password_key"]]
+        elif fmt == "env":
+            kv = {}
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if "=" in line and not line.lstrip().startswith("#"):
+                    k, v = line.split("=", 1)
+                    kv[k.strip()] = v.strip().strip("'\"")
+            user, pw = kv[ref["user_key"]], kv[ref["password_key"]]
+        else:  # md_row
+            row = next(l for l in path.read_text(encoding="utf-8").splitlines() if ref["row_match"] in l)
+            vals = re.findall(r"`([^`]+)`", row)
+            user, pw = vals[0], vals[1]
+    except (KeyError, IndexError, StopIteration, ValueError):
+        raise ConfigError("secret_refs 指向的文件里取不到账号/密码（检查键名 / row_match）")
+    if not user or not pw:
+        raise ConfigError("secret_refs 取到的账号或密码为空")
+    SCRUB.add(pw)
+    return user, pw
+
+
+# --------------------------------------------------------------------------- backends
+JS_FIND = (
+    "const __find = (sel) => { const m = sel.match(/^(.*):has-text\\((['\"])(.*)\\2\\)$/);"
+    " if (m) { return Array.from(document.querySelectorAll(m[1] || '*'))"
+    ".find(e => (e.textContent || '').includes(m[3])) || null; }"
+    " return document.querySelector(sel); };"
+)
+
+CDP_COOKIE_KEYS = ("name", "value", "url", "domain", "path", "secure", "httpOnly", "sameSite",
+                   "expires", "priority", "sourceScheme", "sourcePort")
+
+
+def default_runner(argv, stdin=None, timeout=150):
+    """Run a subprocess, capture both streams (never echoed), feed stdin."""
+    try:
+        r = subprocess.run(argv, input=stdin, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, "", f"timeout after {timeout}s"
+    except OSError as e:
+        return 127, "", str(e)
+    return r.returncode, r.stdout, r.stderr
+
+
+def cdp_cookie_params(c):
+    out = {k: c[k] for k in CDP_COOKIE_KEYS if k in c and c[k] is not None}
+    if c.get("session") or out.get("expires", 0) in (-1, None):
+        out.pop("expires", None)
+    return out
+
+
+def rift_helper_path():
+    p = os.environ.get("RIFT_BROWSER_HELPER")
+    if p:
+        return Path(p).expanduser()
+    return Path("~/AgentWorkspace/projects/agent-hub-private/rift-browser/bin/cdp-helper.py").expanduser()
+
+
+def ego_argv(cfg, platform):
+    host = cfg.get("backend_host")
+    if host and host != "local":
+        shell = cfg.get("backend_shell", "zsh -lic")
+        return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", host,
+                f'{shell} "ego-browser nodejs"']
+    if platform == "darwin":
+        return ["ego-browser", "nodejs"]
+    raise BackendUnavailable("Linux 上 ego 后端需要在站点配置里写 backend_host（ssh 到装有 ego-browser 的 Mac）")
+
+
+def choose_backend(cfg, platform, rift_available=None):
+    if rift_available is None:
+        rift_available = rift_helper_path().exists()
+    want = cfg.get("backend", "auto")
+    host = cfg.get("backend_host")
+    has_host = bool(host and host != "local")
+    if want == "ego":
+        return "ego"
+    if want == "rift":
+        if not rift_available:
+            raise BackendUnavailable("rift 后端不可用：本机没有 rift-browser（cdp-helper.py）")
+        return "rift"
+    if platform == "darwin" or has_host:
+        return "ego"
+    if rift_available:
+        return "rift"
+    raise BackendUnavailable("没有可用后端：Linux 需要 backend_host（ego over ssh）或本机 rift-browser")
+
+
+class EgoBackend:
+    """Drives ego-browser (`ego-browser nodejs`, JS on stdin). Local on macOS, over ssh from Linux."""
+
+    supports_cookies = True
+
+    def __init__(self, cfg, site, runner=None, platform=None):
+        self.cfg, self.site = cfg, site
+        self.runner = runner or default_runner
+        self.platform = platform or sys.platform
+        self.task_space = cfg.get("task_space") or f"rift-session-{site}"
+        self.label = cfg.get("page_label", "p1")
+
+    def open(self):
+        pass
+
+    def close(self):
+        pass
+
+    def _run(self, body):
+        script = (f"const __ts = await taskSpace({json.dumps(self.task_space)});\n"
+                  f"const page = __ts.page({json.dumps(self.label)});\nlet __r = null;\n{body}\n"
+                  'console.log("RS_RESULT " + JSON.stringify(__r));\n')
+        rc, out, err = self.runner(ego_argv(self.cfg, self.platform), script, 150)
+        text = f"{out}\n{err}"
+        for line in reversed(text.splitlines()):
+            if line.startswith("RS_RESULT "):
+                try:
+                    return json.loads(line[len("RS_RESULT "):])
+                except ValueError:
+                    break
+        tail = " ".join(text.split())[-200:]
+        raise BackendError(SCRUB(f"ego 后端无结果 rc={rc}: {tail}"))
+
+    def _state_js(self):
+        return "__r = { title: await page.title(), url: await page.url() };"
+
+    def goto(self, url):
+        return self._run(f"await page.goto({json.dumps(url)}, {{ timeout: 60000 }});"
+                         " await page.waitForLoadState(); await page.waitForTimeout(1500);\n" + self._state_js())
+
+    def page_state(self):
+        return self._run(self._state_js())
+
+    def fill(self, selector, value, secret=False):
+        if secret:
+            SCRUB.add(value)
+        self._run(f"await page.fill({json.dumps(selector)}, {json.dumps(value)}); __r = {{ ok: true }};")
+
+    def click(self, selector):
+        self._run(f"await page.click({json.dumps(selector)}); __r = {{ ok: true }};")
+
+    def wait(self, ms):
+        self._run(f"await page.waitForTimeout({int(ms)}); __r = {{ ok: true }};")
+
+    def _eval(self, expr):
+        src = JS_FIND + " return (" + expr + ");"
+        r = self._run(f"__r = {{ v: await page.evaluate({json.dumps('(() => {' + src + '})()')}) }};")
+        return r.get("v")
+
+    def exists(self, selector):
+        return bool(self._eval(f"!!__find({json.dumps(selector)})"))
+
+    def check(self, selector):
+        self._eval(f"(() => {{ const e = __find({json.dumps(selector)}); if (e && !e.checked) e.click(); "
+                   "return !!(e && e.checked); })()")
+
+    def page_text(self):
+        return self._eval("(document.body.innerText || '').slice(0, 20000)") or ""
+
+    def get_cookies(self, urls):
+        r = self._run(f"const c = await page.cdp('Network.getCookies', {{ urls: {json.dumps(urls)} }});"
+                      " __r = { cookies: (c && c.cookies) || [] };")
+        cookies = r.get("cookies", [])
+        SCRUB.add(*[c.get("value") for c in cookies])
+        return cookies
+
+    def set_cookies(self, cookies):
+        lines = [f"await page.cdp('Network.setCookie', {json.dumps(cdp_cookie_params(c))});" for c in cookies]
+        self._run("\n".join(lines) + "\n__r = { ok: true };")
+
+    def delete_cookie(self, name, domain, path):
+        self._run(f"await page.cdp('Network.deleteCookies', {json.dumps({'name': name, 'domain': domain, 'path': path})});"
+                  " __r = { ok: true };")
+
+
+class RiftBackend:
+    """Drives rift-browser's cdp-helper.py (Agent Hub). Cannot read HttpOnly cookies -> no backup/restore."""
+
+    supports_cookies = False
+
+    def __init__(self, cfg, site, runner=None, helper=None, sleep=time.sleep):
+        self.cfg, self.site = cfg, site
+        self.runner = runner or default_runner
+        self.helper = str(helper or rift_helper_path())
+        self.agent = f"rift-session-{site}"
+        self.sleep = sleep
+
+    def _helper(self, *args, stdin=None, timeout=60):
+        return self.runner([sys.executable, self.helper, *args], stdin, timeout)
+
+    def open(self):
+        rc, out, err = self._helper("acquire", "--help")
+        ttl_ok = "--ttl-ms" in (out + err)
+        base = ["acquire", "--agent", self.agent, "--url", "about:blank"]
+        if ttl_ok:
+            rc, out, err = self._helper(*base, "--ttl-ms", str(self.cfg.get("rift_ttl_ms", 604800000)))
+            if rc == 0:
+                return
+        rc, out, err = self._helper(*base)
+        if rc != 0:
+            raise BackendError(SCRUB(f"rift acquire 失败 rc={rc}: {' '.join((out + err).split())[-160:]}"))
+
+    def close(self):
+        pass  # 不 release：登录态要靠租约跨多次调用保留
+
+    def _eval(self, expr, secret=None, timeout=60):
+        args = ["eval", "--agent", self.agent, "--expr", expr]
+        if secret is not None:
+            args.append("--secret-stdin")
+        rc, out, err = self._helper(*args, stdin=secret, timeout=timeout)
+        try:
+            return json.loads(out.strip().splitlines()[-1]).get("value")
+        except (ValueError, IndexError, AttributeError):
+            raise BackendError(SCRUB(f"rift eval 失败 rc={rc}: {' '.join((out + err).split())[-160:]}"))
+
+    def _state(self):
+        return json.loads(self._eval("JSON.stringify({title: document.title, url: location.href})"))
+
+    def goto(self, url):
+        rc, out, err = self._helper("navigate", "--agent", self.agent, "--url", url)
+        if rc != 0:
+            raise BackendError(SCRUB(f"rift navigate 失败 rc={rc}"))
+        self.sleep(1.5)
+        return self._state()
+
+    def page_state(self):
+        return self._state()
+
+    def fill(self, selector, value, secret=False):
+        if secret:
+            SCRUB.add(value)
+        js = (f"(() => {{ {JS_FIND} const e = __find({json.dumps(selector)}); if (!e) return false;"
+              " const v = globalThis.__ARCHERY_SECRET__; delete globalThis.__ARCHERY_SECRET__;"
+              " const set = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e), 'value').set;"
+              " set.call(e, v); e.dispatchEvent(new Event('input', {bubbles: true}));"
+              " e.dispatchEvent(new Event('change', {bubbles: true})); return true; })()")
+        if self._eval(js, secret=value) is not True:
+            raise BackendError(f"找不到输入框: {selector}")
+
+    def click(self, selector):
+        js = f"(() => {{ {JS_FIND} const e = __find({json.dumps(selector)}); if (!e) return false; e.click(); return true; }})()"
+        if self._eval(js) is not True:
+            raise BackendError(f"找不到可点击元素: {selector}")
+
+    def check(self, selector):
+        js = (f"(() => {{ {JS_FIND} const e = __find({json.dumps(selector)}); if (!e) return false;"
+              " if (!e.checked) e.click(); return !!e.checked; })()")
+        if self._eval(js) is not True:
+            raise BackendError(f"勾选失败: {selector}")
+
+    def exists(self, selector):
+        return bool(self._eval(f"(() => {{ {JS_FIND} return !!__find({json.dumps(selector)}); }})()"))
+
+    def page_text(self):
+        return self._eval("(document.body.innerText || '').slice(0, 20000)") or ""
+
+    def wait(self, ms):
+        self.sleep(ms / 1000.0)
+
+    def _no_cookies(self, *a, **k):
+        raise BackendUnsupported("rift 后端读不到 HttpOnly cookie：backup / restore / drill 不可用（请用 ego 后端）")
+
+    get_cookies = set_cookies = delete_cookie = _no_cookies
+
+
+class GuardedBackend:
+    """Wraps a backend and enforces allowed_hosts: no navigation, fill or click off the allow-list."""
+
+    def __init__(self, inner, allowed_hosts):
+        self.inner, self.allowed = inner, allowed_hosts
+        self.last_url = None
+        self.supports_cookies = getattr(inner, "supports_cookies", True)
+
+    def _seen(self, state):
+        self.last_url = state.get("url")
+        self._check(self.last_url)
+        return state
+
+    def _check(self, url):
+        if not host_allowed(url or "", self.allowed):
+            raise HostBlocked(f"页面主机 {_hostname(url or '') or '?'} 不在 allowed_hosts 内，已中止（未填任何表单）")
+
+    def _require_host(self):
+        if self.last_url is None:
+            self._seen(self.inner.page_state())
+        else:
+            self._check(self.last_url)
+
+    def open(self):
+        self.inner.open()
+
+    def close(self):
+        self.inner.close()
+
+    def goto(self, url):
+        self._check(url)
+        return self._seen(self.inner.goto(url))
+
+    def page_state(self):
+        return self._seen(self.inner.page_state())
+
+    def fill(self, selector, value, secret=False):
+        self._require_host()
+        self.inner.fill(selector, value, secret=secret)
+
+    def click(self, selector):
+        self._require_host()
+        self.inner.click(selector)
+        self.last_url = None  # page may have navigated: re-check before the next write
+
+    def check(self, selector):
+        self._require_host()
+        self.inner.check(selector)
+
+    def __getattr__(self, name):  # exists / page_text / wait / cookies
+        return getattr(self.inner, name)
+
+
+# --------------------------------------------------------------------------- deps / context
+class CronIO:
+    def read(self):
+        rc, out, _ = default_runner(["crontab", "-l"], None, 30)
+        return out if rc == 0 else ""
+
+    def write(self, text):
+        rc, _, err = default_runner(["crontab", "-"], text, 30)
+        if rc != 0:
+            raise RiftSessionError(f"写入 crontab 失败: {err.strip()[:120]}")
+
+
+def default_backend_factory(cfg, platform):
+    kind = choose_backend(cfg, platform)
+    if kind == "ego":
+        return EgoBackend(cfg, cfg["name"], platform=platform)
+    return RiftBackend(cfg, cfg["name"])
+
+
+@dataclass
+class Deps:
+    backend_factory: Optional[Callable] = None
+    now: Callable = time.time
+    sleep: Callable = time.sleep
+    platform: str = field(default_factory=lambda: sys.platform)
+    cron_io: object = field(default_factory=CronIO)
+
+    def make_backend(self, cfg):
+        if self.backend_factory:
+            return self.backend_factory(cfg)
+        return default_backend_factory(cfg, self.platform)
+
+
+class Ctx:
+    def __init__(self, deps, cfg):
+        self.deps, self.cfg, self.site = deps, cfg, cfg["name"]
+        self.backend = None
+
+    def now(self):
+        return self.deps.now()
+
+    def __enter__(self):
+        inner = self.deps.make_backend(self.cfg)
+        inner.open()
+        self.backend = GuardedBackend(inner, self.cfg["allowed_hosts"])
+        return self
+
+    def __exit__(self, *exc):
+        if self.backend is not None:
+            try:
+                self.backend.close()
+            except Exception:
+                pass
+
+
+# --------------------------------------------------------------------------- output / logging
+def _kv(v):
+    return re.sub(r"\s+", "_", str(v))
+
+
+def emit(cmd, site, state, rc, human, **extra):
+    parts = [f"cmd={cmd}", f"site={site}", f"state={state}", f"rc={rc}"]
+    parts += [f"{k}={_kv(v)}" for k, v in extra.items() if v is not None]
+    print(SCRUB("RIFT_SESSION " + " ".join(parts)))
+    print(SCRUB(human))
+    return rc
+
+
+def append_log(site, now, state, brief):
+    d = state_dir()
+    ensure_private_dir(d)
+    path = log_path(site)
+    if path.exists() and path.stat().st_size > LOG_MAX_BYTES:
+        os.replace(path, path.with_name(path.name + ".1"))
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(SCRUB(f"{iso(now)} {site} {state} {brief}") + "\n")
+    os.chmod(path, 0o600)
+
+
+def save_status(ctx, state, cmd, info=None):
+    rec = {"ts": ctx.now(), "state": state, "cmd": cmd}
+    rec.update(info or {})
+    ensure_private_dir(state_dir())
+    write_private(status_path(ctx.site), json.dumps(rec))
+
+
+def load_status(site):
+    try:
+        return json.loads(status_path(site).read_text())
+    except (OSError, ValueError):
+        return None
+
+
+# --------------------------------------------------------------------------- session logic
+def detect_state(backend, cfg, st=None):
+    """LOGGED_IN | TWO_FACTOR | LOGIN_PAGE | UNKNOWN for the current page."""
+    st = st or backend.page_state()
+    title, url = st.get("title") or "", st.get("url") or ""
+    chk = cfg["logged_in_check"]
+    if chk.get("title_regex") and re.search(chk["title_regex"], title):
+        return "LOGGED_IN"
+    if chk.get("selector") and backend.exists(chk["selector"]):
+        return "LOGGED_IN"
+    if chk.get("text") and chk["text"] in backend.page_text():
+        return "LOGGED_IN"
+    tf = two_factor_cfg(cfg)
+    if tf.get("type", "none") != "none":
+        if (tf.get("page_title_regex") and re.search(tf["page_title_regex"], title)) or \
+                (tf.get("page_url_regex") and re.search(tf["page_url_regex"], url)):
+            return "TWO_FACTOR"
+    lp = cfg.get("login_page_check") or {}
+    if lp.get("title_regex") and re.search(lp["title_regex"], title):
+        return "LOGIN_PAGE"
+    if lp.get("selector") and backend.exists(lp["selector"]):
+        return "LOGIN_PAGE"
+    if not lp and backend.exists(cfg["login_form"]["username"]):
+        return "LOGIN_PAGE"
+    return "UNKNOWN"
+
+
+def keepalive_url(cfg):
+    return (cfg.get("keepalive") or {}).get("url") or cfg["base_url"]
+
+
+def watched_names(cfg):
+    return list(cfg["session_cookie_names"]) + list(cfg.get("device_token_cookie_names") or [])
+
+
+def cookie_info(ctx):
+    """Summarise session / device-token cookie presence and remaining life (no values)."""
+    try:
+        cookies = ctx.backend.get_cookies([ctx.cfg["base_url"]])
+    except BackendUnsupported:
+        return {}
+    now = ctx.now()
+    by = {c["name"]: c for c in cookies}
+    info = {}
+    sess = [by[n] for n in ctx.cfg["session_cookie_names"] if n in by]
+    info["session_cookie"] = "present" if sess else "absent"
+    if sess:
+        exp = sess[0].get("expires", -1)
+        info["session_expires"] = -1 if sess[0].get("session") or exp in (-1, None) else exp
+        if info["session_expires"] != -1:
+            info["session_hours"] = max(0, int((exp - now) // 3600))
+    dev = [by[n] for n in ctx.cfg.get("device_token_cookie_names") or [] if n in by]
+    if ctx.cfg.get("device_token_cookie_names"):
+        info["device_token"] = "present" if dev else "absent"
+        if dev and dev[0].get("expires", -1) not in (-1, None):
+            info["device_expires"] = dev[0]["expires"]
+            info["device_token_days"] = max(0, int((dev[0]["expires"] - now) // 86400))
+    return info
+
+
+def totp_code(entry, deps):
+    t = deps.now()
+    remaining = 30 - (t % 30)
+    if remaining < TOTP_MIN_REMAINING:
+        deps.sleep(remaining + 1)
+    mfa = os.environ.get("RIFT_MFA_BIN") or shutil.which("rift-mfa") or \
+        str(ENGINE_DIR.parent.parent / "rift-mfa" / "scripts" / "rift-mfa")
+    rc, out, err = default_runner([mfa, entry], None, 30)
+    code = out.strip()
+    SCRUB.add(code)
+    if rc != 0 or not re.fullmatch(r"\d{6}", code):
+        raise ConfigError(f"rift-mfa 取码失败 rc={rc}（条目 {entry}）")
+    return code
+
+
+def submit_code(ctx, code):
+    cfg, b = ctx.cfg, ctx.backend
+    tf = two_factor_cfg(cfg)
+    SCRUB.add(code)
+    b.fill(tf["code_input"], code, secret=True)
+    if tf.get("remember"):
+        b.check(tf["remember"])
+    b.click(tf["submit"])
+    b.wait(int(tf.get("after_submit_wait_ms", 6000)))
+    return detect_state(b, cfg)
+
+
+def fill_login_form(ctx):
+    cfg, b = ctx.cfg, ctx.backend
+    form = cfg["login_form"]
+    user, pw = load_credentials(cfg["secret_refs"])
+    b.fill(form["username"], user, secret=True)
+    if form.get("next"):
+        b.click(form["next"])
+        b.wait(int(form.get("after_next_wait_ms", 2500)))
+        b.page_state()
+    b.fill(form["password"], pw, secret=True)
+    b.click(form["submit"])
+    b.wait(int(form.get("after_submit_wait_ms", 6000)))
+    return detect_state(b, cfg)
+
+
+NEED_CODE_HELP = ("已到二次验证页；拿到验证码后用 `rift-session login {site} --code <码>`（或 `--code -` 从 stdin 读）"
+                  "在同一页继续，不要重新 login（会再发一次验证码）")
+
+
+def perform_login(ctx, mode, code=None):
+    """mode 'login' may request / submit a 2FA code; 'relogin' never does. Returns (state, detail)."""
+    cfg, b = ctx.cfg, ctx.backend
+    if mode == "login" and code is not None:
+        state = detect_state(b, cfg, b.page_state())
+        if state == "LOGGED_IN":
+            return "LOGGED_IN", "已处于登录状态"
+        if state != "TWO_FACTOR":
+            return "LOGIN_FAILED", "当前不在验证码页：先不带 --code 跑一次 login，走到验证码页后再带码继续"
+        state = submit_code(ctx, code)
+        return ("LOGGED_IN", "验证码通过") if state == "LOGGED_IN" else ("LOGIN_FAILED", "验证码未通过，已停手不重试")
+    state = detect_state(b, cfg, b.goto(cfg["login_url"]))
+    if state == "LOGGED_IN":
+        return "LOGGED_IN", "已处于登录状态"
+    if state == "LOGIN_PAGE":
+        state = fill_login_form(ctx)
+    elif state == "UNKNOWN":
+        return "LOGIN_FAILED", "登录页无法识别（检查 login_page_check / login_form 选择器）"
+    if state == "LOGGED_IN":
+        return "LOGGED_IN", "密码登录成功"
+    if state == "TWO_FACTOR":
+        if mode == "relogin":
+            return "NEED_CODE", "密码已过，落到二次验证页（记住设备令牌可能已失效），relogin 不请求验证码"
+        ttype = two_factor_cfg(cfg).get("type", "none")
+        if ttype.startswith("totp:"):
+            state = submit_code(ctx, totp_code(ttype[5:], ctx.deps))
+            return ("LOGGED_IN", "TOTP 通过") if state == "LOGGED_IN" else ("LOGIN_FAILED", "TOTP 未通过，已停手不重试")
+        if ttype == "manual_code":
+            return "NEED_CODE", NEED_CODE_HELP.format(site=ctx.site)
+        return "LOGIN_FAILED", "站点要求二次验证，但配置里 two_factor=none"
+    return "LOGIN_FAILED", "提交后仍在登录页（账号密码可能不对，已停手不重试）"
+
+
+def relogin_allowed(site, now, max_per_hour):
+    try:
+        attempts = json.loads(attempts_path(site).read_text()).get("attempts", [])
+    except (OSError, ValueError):
+        attempts = []
+    return len([a for a in attempts if now - a < 3600]) < max_per_hour
+
+
+def record_attempt(site, now):
+    try:
+        attempts = json.loads(attempts_path(site).read_text()).get("attempts", [])
+    except (OSError, ValueError):
+        attempts = []
+    attempts = [a for a in attempts if now - a < 3600] + [now]
+    ensure_private_dir(state_dir())
+    write_private(attempts_path(site), json.dumps({"attempts": attempts}))
+
+
+def do_relogin(ctx, force=False):
+    limit = int((ctx.cfg.get("relogin_policy") or {}).get("max_per_hour", 1))
+    if not force and not relogin_allowed(ctx.site, ctx.now(), limit):
+        return "RELOGIN_SKIPPED", f"限频：1 小时内已尝试 {limit} 次，跳过"
+    record_attempt(ctx.site, ctx.now())
+    return perform_login(ctx, "relogin")
+
+
+def probe(ctx):
+    """Visit the keepalive URL once and classify the page."""
+    st = ctx.backend.goto(keepalive_url(ctx.cfg))
+    return detect_state(ctx.backend, ctx.cfg, st)
+
+
+def rc_for(state):
+    return {"LOGGED_IN": EXIT_OK, "NEED_CODE": EXIT_NEED_HUMAN}.get(state, EXIT_LOST)
+
+
+def cached_info(ctx):
+    try:
+        return cookie_info(ctx)
+    except RiftSessionError:
+        return {}
+
+
+# --------------------------------------------------------------------------- commands
+def cmd_status(ctx, args):
+    state = probe(ctx)
+    info = cached_info(ctx)
+    shown = "LOGGED_IN" if state == "LOGGED_IN" else ("UNKNOWN" if state == "UNKNOWN" else "SESSION_LOST")
+    save_status(ctx, shown, "status", info)
+    append_log(ctx.site, ctx.now(), shown, "status")
+    extra = {k: info.get(k) for k in ("session_cookie", "session_hours", "device_token", "device_token_days")}
+    human = "已登录。" if shown == "LOGGED_IN" else ("页面无法识别。" if shown == "UNKNOWN" else "会话已丢失（在登录页/验证码页）。")
+    return emit("status", ctx.site, shown, rc_for(shown), human, **extra)
+
+
+def cmd_login(ctx, args):
+    code = args.code
+    if code == "-":
+        code = sys.stdin.read().strip()
+    if code is not None and not re.fullmatch(r"\d{4,10}", code):
+        raise UsageError("--code 必须是 4-10 位数字")
+    state, detail = perform_login(ctx, "login", code)
+    info = cached_info(ctx) if state == "LOGGED_IN" else {}
+    save_status(ctx, state, "login", info)
+    append_log(ctx.site, ctx.now(), state, f"login {detail}")
+    return emit("login", ctx.site, state, rc_for(state), detail,
+                device_token_days=info.get("device_token_days"))
+
+
+def cmd_relogin(ctx, args):
+    state, detail = do_relogin(ctx, force=args.force)
+    save_status(ctx, state, "relogin")
+    append_log(ctx.site, ctx.now(), state, f"relogin {detail}")
+    return emit("relogin", ctx.site, state, rc_for(state), detail)
+
+
+def cmd_keepalive(ctx, args):
+    cfg = ctx.cfg
+    state = probe(ctx)
+    if state == "LOGGED_IN":
+        info = cached_info(ctx)
+        save_status(ctx, "LOGGED_IN", "keepalive", info)
+        append_log(ctx.site, ctx.now(), "LOGGED_IN", "keepalive")
+        return emit("keepalive", ctx.site, "LOGGED_IN", 0, "会话有效，已刷新空闲计时。",
+                    ts=iso(ctx.now()), device_token_days=info.get("device_token_days"))
+    if state == "UNKNOWN":
+        save_status(ctx, "UNKNOWN", "keepalive")
+        append_log(ctx.site, ctx.now(), "UNKNOWN", "keepalive page not recognised")
+        return emit("keepalive", ctx.site, "UNKNOWN", EXIT_LOST, "页面无法识别，未做任何登录动作。", ts=iso(ctx.now()))
+    append_log(ctx.site, ctx.now(), "SESSION_LOST", "keepalive")
+    if (cfg.get("keepalive") or {}).get("auto_relogin", True) is False:
+        save_status(ctx, "SESSION_LOST", "keepalive")
+        return emit("keepalive", ctx.site, "SESSION_LOST", EXIT_LOST, "会话丢失（auto_relogin 已关闭）。", ts=iso(ctx.now()))
+    rstate, detail = do_relogin(ctx)
+    append_log(ctx.site, ctx.now(), rstate, f"relogin {detail}")
+    if rstate == "LOGGED_IN":
+        info = cached_info(ctx)
+        save_status(ctx, "LOGGED_IN", "keepalive", info)
+        return emit("keepalive", ctx.site, "LOGGED_IN", 0, "会话曾丢失，已用密码重新登录。", via="relogin", ts=iso(ctx.now()))
+    save_status(ctx, "SESSION_LOST", "keepalive")
+    final = "NEED_CODE" if rstate == "NEED_CODE" else "SESSION_LOST"
+    return emit("keepalive", ctx.site, final, rc_for(rstate), detail, relogin=rstate, ts=iso(ctx.now()))
+
+
+def read_backup(cfg):
+    path = backup_path(cfg)
+    if not path.exists():
+        raise ConfigError(f"没有 cookie 备份: {path}（先 backup）")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        cookies = data["cookies"]
+    except (OSError, ValueError, KeyError):
+        raise ConfigError(f"cookie 备份文件损坏: {path}")
+    SCRUB.add(*[c.get("value") for c in cookies])
+    return cookies
+
+
+def take_backup(ctx):
+    names = watched_names(ctx.cfg)
+    cookies = [c for c in ctx.backend.get_cookies([ctx.cfg["base_url"]]) if c.get("name") in names]
+    if not any(c["name"] in ctx.cfg["session_cookie_names"] for c in cookies):
+        raise ConfigError("取不到会话 cookie，不写备份")
+    SCRUB.add(*[c.get("value") for c in cookies])
+    path = backup_path(ctx.cfg)
+    if not ctx.cfg.get("backup_file"):
+        ensure_private_dir(secrets_dir())
+    write_private(path, json.dumps({"saved_at": iso(ctx.now()), "url": ctx.cfg["base_url"], "cookies": cookies}))
+    return cookies
+
+
+def cmd_backup(ctx, args):
+    if probe(ctx) != "LOGGED_IN":
+        append_log(ctx.site, ctx.now(), "SESSION_LOST", "backup refused: not logged in")
+        return emit("backup", ctx.site, "SESSION_LOST", EXIT_LOST, "当前未登录，不备份（先 login / relogin）。")
+    cookies = take_backup(ctx)
+    append_log(ctx.site, ctx.now(), "BACKUP_OK", "backup")
+    names = ",".join(c["name"] for c in cookies)
+    return emit("backup", ctx.site, "BACKUP_OK", 0, f"已备份 cookie（仅名称：{names}），值不打印。",
+                cookies=names, file=backup_path(ctx.cfg).name)
+
+
+def cmd_restore(ctx, args):
+    cookies = read_backup(ctx.cfg)
+    ctx.backend.goto(ctx.cfg["base_url"])
+    ctx.backend.set_cookies(cookies)
+    state = probe(ctx)
+    append_log(ctx.site, ctx.now(), state, "restore")
+    save_status(ctx, state if state == "LOGGED_IN" else "SESSION_LOST", "restore")
+    return emit("restore", ctx.site, state, rc_for(state),
+                "已从备份恢复会话 cookie，当前已登录。" if state == "LOGGED_IN" else "已写回 cookie，但站点仍未识别为登录（令牌可能已过期）。")
+
+
+DRILL_PLAN = ("A 删除会话 cookie(%s) → 访问保活地址，应回登录页；B 用本地备份恢复 cookie → 应回已登录；"
+              "C 再删会话 cookie 后只用账号密码重登（relogin，不请求验证码）→ 看是否还要二次验证码；"
+              "任一步失败自动从备份还原；全部通过后刷新备份。")
+
+
+def cmd_drill(ctx, args):
+    cfg = ctx.cfg
+    if not cfg.get("drill_allowed"):
+        raise ConfigError('该站点未设置 "drill_allowed": true，拒绝演练')
+    if args.dry_run:
+        return emit("drill", ctx.site, "DRY_RUN", 0, "将执行：" + DRILL_PLAN % ",".join(cfg["session_cookie_names"]),
+                    plan="A:delete_session,B:restore_from_backup,C:relogin_password_only,final:refresh_backup")
+    return _drill(ctx)
+
+
+def _delete_session(ctx, backup):
+    for c in backup:
+        if c["name"] in ctx.cfg["session_cookie_names"]:
+            ctx.backend.delete_cookie(c["name"], c.get("domain", ""), c.get("path", "/"))
+
+
+def _drill(ctx):
+    b, cfg = ctx.backend, ctx.cfg
+    if probe(ctx) != "LOGGED_IN":
+        append_log(ctx.site, ctx.now(), "DRILL_ABORT", "not logged in at start")
+        return emit("drill", ctx.site, "DRILL_ABORT", EXIT_LOST, "演练前必须是已登录状态，未做任何改动。")
+    backup = take_backup(ctx)
+    steps, note = [], ""
+    try:
+        _delete_session(ctx, backup)
+        ok = probe(ctx) in ("LOGIN_PAGE", "TWO_FACTOR")
+        steps.append(("A", ok))
+        if ok:
+            b.set_cookies(backup)
+            ok = probe(ctx) == "LOGGED_IN"
+            steps.append(("B", ok))
+        if ok:
+            _delete_session(ctx, backup)
+            rstate, detail = do_relogin(ctx, force=True)
+            ok = rstate == "LOGGED_IN"
+            steps.append(("C", ok))
+            note = detail
+        passed = ok
+    except RiftSessionError as e:
+        passed, note = False, SCRUB(str(e))
+        steps.append(("EXC", False))
+    restored = ""
+    if not passed:
+        try:
+            b.set_cookies(backup)
+            restored = "restored" if probe(ctx) == "LOGGED_IN" else "restore_not_confirmed"
+        except RiftSessionError as e:
+            restored = "restore_error"
+            note += " " + SCRUB(str(e))
+    else:
+        try:
+            take_backup(ctx)
+        except RiftSessionError as e:
+            note += " 备份刷新失败: " + SCRUB(str(e))
+    summary = ",".join(f"{n}:{'ok' if k else 'fail'}" for n, k in steps)
+    state = "DRILL_PASS" if passed else "DRILL_FAIL"
+    append_log(ctx.site, ctx.now(), state, f"drill {summary} {restored}".strip())
+    human = ("演练通过：删除会话后可由备份恢复，且仅凭账号密码也能重登（无需验证码）。" if passed
+             else f"演练失败（{summary}）：{note or '见步骤'}；已尝试从备份还原（{restored or 'n/a'}）。")
+    return emit("drill", ctx.site, state, 0 if passed else EXIT_LOST, human, steps=summary, restore=restored or None)
+
+
+# ---- schedule
+def _cron_line(cfg, site):
+    minutes = int((cfg.get("keepalive") or {}).get("interval_minutes", 10))
+    return f"*/{minutes} * * * * {sys.executable} {ENGINE_PATH} keepalive {site} >/dev/null 2>&1 {MARKER_PREFIX}{site}"
+
+
+def _plist(cfg, site):
+    minutes = int((cfg.get("keepalive") or {}).get("interval_minutes", 10))
+    return {
+        "Label": f"com.rift-session.{site}",
+        "ProgramArguments": [sys.executable, str(ENGINE_PATH), "keepalive", site],
+        "StartInterval": minutes * 60,
+        "RunAtLoad": True,
+        "StandardOutPath": "/dev/null",
+        "StandardErrorPath": "/dev/null",
+        "EnvironmentVariables": {"PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"},
+    }
+
+
+def _our_line(line, site):
+    return line.rstrip().endswith(f"{MARKER_PREFIX}{site}")
+
+
+def cmd_schedule(deps, cfg, action):
+    site = cfg["name"]
+    now = deps.now()
+    if deps.platform == "darwin":
+        plist = launch_agents_dir() / f"com.rift-session.{site}.plist"
+        label = f"com.rift-session.{site}"
+        if action == "install":
+            ensure_private_dir(plist.parent, 0o755)
+            plist.write_bytes(plistlib.dumps(_plist(cfg, site)))
+            return emit("schedule", site, "SCHEDULED", 0,
+                        f"已写入 {plist}。手动加载：launchctl bootstrap gui/$(id -u) {plist}（本命令不会自动加载）")
+        if action == "remove":
+            existed = plist.exists()
+            if existed:
+                plist.unlink()
+            return emit("schedule", site, "NOT_SCHEDULED", 0,
+                        f"已删除 plist。若已加载，请先卸载：launchctl bootout gui/$(id -u)/{label}" if existed else "没有该站点的 plist。")
+        present = plist.exists()
+        return emit("schedule", site, "SCHEDULED" if present else "NOT_SCHEDULED", 0,
+                    "launchd plist 已存在。" if present else "launchd plist 不存在。")
+    text = deps.cron_io.read() or ""
+    lines = text.splitlines()
+    mine = [l for l in lines if _our_line(l, site)]
+    if action == "status":
+        return emit("schedule", site, "SCHEDULED" if mine else "NOT_SCHEDULED", 0,
+                    "crontab 里有保活行。" if mine else "crontab 里没有保活行。")
+    if action == "install":
+        new = _cron_line(cfg, site)
+        if mine == [new]:
+            return emit("schedule", site, "SCHEDULED", 0, "已存在相同的保活行，未改动。")
+        _backup_crontab(text, now)
+        kept = [l for l in lines if not _our_line(l, site)]
+        deps.cron_io.write("\n".join(kept + [new]) + "\n")
+        return emit("schedule", site, "SCHEDULED", 0, f"已写入 crontab（先备份了原内容）：{new.split(' >/dev')[0]}")
+    if not mine:
+        return emit("schedule", site, "NOT_SCHEDULED", 0, "crontab 里没有该站点的保活行。")
+    _backup_crontab(text, now)
+    kept = [l for l in lines if not _our_line(l, site)]
+    deps.cron_io.write(("\n".join(kept) + "\n") if kept else "")
+    return emit("schedule", site, "NOT_SCHEDULED", 0, "已从 crontab 精确移除该站点的保活行。")
+
+
+def _backup_crontab(text, now):
+    d = home_dir() / "backups"
+    ensure_private_dir(d)
+    write_private(d / f"crontab-{datetime.fromtimestamp(now, tz=timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.txt", text)
+
+
+def cmd_list(deps):
+    names = list_site_names()
+    now = deps.now()
+    print(f"RIFT_SESSION cmd=list state=OK rc=0 sites={len(names)}")
+    for n in names:
+        st = load_status(n)
+        if not st:
+            print(f"RIFT_SESSION cmd=list site={n} state=UNKNOWN last=never")
+            continue
+        parts = [f"cmd=list", f"site={n}", f"state={st.get('state')}", f"last={iso(st['ts'])}",
+                 f"via={st.get('cmd')}"]
+        for k in ("session_cookie", "session_hours", "device_token", "device_token_days"):
+            if st.get(k) is not None:
+                parts.append(f"{k}={st[k]}")
+        print("RIFT_SESSION " + " ".join(parts))
+    print(f"共 {len(names)} 个站点（状态来自上次 keepalive/status/login，非实时；实时请 status <site>）。")
+    return 0
+
+
+# --------------------------------------------------------------------------- CLI
+class Parser(argparse.ArgumentParser):
+    def error(self, message):
+        raise UsageError(message)
+
+
+def build_parser():
+    p = Parser(prog="rift-session", description="登录态固化 / 保活 / 自动重登 / 演练")
+    sub = p.add_subparsers(dest="cmd", required=True, parser_class=Parser)
+    sub.add_parser("list")
+    for name in ("status", "keepalive", "backup", "restore"):
+        sub.add_parser(name).add_argument("site")
+    lg = sub.add_parser("login")
+    lg.add_argument("site")
+    lg.add_argument("--code", help="6 位验证码（`-` 表示从 stdin 读）")
+    rl = sub.add_parser("relogin")
+    rl.add_argument("site")
+    rl.add_argument("--force", action="store_true", help="忽略限频（只用于演练）")
+    dr = sub.add_parser("drill")
+    dr.add_argument("site")
+    dr.add_argument("--dry-run", action="store_true")
+    sc = sub.add_parser("schedule")
+    sc.add_argument("action", choices=["install", "remove", "status"])
+    sc.add_argument("site")
+    return p
+
+
+SESSION_COMMANDS = {"status": cmd_status, "login": cmd_login, "relogin": cmd_relogin,
+                    "keepalive": cmd_keepalive, "backup": cmd_backup, "restore": cmd_restore,
+                    "drill": cmd_drill}
+
+
+def main(argv=None, deps=None):
+    global SCRUB
+    SCRUB = Scrubber()
+    deps = deps or Deps()
+    site = "-"
+    cmd = "?"
+    try:
+        args = build_parser().parse_args(argv if argv is not None else sys.argv[1:])
+        cmd = args.cmd
+        if cmd == "list":
+            return cmd_list(deps)
+        site = args.site
+        cfg = load_site(site)
+        if cmd == "schedule":
+            return cmd_schedule(deps, cfg, args.action)
+        if cmd == "drill" and args.dry_run:
+            return cmd_drill(Ctx(deps, cfg), args)
+        if cmd == "drill" and not cfg.get("drill_allowed"):
+            return cmd_drill(Ctx(deps, cfg), args)
+        with Ctx(deps, cfg) as ctx:
+            return SESSION_COMMANDS[cmd](ctx, args)
+    except SystemExit as e:
+        return int(e.code or 0)
+    except UsageError as e:
+        return emit(cmd, site, "USAGE_ERROR", EXIT_CONFIG, f"参数错误: {e}")
+    except (ConfigError, BackendError, HostBlocked, RiftSessionError) as e:
+        state = "HOST_BLOCKED" if isinstance(e, HostBlocked) else (
+            "BACKEND_ERROR" if isinstance(e, BackendError) else "CONFIG_ERROR")
+        _log_failure(site, deps, state, e)
+        return emit(cmd, site, state, EXIT_CONFIG, f"{e}")
+    except Exception as e:  # unexpected: never dump a traceback that could carry secrets
+        _log_failure(site, deps, "BACKEND_ERROR", e)
+        return emit(cmd, site, "BACKEND_ERROR", EXIT_CONFIG, f"{type(e).__name__}: {e}")
+
+
+def _log_failure(site, deps, state, err):
+    if site and site != "-" and SITE_NAME_RE.match(site) and (home_dir() / "sites" / f"{site}.json").exists():
+        try:
+            append_log(site, deps.now(), state, " ".join(str(err).split())[:160])
+        except OSError:
+            pass
+
+
+if __name__ == "__main__":
+    sys.exit(main())
