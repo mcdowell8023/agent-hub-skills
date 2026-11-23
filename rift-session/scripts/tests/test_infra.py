@@ -58,6 +58,20 @@ class GuardTest(unittest.TestCase):
         self.assertEqual(s.fills, [])
 
 
+def probes(**results):
+    """results: name -> (ok, reason); records call order."""
+    calls = []
+
+    def mk(name):
+        def f():
+            calls.append(name)
+            return results.get(name, (False, "n/a"))
+        return f
+    d = {n: mk(n) for n in ("ego", "ego_over_ssh", "rift", "chrome")}
+    d["calls"] = calls
+    return d
+
+
 class PlatformSelectionTest(unittest.TestCase):
     def cfg(self, **kw):
         return site_config("/tmp", **kw)
@@ -74,27 +88,83 @@ class PlatformSelectionTest(unittest.TestCase):
         cfg.pop("backend_host")
         self.assertEqual(rs.ego_argv(cfg, "darwin"), ["ego-browser", "nodejs"])
 
+    def test_ego_argv_force_local_ignores_host(self):
+        self.assertEqual(rs.ego_argv(self.cfg(backend_host="mac"), "darwin", force_local=True),
+                         ["ego-browser", "nodejs"])
+
     def test_ego_argv_linux_without_host_unavailable(self):
         cfg = self.cfg()
         cfg.pop("backend_host")
         with self.assertRaises(rs.BackendUnavailable):
             rs.ego_argv(cfg, "linux")
 
-    def test_auto_choice(self):
+    def test_default_order_macos(self):
+        cfg = self.cfg(backend="auto")
+        self.assertEqual(rs.backend_order(cfg, "darwin"), ["ego", "chrome"])
+
+    def test_default_order_linux_with_and_without_host(self):
+        cfg = self.cfg(backend="auto")
+        self.assertEqual(rs.backend_order(cfg, "linux"), ["ego_over_ssh", "rift", "chrome"])
+        cfg.pop("backend_host")
+        self.assertEqual(rs.backend_order(cfg, "linux"), ["rift", "chrome"])
+
+    def test_explicit_backend_order_and_explicit_backend(self):
+        cfg = self.cfg(backend="auto", backend_order=["chrome", "rift"])
+        self.assertEqual(rs.backend_order(cfg, "linux"), ["chrome", "rift"])
+        self.assertEqual(rs.backend_order(self.cfg(backend="rift", backend_order=["chrome"]), "linux"), ["rift"])
+        self.assertEqual(rs.backend_order(self.cfg(backend="ego"), "linux"), ["ego_over_ssh"])  # host configured
+
+    def test_select_takes_first_available_and_reports_reasons(self):
+        pr = probes(ego_over_ssh=(False, "ssh mac 不通"), rift=(True, "rift-browser 在位"), chrome=(True, "Chrome"))
+        kind, why = rs.select_backend(self.cfg(backend="auto"), "linux", pr)
+        self.assertEqual(kind, "rift")
+        self.assertEqual(pr["calls"], ["ego_over_ssh", "rift"])  # chrome never probed
+        self.assertIn("ego_over_ssh=ssh mac 不通", why)
+        self.assertIn("rift=rift-browser 在位", why)
+
+    def test_select_falls_through_to_chrome(self):
+        pr = probes(chrome=(True, "Chrome: /usr/bin/google-chrome"))
+        kind, _ = rs.select_backend(self.cfg(backend="auto"), "linux", pr)
+        self.assertEqual(kind, "chrome")
+
+    def test_select_none_available_lists_every_reason(self):
+        pr = probes()
+        with self.assertRaises(rs.BackendUnavailable) as cm:
+            rs.select_backend(self.cfg(backend="auto"), "linux", pr)
+        self.assertIn("ego_over_ssh", str(cm.exception))
+        self.assertIn("chrome", str(cm.exception))
+
+    def test_macos_default_prefers_ego_then_chrome(self):
         cfg = self.cfg(backend="auto")
         cfg.pop("backend_host")
-        self.assertEqual(rs.choose_backend(cfg, "darwin", rift_available=True), "ego")
-        self.assertEqual(rs.choose_backend(cfg, "linux", rift_available=True), "rift")
-        cfg["backend_host"] = "mac"
-        self.assertEqual(rs.choose_backend(cfg, "linux", rift_available=True), "ego")
+        kind, _ = rs.select_backend(cfg, "darwin", probes(ego=(False, "no"), chrome=(True, "ok")))
+        self.assertEqual(kind, "chrome")
 
-    def test_rift_unavailable_on_mac_without_component(self):
-        cfg = self.cfg(backend="rift")
-        with self.assertRaises(rs.BackendUnavailable):
-            rs.choose_backend(cfg, "darwin", rift_available=False)
+    def test_default_probes_detect_chrome_and_ego(self):
+        cfg = self.cfg(backend="auto")
+        pr = rs.default_probes(cfg, "darwin", which=lambda n: None, exists=lambda p: p.endswith("Google Chrome"))
+        self.assertTrue(pr["chrome"]()[0])
+        self.assertEqual(pr["ego"]()[0], False)
+        pr = rs.default_probes(cfg, "darwin", which=lambda n: "/usr/local/bin/ego-browser", exists=lambda p: False)
+        self.assertTrue(pr["ego"]()[0])
+        self.assertFalse(pr["chrome"]()[0])
+        self.assertFalse(pr["rift"]()[0] and False)
 
-    def test_explicit_ego_kept_even_if_rift_available(self):
-        self.assertEqual(rs.choose_backend(self.cfg(backend="ego"), "linux", rift_available=True), "ego")
+    def test_ssh_probe_uses_batchmode_and_reflects_rc(self):
+        seen = []
+        ok = rs.default_probes(self.cfg(), "linux", runner=lambda argv, stdin, timeout: (seen.append(argv) or (0, "", "")))
+        self.assertTrue(ok["ego_over_ssh"]()[0])
+        self.assertIn("BatchMode=yes", seen[0])
+        bad = rs.default_probes(self.cfg(), "linux", runner=lambda argv, stdin, timeout: (255, "", ""))
+        self.assertFalse(bad["ego_over_ssh"]()[0])
+
+    def test_find_chrome_override_and_candidates(self):
+        self.assertEqual(rs.find_chrome({"chrome_bin": "/opt/c/chrome"}, "linux", exists=lambda p: True), "/opt/c/chrome")
+        self.assertIsNone(rs.find_chrome({"chrome_bin": "/opt/c/chrome"}, "linux", exists=lambda p: False))
+        self.assertEqual(rs.find_chrome({}, "linux", which=lambda n: "/usr/bin/chromium" if n == "chromium" else None),
+                         "/usr/bin/chromium")
+        mac = rs.find_chrome({}, "darwin", exists=lambda p: "Google Chrome.app" in p and p.startswith("/Applications"))
+        self.assertEqual(mac, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 
     def test_paths_use_expanduser_not_hardcoded_home(self):
         for plat in ("linux", "darwin"):
@@ -243,6 +313,12 @@ class ScheduleTest(EngineTestCase):
         self.assertEqual(cron.text, "0 3 * * * /usr/bin/backup.sh\n")
         rc, out, _ = self.run_cli(["schedule", "status", "demo"], cron_io=cron)
         self.assertIn("state=NOT_SCHEDULED", out)
+
+    def test_script_override_goes_into_cron_line(self):
+        self.write_site()
+        cron = FakeCron()
+        self.run_cli(["schedule", "install", "demo", "--script", "/opt/bin/rift-session"], cron_io=cron)
+        self.assertIn(" /opt/bin/rift-session keepalive demo ", cron.text)
 
     def test_cron_remove_leaves_other_sites_alone(self):
         self.write_site("a")

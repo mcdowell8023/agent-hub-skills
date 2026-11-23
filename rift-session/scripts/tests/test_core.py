@@ -28,7 +28,9 @@ class ConfigValidationTest(EngineTestCase):
 
     def test_bad_values_rejected(self):
         cases = [
-            dict(backend="chrome"),
+            dict(backend="firefox"),
+            dict(backend_order=["ego", "firefox"]),
+            dict(chrome_headless="maybe"),
             dict(two_factor={"type": "sms"}),
             dict(logged_in_check={"title_regex": "("}),
             dict(logged_in_check={}),
@@ -125,6 +127,7 @@ class StatusTest(EngineTestCase):
         self.assertEqual(rc, 0)
         self.assertIn("state=LOGGED_IN", out)
         self.assertIn("device_token_days=20", out)
+        self.assertIn("device_token_hours=480", out)
         self.assertNoSecrets(out, err)
         self.assertEqual(len(out.strip().splitlines()), 2)  # machine line + human line
 

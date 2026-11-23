@@ -9,11 +9,15 @@
 安全：密码与验证码只经 stdin 交给后端进程；不进 argv / 环境变量 / 日志 / stdout；cookie 值从不打印。
 """
 import argparse
+import base64
+import hashlib
 import json
 import os
 import plistlib
 import re
 import shutil
+import socket
+import struct
 import subprocess
 import sys
 import time
@@ -21,6 +25,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
+from urllib import request as urlrequest
 from urllib.parse import urlparse
 
 ENGINE_DIR = Path(__file__).resolve().parent
@@ -162,7 +167,8 @@ def host_allowed(url, allowed_hosts):
 
 
 # --------------------------------------------------------------------------- config
-BACKENDS = ("ego", "rift", "auto")
+BACKENDS = ("ego", "ego_over_ssh", "rift", "chrome", "auto")
+ORDER_NAMES = ("ego", "ego_over_ssh", "rift", "chrome")
 SITE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
@@ -258,7 +264,14 @@ def validate_config(cfg):
     if rp.get("max_per_hour") is not None and not (isinstance(rp["max_per_hour"], int) and rp["max_per_hour"] >= 1):
         errs.append("relogin_policy.max_per_hour: 正整数")
     if cfg.get("backend", "auto") not in BACKENDS:
-        errs.append("backend: ego | rift | auto")
+        errs.append("backend: ego | ego_over_ssh | rift | chrome | auto")
+    order = cfg.get("backend_order")
+    if order is not None and not (isinstance(order, list) and order and all(o in ORDER_NAMES for o in order)):
+        errs.append("backend_order: 非空数组，元素 ∈ ego | ego_over_ssh | rift | chrome")
+    if cfg.get("chrome_headless", "auto") not in (True, False, "auto"):
+        errs.append("chrome_headless: true | false | \"auto\"")
+    if cfg.get("chrome_port") is not None and not (isinstance(cfg["chrome_port"], int) and 1024 <= cfg["chrome_port"] <= 65535):
+        errs.append("chrome_port: 1024..65535 的整数")
     return errs
 
 
@@ -358,34 +371,95 @@ def rift_helper_path():
     return Path("~/AgentWorkspace/projects/agent-hub-private/rift-browser/bin/cdp-helper.py").expanduser()
 
 
-def ego_argv(cfg, platform):
+def has_ssh_host(cfg):
     host = cfg.get("backend_host")
-    if host and host != "local":
+    return bool(host and host != "local")
+
+
+def ego_argv(cfg, platform, force_local=False):
+    if has_ssh_host(cfg) and not force_local:
         shell = cfg.get("backend_shell", "zsh -lic")
-        return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", host,
-                f'{shell} "ego-browser nodejs"']
+        return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", cfg["backend_host"],
+                '%s "ego-browser nodejs"' % shell]
     if platform == "darwin":
         return ["ego-browser", "nodejs"]
     raise BackendUnavailable("Linux 上 ego 后端需要在站点配置里写 backend_host（ssh 到装有 ego-browser 的 Mac）")
 
 
-def choose_backend(cfg, platform, rift_available=None):
-    if rift_available is None:
-        rift_available = rift_helper_path().exists()
+def backend_order(cfg, platform):
+    """Candidate backends in priority order. `backend_order` only applies when backend == auto."""
     want = cfg.get("backend", "auto")
-    host = cfg.get("backend_host")
-    has_host = bool(host and host != "local")
-    if want == "ego":
-        return "ego"
-    if want == "rift":
-        if not rift_available:
-            raise BackendUnavailable("rift 后端不可用：本机没有 rift-browser（cdp-helper.py）")
-        return "rift"
-    if platform == "darwin" or has_host:
-        return "ego"
-    if rift_available:
-        return "rift"
-    raise BackendUnavailable("没有可用后端：Linux 需要 backend_host（ego over ssh）或本机 rift-browser")
+    if want != "auto":
+        if want == "ego" and has_ssh_host(cfg):
+            return ["ego_over_ssh"]
+        return [want]
+    if cfg.get("backend_order"):
+        return list(cfg["backend_order"])
+    if platform == "darwin":
+        return ["ego", "chrome"]
+    return (["ego_over_ssh"] if has_ssh_host(cfg) else []) + ["rift", "chrome"]
+
+
+def chrome_candidates(platform):
+    if platform == "darwin":
+        return ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                "~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                "/Applications/Chromium.app/Contents/MacOS/Chromium"]
+    return ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "chrome"]
+
+
+def find_chrome(cfg, platform, which=shutil.which, exists=os.path.exists):
+    """Return the chrome executable path or None. cfg.chrome_bin overrides detection."""
+    if cfg.get("chrome_bin"):
+        p = os.path.expanduser(cfg["chrome_bin"])
+        return p if exists(p) else None
+    for c in chrome_candidates(platform):
+        if platform == "darwin":
+            p = os.path.expanduser(c)
+            if exists(p):
+                return p
+        else:
+            p = which(c)
+            if p:
+                return p
+    return None
+
+
+def default_probes(cfg, platform, runner=None, which=shutil.which, exists=os.path.exists):
+    runner = runner or default_runner
+
+    def p_ego():
+        if platform != "darwin":
+            return False, "仅 macOS 本机可用"
+        return (True, "ego-browser 在 PATH") if which("ego-browser") else (False, "ego-browser 不在 PATH")
+
+    def p_ssh():
+        if not has_ssh_host(cfg):
+            return False, "未配置 backend_host"
+        rc, _, _ = runner(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", cfg["backend_host"], "true"], None, 20)
+        return (True, "ssh %s 通" % cfg["backend_host"]) if rc == 0 else (False, "ssh %s 不通 rc=%s" % (cfg["backend_host"], rc))
+
+    def p_rift():
+        h = rift_helper_path()
+        return (True, "rift-browser 在位") if exists(str(h)) else (False, "本机没有 rift-browser")
+
+    def p_chrome():
+        b = find_chrome(cfg, platform, which, exists)
+        return (True, "Chrome: %s" % b) if b else (False, "找不到 Google Chrome / Chromium（可用 chrome_bin 指定）")
+
+    return {"ego": p_ego, "ego_over_ssh": p_ssh, "rift": p_rift, "chrome": p_chrome}
+
+
+def select_backend(cfg, platform, probes=None):
+    """Probe candidates in order; return (kind, reasons). Raises BackendUnavailable listing every skip."""
+    probes = probes or default_probes(cfg, platform)
+    reasons = []
+    for name in backend_order(cfg, platform):
+        ok, why = probes[name]()
+        reasons.append("%s=%s" % (name, why))
+        if ok:
+            return name, "; ".join(reasons)
+    raise BackendUnavailable("没有可用后端（%s）" % "; ".join(reasons))
 
 
 class EgoBackend:
@@ -393,10 +467,11 @@ class EgoBackend:
 
     supports_cookies = True
 
-    def __init__(self, cfg, site, runner=None, platform=None):
+    def __init__(self, cfg, site, runner=None, platform=None, local=False):
         self.cfg, self.site = cfg, site
         self.runner = runner or default_runner
         self.platform = platform or sys.platform
+        self.local = local
         self.task_space = cfg.get("task_space") or f"rift-session-{site}"
         self.label = cfg.get("page_label", "p1")
 
@@ -410,7 +485,7 @@ class EgoBackend:
         script = (f"const __ts = await taskSpace({json.dumps(self.task_space)});\n"
                   f"const page = __ts.page({json.dumps(self.label)});\nlet __r = null;\n{body}\n"
                   'console.log("RS_RESULT " + JSON.stringify(__r));\n')
-        rc, out, err = self.runner(ego_argv(self.cfg, self.platform), script, 150)
+        rc, out, err = self.runner(ego_argv(self.cfg, self.platform, self.local), script, 150)
         text = f"{out}\n{err}"
         for line in reversed(text.splitlines()):
             if line.startswith("RS_RESULT "):
@@ -563,6 +638,315 @@ class RiftBackend:
     get_cookies = set_cookies = delete_cookie = _no_cookies
 
 
+WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+
+class WSClient:
+    """Minimal RFC 6455 client (text frames only) for talking CDP; stdlib only, independent of any other skill."""
+
+    def __init__(self, url, timeout=20):
+        u = urlparse(url)
+        self.host, self.port = u.hostname, u.port or 80
+        self.path = (u.path or "/") + ("?" + u.query if u.query else "")
+        self.timeout = timeout
+        self.sock = None
+        self._buf = b""
+        self._id = 0
+
+    def connect(self):
+        try:
+            s = socket.create_connection((self.host, self.port), timeout=self.timeout)
+        except OSError as e:
+            raise BackendError("CDP websocket 连不上 %s:%s: %s" % (self.host, self.port, e))
+        self.sock = s
+        key = base64.b64encode(os.urandom(16)).decode()
+        req = ("GET %s HTTP/1.1\r\nHost: %s:%s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+               "Sec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n" % (self.path, self.host, self.port, key))
+        s.sendall(req.encode())
+        data = b""
+        while b"\r\n\r\n" not in data:
+            chunk = s.recv(4096)
+            if not chunk:
+                raise BackendError("websocket 握手被关闭")
+            data += chunk
+        head, self._buf = data.split(b"\r\n\r\n", 1)
+        lines = head.decode("latin-1").split("\r\n")
+        if " 101 " not in lines[0] + " ":
+            raise BackendError("websocket 握手失败: %s" % lines[0][:80])
+        accept = base64.b64encode(hashlib.sha1((key + WS_GUID).encode()).digest()).decode()
+        if not any(l.lower().startswith("sec-websocket-accept:") and l.split(":", 1)[1].strip() == accept for l in lines[1:]):
+            raise BackendError("websocket 握手校验失败（Sec-WebSocket-Accept 不匹配）")
+
+    def _read_exact(self, n):
+        while len(self._buf) < n:
+            try:
+                chunk = self.sock.recv(65536)
+            except socket.timeout:
+                raise BackendError("CDP 等待回应超时")
+            except OSError as e:
+                raise BackendError("CDP websocket 读取失败: %s" % e)
+            if not chunk:
+                raise BackendError("CDP websocket 已关闭")
+            self._buf += chunk
+        out, self._buf = self._buf[:n], self._buf[n:]
+        return out
+
+    def _send_frame(self, opcode, payload):
+        n = len(payload)
+        header = bytes([0x80 | opcode])
+        if n < 126:
+            header += bytes([0x80 | n])
+        elif n < 65536:
+            header += bytes([0x80 | 126]) + struct.pack(">H", n)
+        else:
+            header += bytes([0x80 | 127]) + struct.pack(">Q", n)
+        mask = os.urandom(4)
+        masked = (int.from_bytes(payload, "big") ^ int.from_bytes((mask * (n // 4 + 1))[:n], "big")).to_bytes(n, "big") if n else b""
+        try:
+            self.sock.sendall(header + mask + masked)
+        except OSError as e:
+            raise BackendError("CDP websocket 发送失败: %s" % e)
+
+    def recv_message(self):
+        data, started = b"", False
+        while True:
+            b1, b2 = self._read_exact(2)
+            fin, opcode, length = b1 & 0x80, b1 & 0x0F, b2 & 0x7F
+            if length == 126:
+                length = struct.unpack(">H", self._read_exact(2))[0]
+            elif length == 127:
+                length = struct.unpack(">Q", self._read_exact(8))[0]
+            mask = self._read_exact(4) if b2 & 0x80 else None
+            payload = self._read_exact(length) if length else b""
+            if mask:
+                payload = (int.from_bytes(payload, "big") ^ int.from_bytes((mask * (length // 4 + 1))[:length], "big")).to_bytes(length, "big")
+            if opcode == 0x8:
+                raise BackendError("CDP websocket 被对端关闭")
+            if opcode == 0x9:
+                self._send_frame(0xA, payload)
+                continue
+            if opcode == 0xA:
+                continue
+            data += payload
+            started = True
+            if fin:
+                return data.decode("utf-8", "replace")
+
+    def call(self, method, params=None, timeout=None):
+        if timeout:
+            self.sock.settimeout(timeout)
+        self._id += 1
+        mid = self._id
+        self._send_frame(0x1, json.dumps({"id": mid, "method": method, "params": params or {}}).encode())
+        while True:
+            try:
+                msg = json.loads(self.recv_message())
+            except ValueError:
+                continue
+            if msg.get("id") != mid:
+                continue  # CDP event or reply to something else
+            if "error" in msg:
+                raise BackendError("CDP %s 错误: %s" % (method, (msg["error"] or {}).get("message", "?")))
+            return msg.get("result", {})
+
+    def close(self):
+        if self.sock is not None:
+            try:
+                self._send_frame(0x8, b"")
+            except BackendError:
+                pass
+            try:
+                self.sock.close()
+            except OSError:
+                pass
+            self.sock = None
+
+
+def pick_free_port():
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+def chrome_headless(cfg, platform, env=None):
+    env = os.environ if env is None else env
+    want = cfg.get("chrome_headless", "auto")
+    if want is True or want is False:
+        return want
+    if platform == "darwin":
+        return False
+    return not (env.get("DISPLAY") or env.get("WAYLAND_DISPLAY"))
+
+
+def default_launcher(argv):
+    return subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+class ChromeBackend:
+    """Google Chrome via CDP with a dedicated persistent per-site profile (cookies survive Chrome restarts)."""
+
+    supports_cookies = True
+
+    def __init__(self, cfg, site, platform=None, launcher=None, sleep=time.sleep, env=None,
+                 which=shutil.which, path_exists=os.path.exists, pick_port=pick_free_port, ready_polls=60):
+        self.cfg, self.site = cfg, site
+        self.platform = platform or sys.platform
+        self.launcher, self.sleep, self.env = launcher or default_launcher, sleep, env
+        self.which, self.path_exists, self.pick_port, self.ready_polls = which, path_exists, pick_port, ready_polls
+        self.ws = None
+
+    # ---- paths / state
+    def profile_dir(self):
+        return state_dir() / "chrome-profile" / self.site
+
+    def _state_file(self):
+        return state_dir() / ("%s.chrome.json" % self.site)
+
+    def _read_state(self):
+        try:
+            return json.loads(self._state_file().read_text())
+        except (OSError, ValueError):
+            return {}
+
+    def port(self):
+        if self.cfg.get("chrome_port"):
+            return int(self.cfg["chrome_port"])
+        port = self._read_state().get("port")
+        if not port:
+            port = self.pick_port()
+            ensure_private_dir(state_dir())
+            write_private(self._state_file(), json.dumps({"port": port}))
+        return int(port)
+
+    # ---- chrome process
+    def _http(self, port, path, method="GET", timeout=5):
+        req = urlrequest.Request("http://127.0.0.1:%d%s" % (port, path), method=method)
+        with urlrequest.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8"))
+
+    def _running(self, port):
+        try:
+            self._http(port, "/json/version", timeout=2)
+            return True
+        except (OSError, ValueError):
+            return False
+
+    def _launch(self, port):
+        binary = find_chrome(self.cfg, self.platform, self.which, self.path_exists)
+        if not binary:
+            raise BackendUnavailable("找不到 Google Chrome / Chromium（可在站点配置里用 chrome_bin 指定）")
+        prof = self.profile_dir()
+        ensure_private_dir(prof.parent)
+        ensure_private_dir(prof)
+        argv = [binary, "--remote-debugging-port=%d" % port, "--remote-debugging-address=127.0.0.1",
+                "--user-data-dir=%s" % prof, "--no-first-run", "--no-default-browser-check"]
+        if chrome_headless(self.cfg, self.platform, self.env):
+            argv.append("--headless=new")
+        argv.append("about:blank")
+        proc = self.launcher(argv)
+        ensure_private_dir(state_dir())
+        write_private(self._state_file(), json.dumps({"port": port, "pid": getattr(proc, "pid", None)}))
+        for _ in range(self.ready_polls):
+            if self._running(port):
+                return
+            self.sleep(0.5)
+        raise BackendError("Chrome 已启动但 CDP 端口 %d 没就绪（该 profile 可能被没开调试端口的 Chrome 占着）" % port)
+
+    def open(self):
+        port = self.port()
+        if not self._running(port):
+            self._launch(port)
+        try:
+            pages = [t for t in self._http(port, "/json/list") if t.get("type") == "page"]
+            if not pages:
+                pages = [self._http(port, "/json/new?about:blank", method="PUT")]
+        except (OSError, ValueError) as e:
+            raise BackendError("读取 Chrome 标签页失败: %s" % e)
+        self.ws = WSClient(pages[0]["webSocketDebuggerUrl"])
+        self.ws.connect()
+
+    def close(self):
+        if self.ws is not None:
+            self.ws.close()  # Chrome itself keeps running so the profile / cookies stay warm
+            self.ws = None
+
+    # ---- primitives
+    def _eval(self, expr, timeout=60):
+        res = self.ws.call("Runtime.evaluate", {"expression": expr, "returnByValue": True, "awaitPromise": True}, timeout)
+        if res.get("exceptionDetails"):
+            raise BackendError("页面脚本报错: %s" % ((res["exceptionDetails"].get("exception") or {}).get("description")
+                                                    or res["exceptionDetails"].get("text", "?")))
+        return (res.get("result") or {}).get("value")
+
+    def _state(self):
+        return json.loads(self._eval("JSON.stringify({title: document.title, url: location.href})"))
+
+    def goto(self, url):
+        res = self.ws.call("Page.navigate", {"url": url}, 60)
+        if res.get("errorText"):
+            raise BackendError("导航失败: %s" % res["errorText"])
+        for _ in range(60):
+            try:
+                if self._eval("document.readyState") == "complete":
+                    break
+            except BackendError:
+                pass  # execution context is being replaced during navigation
+            self.sleep(0.5)
+        self.sleep(1.5)
+        return self._state()
+
+    def page_state(self):
+        return self._state()
+
+    def fill(self, selector, value, secret=False):
+        if secret:
+            SCRUB.add(value)
+        js = ("(() => { %s const e = __find(%s); if (!e) return false; e.focus();"
+              " const set = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e), 'value').set;"
+              " set.call(e, %s); e.dispatchEvent(new Event('input', {bubbles: true}));"
+              " e.dispatchEvent(new Event('change', {bubbles: true})); return true; })()"
+              % (JS_FIND, json.dumps(selector), json.dumps(value)))
+        if self._eval(js) is not True:
+            raise BackendError("找不到输入框: %s" % selector)
+
+    def click(self, selector):
+        js = "(() => { %s const e = __find(%s); if (!e) return false; e.click(); return true; })()" % (JS_FIND, json.dumps(selector))
+        if self._eval(js) is not True:
+            raise BackendError("找不到可点击元素: %s" % selector)
+
+    def check(self, selector):
+        js = ("(() => { %s const e = __find(%s); if (!e) return false; if (!e.checked) e.click();"
+              " return !!e.checked; })()" % (JS_FIND, json.dumps(selector)))
+        if self._eval(js) is not True:
+            raise BackendError("勾选失败: %s" % selector)
+
+    def exists(self, selector):
+        return bool(self._eval("(() => { %s return !!__find(%s); })()" % (JS_FIND, json.dumps(selector))))
+
+    def page_text(self):
+        return self._eval("(document.body.innerText || '').slice(0, 20000)") or ""
+
+    def wait(self, ms):
+        self.sleep(ms / 1000.0)
+
+    def get_cookies(self, urls):
+        cookies = self.ws.call("Network.getCookies", {"urls": urls}).get("cookies", [])
+        SCRUB.add(*[c.get("value") for c in cookies])
+        return cookies
+
+    def set_cookies(self, cookies):
+        for c in cookies:
+            res = self.ws.call("Network.setCookie", cdp_cookie_params(c))
+            if res.get("success") is False:
+                raise BackendError("写入 cookie 被浏览器拒绝: %s" % c.get("name"))
+
+    def delete_cookie(self, name, domain, path):
+        self.ws.call("Network.deleteCookies", {"name": name, "domain": domain, "path": path})
+
+
 class GuardedBackend:
     """Wraps a backend and enforces allowed_hosts: no navigation, fill or click off the allow-list."""
 
@@ -629,10 +1013,17 @@ class CronIO:
 
 
 def default_backend_factory(cfg, platform):
-    kind = choose_backend(cfg, platform)
+    kind, why = select_backend(cfg, platform)
     if kind == "ego":
-        return EgoBackend(cfg, cfg["name"], platform=platform)
-    return RiftBackend(cfg, cfg["name"])
+        be = EgoBackend(cfg, cfg["name"], platform=platform, local=True)
+    elif kind == "ego_over_ssh":
+        be = EgoBackend(cfg, cfg["name"], platform=platform)
+    elif kind == "rift":
+        be = RiftBackend(cfg, cfg["name"])
+    else:
+        be = ChromeBackend(cfg, cfg["name"], platform=platform)
+    be.kind, be.reason = kind, why
+    return be
 
 
 @dataclass
@@ -698,6 +1089,10 @@ def append_log(site, now, state, brief):
 def save_status(ctx, state, cmd, info=None):
     rec = {"ts": ctx.now(), "state": state, "cmd": cmd}
     rec.update(info or {})
+    kind = getattr(ctx.backend, "kind", None)
+    if kind:
+        rec["backend"] = kind
+        rec["backend_why"] = getattr(ctx.backend, "reason", "")[:200]
     ensure_private_dir(state_dir())
     write_private(status_path(ctx.site), json.dumps(rec))
 
@@ -766,6 +1161,7 @@ def cookie_info(ctx):
         if dev and dev[0].get("expires", -1) not in (-1, None):
             info["device_expires"] = dev[0]["expires"]
             info["device_token_days"] = max(0, int((dev[0]["expires"] - now) // 86400))
+            info["device_token_hours"] = max(0, int((dev[0]["expires"] - now) // 3600))
     return info
 
 
@@ -898,9 +1294,13 @@ def cmd_status(ctx, args):
     shown = "LOGGED_IN" if state == "LOGGED_IN" else ("UNKNOWN" if state == "UNKNOWN" else "SESSION_LOST")
     save_status(ctx, shown, "status", info)
     append_log(ctx.site, ctx.now(), shown, "status")
-    extra = {k: info.get(k) for k in ("session_cookie", "session_hours", "device_token", "device_token_days")}
+    extra = {k: info.get(k) for k in ("session_cookie", "session_hours", "device_token", "device_token_days",
+                                      "device_token_hours")}
     human = "已登录。" if shown == "LOGGED_IN" else ("页面无法识别。" if shown == "UNKNOWN" else "会话已丢失（在登录页/验证码页）。")
-    return emit("status", ctx.site, shown, rc_for(shown), human, **extra)
+    kind = getattr(ctx.backend, "kind", None)
+    if kind:
+        human += " 后端 %s（探测：%s）" % (kind, getattr(ctx.backend, "reason", ""))
+    return emit("status", ctx.site, shown, rc_for(shown), human, backend=kind, **extra)
 
 
 def cmd_login(ctx, args):
@@ -932,7 +1332,8 @@ def cmd_keepalive(ctx, args):
         save_status(ctx, "LOGGED_IN", "keepalive", info)
         append_log(ctx.site, ctx.now(), "LOGGED_IN", "keepalive")
         return emit("keepalive", ctx.site, "LOGGED_IN", 0, "会话有效，已刷新空闲计时。",
-                    ts=iso(ctx.now()), device_token_days=info.get("device_token_days"))
+                    ts=iso(ctx.now()), device_token_days=info.get("device_token_days"),
+                    device_token_hours=info.get("device_token_hours"))
     if state == "UNKNOWN":
         save_status(ctx, "UNKNOWN", "keepalive")
         append_log(ctx.site, ctx.now(), "UNKNOWN", "keepalive page not recognised")
@@ -1068,16 +1469,16 @@ def _drill(ctx):
 
 
 # ---- schedule
-def _cron_line(cfg, site):
+def _cron_line(cfg, site, script=None):
     minutes = int((cfg.get("keepalive") or {}).get("interval_minutes", 10))
-    return f"*/{minutes} * * * * {sys.executable} {ENGINE_PATH} keepalive {site} >/dev/null 2>&1 {MARKER_PREFIX}{site}"
+    return f"*/{minutes} * * * * {sys.executable} {script or ENGINE_PATH} keepalive {site} >/dev/null 2>&1 {MARKER_PREFIX}{site}"
 
 
-def _plist(cfg, site):
+def _plist(cfg, site, script=None):
     minutes = int((cfg.get("keepalive") or {}).get("interval_minutes", 10))
     return {
         "Label": f"com.rift-session.{site}",
-        "ProgramArguments": [sys.executable, str(ENGINE_PATH), "keepalive", site],
+        "ProgramArguments": [sys.executable, str(script or ENGINE_PATH), "keepalive", site],
         "StartInterval": minutes * 60,
         "RunAtLoad": True,
         "StandardOutPath": "/dev/null",
@@ -1090,7 +1491,7 @@ def _our_line(line, site):
     return line.rstrip().endswith(f"{MARKER_PREFIX}{site}")
 
 
-def cmd_schedule(deps, cfg, action):
+def cmd_schedule(deps, cfg, action, script=None):
     site = cfg["name"]
     now = deps.now()
     if deps.platform == "darwin":
@@ -1098,7 +1499,7 @@ def cmd_schedule(deps, cfg, action):
         label = f"com.rift-session.{site}"
         if action == "install":
             ensure_private_dir(plist.parent, 0o755)
-            plist.write_bytes(plistlib.dumps(_plist(cfg, site)))
+            plist.write_bytes(plistlib.dumps(_plist(cfg, site, script)))
             return emit("schedule", site, "SCHEDULED", 0,
                         f"已写入 {plist}。手动加载：launchctl bootstrap gui/$(id -u) {plist}（本命令不会自动加载）")
         if action == "remove":
@@ -1117,7 +1518,7 @@ def cmd_schedule(deps, cfg, action):
         return emit("schedule", site, "SCHEDULED" if mine else "NOT_SCHEDULED", 0,
                     "crontab 里有保活行。" if mine else "crontab 里没有保活行。")
     if action == "install":
-        new = _cron_line(cfg, site)
+        new = _cron_line(cfg, site, script)
         if mine == [new]:
             return emit("schedule", site, "SCHEDULED", 0, "已存在相同的保活行，未改动。")
         _backup_crontab(text, now)
@@ -1149,7 +1550,10 @@ def cmd_list(deps):
             continue
         parts = [f"cmd=list", f"site={n}", f"state={st.get('state')}", f"last={iso(st['ts'])}",
                  f"via={st.get('cmd')}"]
-        for k in ("session_cookie", "session_hours", "device_token", "device_token_days"):
+        if st.get("backend"):
+            parts.append("backend=%s" % st["backend"])
+            parts.append("backend_why=%s" % _kv(st.get("backend_why", ""))[:120])
+        for k in ("session_cookie", "session_hours", "device_token", "device_token_days", "device_token_hours"):
             if st.get(k) is not None:
                 parts.append(f"{k}={st[k]}")
         print("RIFT_SESSION " + " ".join(parts))
@@ -1181,6 +1585,7 @@ def build_parser():
     sc = sub.add_parser("schedule")
     sc.add_argument("action", choices=["install", "remove", "status"])
     sc.add_argument("site")
+    sc.add_argument("--script", help="写进定时任务的脚本路径（默认本文件；建议用不随 worktree 变化的稳定软链）")
     return p
 
 
@@ -1203,7 +1608,7 @@ def main(argv=None, deps=None):
         site = args.site
         cfg = load_site(site)
         if cmd == "schedule":
-            return cmd_schedule(deps, cfg, args.action)
+            return cmd_schedule(deps, cfg, args.action, args.script)
         if cmd == "drill" and args.dry_run:
             return cmd_drill(Ctx(deps, cfg), args)
         if cmd == "drill" and not cfg.get("drill_allowed"):
