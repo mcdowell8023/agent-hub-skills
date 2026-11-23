@@ -22,6 +22,7 @@ Personal Agent Hub 的核心 skill 集合。提供跨设备 Agent 交接、浏�
 | [rift-mail-triage](rift-mail-triage/) | IMAP 拉邮件 + HTML 草稿 + 按精确 UID 受控发送<br>默认只写草稿；用户明确授权后仅允许 `rift-mail send --uid UID --apply`。发送默认 dry-run，receipt 幂等阻止重复 SMTP，Sent 只读轮询且禁止 `IMAP APPEND`；凭据存 macOS 钥匙串 |
 | [rift-remote-exec](rift-remote-exec/) | 在已注册的远端机器上执行命令，**不经 LLM、不消耗额度**<br>⭐ 用 paseo relay 通道直接开远端终端；附 `rx.sh` 封装（**复用已有终端**、四行协议判完成、**退出码判成败**、自动建/杀终端）与 Windows COMODO 文件锁、ego 脚本三大坑 |
 | [pingcode-api](pingcode-api/) | **免登录**直调 PingCode Open API：用个人访问令牌（PAT）查工作项/工时，不登录、不换 token<br>附 `pc.sh`（curl 封装）与 `pc.py`（Python 封装，令牌自动解析 + 自动翻页）；令牌存 `~/wb/secrets/pingcode-token`（600，不入 git） |
+| [rift-session](rift-session/) | **登录态固化 + 保活 + 自动重登 + 演练**：任意「账号密码 + 可选二次验证」站点，跨 Linux / macOS（Python 3.8+）<br>后端 ego / ego_over_ssh / rift / chrome（专用持久 profile 兜底）按 `backend_order` 探测；密码/验证码只走 stdin；站点配置放用户目录不进仓库 |
 | [skill-loader](skill-loader/) | **没有 `skill` 工具的 agent（MiniMax Code 子 agent）怎么加载 skill 正文**<br>路径规律 `skill 名 → 目录 → SKILL.md` + `skill-path.sh` 跨 5 个 runtime 目录查找 |
 
 ## 安装 —— 🔴 软链到本仓库，不要 cp
